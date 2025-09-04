@@ -1,6 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import fileUpload from "express-fileupload";
-import { registerRoutes } from "./routes-production";
+import { registerRoutes } from "./routes";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // خدمة ملفات الواجهة الأمامية المبنية
-app.use(express.static(path.join(__dirname, '../dist/client')));
+// app.use(express.static(path.join(__dirname, '../dist/client')));
 
 // إضافة دعم رفع الملفات
 app.use(fileUpload({
@@ -91,7 +91,7 @@ app.use((req, res, next) => {
 
   // خدمة الواجهة الأمامية لجميع المسارات الأخرى
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/client/index.html'));
+    res.sendFile(path.join(__dirname, './public/index.html'));
   });
 
   // تشغيل الخادم

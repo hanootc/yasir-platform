@@ -224,6 +224,20 @@ echo "🔑 Password: admin123"
 
   writeFileSync('dist/create-admin.sh', adminScript);
   execSync('chmod +x dist/create-admin.sh');
+   // Copy uploads from root public folder
+   if (existsSync('public/uploads')) {
+    console.log('📁 Copying uploads folder...');
+    execSync('cp -r public/uploads dist/public/', { stdio: 'inherit' });
+    console.log('✅ Uploads folder copied!');
+  }
+  
+    // Restore public folder if it was backed up
+    if (publicBackup && existsSync('/tmp/sanadi-public-backup')) {
+      console.log('📁 Restoring additional public files...');
+      execSync('cp -r /tmp/sanadi-public-backup/uploads dist/public/ 2>/dev/null || true', { stdio: 'inherit' });
+      execSync('rm -rf /tmp/sanadi-public-backup', { stdio: 'inherit' });
+      console.log('✅ Public folder restored!');
+    }  
 
   console.log('\n✅ Standalone build completed successfully!');
   console.log('📁 Files ready in ./dist/');
