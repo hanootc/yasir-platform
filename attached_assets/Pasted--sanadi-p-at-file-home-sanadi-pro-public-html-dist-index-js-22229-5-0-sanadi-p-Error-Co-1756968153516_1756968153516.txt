@@ -1,0 +1,20 @@
+|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: Could not find the build directory: /home/sanadi.pro/public_html/dist/public, make sure to build the client first
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: Could not find the build directory: /home/sanadi.pro/public_html/dist/public, make sure to build the client first
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: Could not find the build directory: /home/sanadi.pro/public_html/dist/public, make sure to build the client first
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: Could not find the build directory: /home/sanadi.pro/public_html/dist/public, make sure to build the client first
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: Could not find the build directory: /home/sanadi.pro/public_html/dist/public, make sure to build the client first
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: ENOENT: no such file or directory, stat '/home/sanadi.pro/public_html/dist/public/index.html'
+0|sanadi-p | Error: ENOENT: no such file or directory, stat '/home/sanadi.pro/public_html/dist/public/index.html'
+0|sanadi-p | Error: ENOENT: no such file or directory, stat '/home/sanadi.pro/public_html/dist/public/index.html'
+0|sanadi-p | Error: ENOENT: no such file or directory, stat '/home/sanadi.pro/public_html/dist/public/index.html'

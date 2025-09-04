@@ -1,0 +1,210 @@
+      const { id } = req.params;
+      const { days, reason } = req.body;
+      const adminId = req.user?.claims?.sub;
+
+      // جلب المنصة الحالية
+      const [platform] = await db.select().from(platforms).where(eq(platforms.id, id));
+      if (!platform) {
+        return res.status(404).json({ error: 'Platform not found' });
+      }
+
+      const currentEndDate = new Date(platform.subscriptionEndDate || Date.now());
+      const newEndDate = new Date(currentEndDate.getTime() + (days * 24 * 60 * 60 * 1000));
+
+      // تحديث تاريخ انتهاء الاشتراك
+      await db.update(platforms)
+        .set({ 
+          subscriptionEndDate: newEndDate,
+          updatedAt: new Date()
+        })
+        .where(eq(platforms.id, id));
+
+      // تسجيل الإجراء
+      await db.insert(adminActionsLog).values({
+        adminId,
+        action: 'extend_subscription',
+        targetType: 'platform',
+        targetId: id,
+        oldValue: { subscriptionEndDate: currentEndDate },
+        newValue: { subscriptionEndDate: newEndDate, days },
+        reason,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      res.json({ success: true, newEndDate });
+    } catch (error) {
+      console.error('Error extending subscription:', error);
+      res.status(500).json({ error: 'Failed to extend subscription' });
+    }
+  });
+
+  // إيقاف المنصة
+  app.post('/api/admin/platforms/:id/suspend', isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminId = req.user?.claims?.sub;
+
+      // جلب المنصة الحالية
+      const [platform] = await db.select().from(platforms).where(eq(platforms.id, id));
+      if (!platform) {
+        return res.status(404).json({ error: 'Platform not found' });
+      }
+
+      // تحديث حالة المنصة
+      await db.update(platforms)
+        .set({ 
+          status: 'suspended',
+          updatedAt: new Date()
+        })
+        .where(eq(platforms.id, id));
+
+      // تسجيل الإجراء
+      await db.insert(adminActionsLog).values({
+        adminId,
+        action: 'suspend_platform',
+        targetType: 'platform',
+        targetId: id,
+        oldValue: { status: platform.status },
+        newValue: { status: 'suspended' },
+        reason,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error suspending platform:', error);
+      res.status(500).json({ error: 'Failed to suspend platform' });
+    }
+  });
+
+  // تفعيل المنصة
+  app.post('/api/admin/platforms/:id/activate', isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.user?.claims?.sub;
+
+      // جلب المنصة الحالية
+      const [platform] = await db.select().from(platforms).where(eq(platforms.id, id));
+      if (!platform) {
+        return res.status(404).json({ error: 'Platform not found' });
+      }
+
+      // تحديث حالة المنصة
+      await db.update(platforms)
+        .set({ 
+          status: 'active',
+          updatedAt: new Date()
+        })
+        .where(eq(platforms.id, id));
+
+      // تسجيل الإجراء
+      await db.insert(adminActionsLog).values({
+        adminId,
+        action: 'activate_platform',
+        targetType: 'platform',
+        targetId: id,
+        oldValue: { status: platform.status },
+        newValue: { status: 'active' },
+        reason: 'Platform activated by admin',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error activating platform:', error);
+      res.status(500).json({ error: 'Failed to activate platform' });
+    }
+  });
+
+  // جلب مميزات الاشتراكات
+  app.get('/api/admin/features', isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const features = await db.select().from(subscriptionFeatures).orderBy(subscriptionFeatures.plan, subscriptionFeatures.featureName);
+      res.json(features);
+    } catch (error) {
+      console.error('Error getting features:', error);
+      res.status(500).json({ error: 'Failed to get features' });
+    }
+  });
+
+  // تحديث ميزة اشتراك
+  app.put('/api/admin/features/:id', isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const featureData = req.body;
+      const adminId = req.user?.claims?.sub;
+
+      // جلب الميزة الحالية
+      const [currentFeature] = await db.select().from(subscriptionFeatures).where(eq(subscriptionFeatures.id, id));
+      if (!currentFeature) {
+        return res.status(404).json({ error: 'Feature not found' });
+      }
+
+      // تحديث الميزة
+      const [updatedFeature] = await db.update(subscriptionFeatures)
+        .set({ 
+          ...featureData,
+          updatedAt: new Date()
+        })
+        .where(eq(subscriptionFeatures.id, id))
+        .returning();
+
+      // تسجيل الإجراء
+      await db.insert(adminActionsLog).values({
+        adminId,
+        action: 'update_feature',
+        targetType: 'feature',
+        targetId: id,
+        oldValue: currentFeature,
+        newValue: updatedFeature,
+        reason: 'Feature updated by admin',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      res.json(updatedFeature);
+    } catch (error) {
+      console.error('Error updating feature:', error);
+      res.status(500).json({ error: 'Failed to update feature' });
+    }
+  });
+
+  // إضافة ميزة جديدة
+  app.post('/api/admin/features', isAuthenticated, requireSuperAdmin, async (req, res) => {
+    try {
+      const featureData = req.body;
+      const adminId = req.user?.claims?.sub;
+
+      const [newFeature] = await db.insert(subscriptionFeatures)
+        .values(featureData)
+        .returning();
+
+      // تسجيل الإجراء
+      await db.insert(adminActionsLog).values({
+        adminId,
+        action: 'create_feature',
+        targetType: 'feature',
+        targetId: newFeature.id,
+        oldValue: null,
+        newValue: newFeature,
+        reason: 'Feature created by admin',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      res.json(newFeature);
+    } catch (error) {
+      console.error('Error creating feature:', error);
+      res.status(500).json({ error: 'Failed to create feature' });
+    }
+  });
+
+  // حذف API القديم - سيتم استبداله بالجديد
+
+  // =============================================================
+  // ADMIN DASHBOARD APIS - إضافة APIs لوحة التحكم الإدارية
+  // =============================================================

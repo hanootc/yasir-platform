@@ -1,0 +1,51 @@
+M2][WARN] Applications  not running, starting...
+[PM2][ERROR] Error: No script path - aborting
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+[root@srv878700 public_html]# # تشغيل التطبيق مباشرة بدون ecosystem.config.js
+cd /home/sanadi.pro/public_html
+pm2 start dist/index.js --name sanadi-pro --env production \
+  --env DATABASE_URL="postgresql://app.sanadi.pro:%40yaserxp1992@localhost:5432/sanadi_pro" \
+  --env SESSION_SECRET="your-super-secret-session-key-12345" \
+  --env NODE_ENV="production" \
+  --env OPENAI_API_KEY="dummy-key"
+
+# فحص الحالة
+pm2 status
+pm2 logs sanadi-pro --lines 5
+[PM2] Starting /home/sanadi.pro/public_html/dist/index.js in fork_mode (1 instance)
+[PM2] Done.
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 0  │ sanadi-pro         │ fork     │ 0    │ online    │ 0%       │ 17.8mb   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 0  │ sanadi-pro         │ fork     │ 0    │ online    │ 0%       │ 63.2mb   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+[TAILING] Tailing last 5 lines for [sanadi-pro] process (change the value with --lines option)
+/root/.pm2/logs/sanadi-pro-error.log last 5 lines:
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+0|sanadi-p | Error: Could not find the build directory: /home/sanadi.pro/public_html/dist/public, make sure to build the client first
+0|sanadi-p |     at serveStatic (file:///home/sanadi.pro/public_html/dist/index.js:22157:11)
+0|sanadi-p |     at file:///home/sanadi.pro/public_html/dist/index.js:22229:5
+
+/root/.pm2/logs/sanadi-pro-out.log last 5 lines:
+0|sanadi-p | ✅ Session restoration process started for all platforms
+0|sanadi-p | WhatsApp sessions loaded from file
+0|sanadi-p | 🔄 Starting session restoration process...
+0|sanadi-p | ❌ No session files found for platform 1
+0|sanadi-p | ✅ Session restoration process started for all platforms
+
+0|sanadi-pro  | Error: DATABASE_URL must be set. Did you forget to provision a database?
+0|sanadi-pro  |     at server/db.ts (file:///home/sanadi.pro/public_html/dist/index.js:2516:13)
+0|sanadi-pro  |     at __init (file:///home/sanadi.pro/public_html/dist/index.js:4:56)
+0|sanadi-pro  |     at server/storage.ts (file:///home/sanadi.pro/public_html/dist/index.js:2537:5)
+0|sanadi-pro  |     at __init (file:///home/sanadi.pro/public_html/dist/index.js:4:56)
+0|sanadi-pro  |     at file:///home/sanadi.pro/public_html/dist/index.js:9093:1
+0|sanadi-pro  |     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+0|sanadi-pro  |     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)

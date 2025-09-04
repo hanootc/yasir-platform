@@ -1,0 +1,688 @@
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LogoUploader } from '@/components/UniversalFileUploader';
+import { insertPlatformSchema, type InsertPlatform } from '@shared/schema';
+import { Upload, Store, Phone, MessageSquare, Lock, Eye, EyeOff, ShoppingBag, Check, CreditCard, ArrowRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Link, useLocation } from 'wouter';
+
+export default function PlatformRegistration() {
+  const [logoUrl, setLogoUrl] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState("premium");
+  const [paymentStep, setPaymentStep] = useState<'plan' | 'info' | 'payment' | 'complete'>('plan');
+  const [paymentData, setPaymentData] = useState<any>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [location] = useLocation();
+  const { toast } = useToast();
+
+  // Check for payment callback from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    const orderId = params.get('orderId');
+    const plan = params.get('plan');
+    const paymentSimulation = params.get('payment_simulation');
+    const transactionId = params.get('transaction_id');
+
+    if (payment === 'success' && orderId && plan) {
+      setSelectedPlan(plan);
+      setPaymentStep('complete');
+      toast({
+        title: "تم الدفع بنجاح!",
+        description: "يمكنك الآن إكمال تسجيل منصتك",
+        variant: "default",
+      });
+    } else if (paymentSimulation === 'true' && transactionId) {
+      // Handle simulation mode for development
+      // Extract plan from order_id if available
+      const orderIdParam = params.get('order_id');
+      if (orderIdParam) {
+        // Extract plan from order_id format: platformName_planType_timestamp_random
+        const parts = decodeURIComponent(orderIdParam).split('_');
+        if (parts.length >= 2) {
+          const planFromOrderId = parts[1]; // premium, basic, enterprise
+          if (['basic', 'premium', 'enterprise'].includes(planFromOrderId)) {
+            setSelectedPlan(planFromOrderId);
+          }
+        }
+      }
+      
+      setPaymentStep('complete');
+      toast({
+        title: "وضع المحاكاة",
+        description: "تم تفعيل وضع المحاكاة للتطوير - يمكنك إكمال التسجيل",
+        variant: "default",
+      });
+      
+      // Clear URL parameters to clean up the address bar
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } else if (payment === 'failed') {
+      const reason = params.get('reason');
+      setPaymentStep('plan');
+      toast({
+        title: "فشل في الدفع",
+        description: reason || "حدث خطأ أثناء عملية الدفع",
+        variant: "destructive",
+      });
+    } else if (payment === 'cancelled') {
+      setPaymentStep('plan');
+      toast({
+        title: "تم إلغاء الدفع",
+        description: "يمكنك المحاولة مرة أخرى",
+        variant: "default",
+      });
+    }
+  }, [toast]);
+
+  const plans = [
+    {
+      id: "basic",
+      name: "البداية",
+      price: "49,000",
+      period: "دينار/شهر",
+      description: "مثالي للمتاجر الصغيرة والمبتدئين",
+      features: [
+        "25 منتج",
+        "25 صفحة هبوط", 
+        "1000 طلب شهرياً",
+        "3 حساب موظف",
+        "إدارة مخزن",
+        "8 ثيمات ألوان + نظام ليلي/نهاري",
+        "دعم واتساب أساسي",
+        "تقارير أساسية"
+      ]
+    },
+    {
+      id: "premium",
+      name: "المحترف",
+      price: "69,000",
+      period: "دينار/شهر",
+      description: "الأنسب للمتاجر النشطة والمتوسطة",
+      features: [
+        "1000 منتج",
+        "صفحات هبوط غير محدودة",
+        "2000 طلب شهرياً", 
+        "10 حساب موظف",
+        "إدارة مخزن",
+        "ربط شركات التوصيل",
+        "ربط بكسل Meta و TikTok",
+        "8 ثيمات ألوان + نظام ليلي/نهاري",
+        "تكامل الإعلانات المتقدم",
+        "نظام المحاسبة",
+        "تصدير Excel مخصص"
+      ],
+      popular: true
+    },
+    {
+      id: "enterprise",
+      name: "المؤسسة",
+      price: "99,000", 
+      period: "دينار/شهر",
+      description: "للشركات الكبيرة والمؤسسات",
+      features: [
+        "منتجات غير محدودة",
+        "طلبات غير محدودة",
+        "موظفين غير محدودين",
+        "إدارة مخزن متقدمة",
+        "ربط شركات توصيل متقدم",
+        "ربط بكسل Meta و TikTok متقدم",
+        "8 ثيمات ألوان + نظام ليلي/نهاري",
+        "إدارة حملات إعلانية متكاملة",
+        "API مخصص",
+        "نسخ احتياطية يومية",
+        "دعم فني مخصص"
+      ]
+    }
+  ];
+
+  const selectedPlanData = plans.find(plan => plan.id === selectedPlan) || plans[1];
+
+  const form = useForm<InsertPlatform>({
+    resolver: zodResolver(insertPlatformSchema),
+    defaultValues: {
+      platformName: '',
+      businessType: '',
+      ownerName: '',
+      phoneNumber: '',
+      whatsappNumber: '',
+      subdomain: '',
+      logoUrl: '',
+      password: '',
+    },
+  });
+
+  // Payment mutation
+  const createPayment = useMutation({
+    mutationFn: async (data: {
+      platformName: string;
+      subscriptionPlan: string;
+      customerName: string;
+      customerPhone: string;
+      customerEmail?: string;
+    }) => {
+      const response = await apiRequest('/api/payments/zaincash/create', 'POST', data);
+      return response.json();
+    },
+    onSuccess: (result: any) => {
+      if (result.success) {
+        // Save payment info and redirect to ZainCash or handle simulation
+        setPaymentData(result);
+        
+        // Check if this is a simulation mode (for development when ZainCash is not accessible)
+        if (result.paymentUrl && result.paymentUrl.includes('payment_simulation=true')) {
+          // Handle simulation mode - directly redirect to completion step
+          toast({
+            title: "وضع المحاكاة",
+            description: "تم تفعيل وضع المحاكاة للتطوير",
+            variant: "default",
+          });
+          window.location.href = result.paymentUrl;
+        } else {
+          // Normal ZainCash redirect
+          window.location.href = result.paymentUrl;
+        }
+      } else {
+        toast({
+          title: "خطأ في الدفع",
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في إنشاء طلب الدفع",
+        description: error.message || "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const registerPlatform = useMutation({
+    mutationFn: async (data: InsertPlatform & { logoUrl: string }) => {
+      const response = await apiRequest('/api/platforms/register', 'POST', data);
+      return response.json();
+    },
+    onSuccess: (response: any, variables: InsertPlatform & { logoUrl: string }) => {
+      // حفظ بيانات المنصة في localStorage للانتقال إلى صفحة النجاح
+      const platformData = {
+        platformName: variables.platformName,
+        businessType: variables.businessType,
+        subdomain: variables.subdomain,
+        ownerName: variables.ownerName,
+        logoUrl: variables.logoUrl,
+      };
+      localStorage.setItem('registeredPlatform', JSON.stringify(platformData));
+      
+      setPaymentStep('complete');
+      window.location.href = '/platform-success';
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "فشل في التسجيل",
+        description: error.message || "حدث خطأ أثناء تسجيل المنصة",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleLogoUploadComplete = (files: { url: string; fileName: string; originalName: string; size: number }[]) => {
+    if (files && files.length > 0) {
+      const uploadedFile = files[0];
+      console.log('Logo uploaded:', uploadedFile);
+      
+      // حفظ رابط الشعار
+      setLogoUrl(uploadedFile.url);
+      form.setValue('logoUrl', uploadedFile.url);
+      
+      toast({
+        title: "تم رفع الشعار بنجاح",
+        description: "تم رفع شعار المنصة بنجاح",
+      });
+    }
+  };
+
+  // Handler for proceeding to payment
+  const proceedToPayment = () => {
+    const formData = form.getValues();
+    if (!formData.platformName || !formData.ownerName || !formData.phoneNumber) {
+      toast({
+        title: "معلومات ناقصة",
+        description: "يرجى ملء جميع الحقول المطلوبة أولاً",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Create payment request
+    createPayment.mutate({
+      platformName: formData.platformName,
+      subscriptionPlan: selectedPlan,
+      customerName: formData.ownerName,
+      customerPhone: formData.phoneNumber,
+      customerEmail: formData.contactEmail || '',
+    });
+  };
+
+  const onSubmit = (data: InsertPlatform) => {
+    if (paymentStep === 'complete') {
+      // Only register platform after payment is confirmed
+      registerPlatform.mutate({ ...data, logoUrl });
+    } else {
+      // Proceed to payment first
+      proceedToPayment();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 p-4" dir="rtl">
+      {/* Header */}
+      <div className="max-w-4xl mx-auto mb-4">
+        <Link href="/marketing">
+          <Button variant="ghost" className="text-gray-600 hover:text-gray-800">
+            <ArrowRight className="h-4 w-4 ml-2" />
+            العودة للموقع التسويقي
+          </Button>
+        </Link>
+      </div>
+
+      <div className="flex items-center justify-center">
+        <Card className="w-full max-w-4xl">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-purple-700 flex items-center justify-center gap-2">
+              <Store className="w-6 h-6" />
+              {paymentStep === 'complete' ? 'إنشاء منصتك' : 'تسجيل منصة جديدة'}
+            </CardTitle>
+            <CardDescription className="text-gray-600">
+              {paymentStep === 'complete' 
+                ? 'تم الدفع بنجاح! أكمل الآن إعداد منصتك'
+                : 'اختر باقتك وادفع ثم أنشئ منصة التجارة الإلكترونية الخاصة بك'
+              }
+            </CardDescription>
+            
+            {/* Development Notice */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+              <p className="text-sm text-blue-700 font-medium">
+                🔧 وضع التطوير مفعل - النظام يستخدم محاكاة للدفع عند عدم توفر ZainCash
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                سيتم توجيهك لصفحة إكمال التسجيل مباشرة إذا لم تكن خدمة الدفع متاحة
+              </p>
+            </div>
+            
+            {/* Progress Indicator */}
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <div className={`flex items-center gap-2 ${
+                paymentStep === 'plan' || paymentStep === 'info' ? 'text-blue-600' : 'text-gray-400'
+              }`}>
+                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-semibold ${
+                  paymentStep === 'plan' || paymentStep === 'info' ? 'border-blue-600 bg-blue-100' : 'border-gray-300'
+                }`}>
+                  1
+                </div>
+                <span className="text-sm">اختيار الباقة</span>
+              </div>
+              
+              <div className="w-8 h-px bg-gray-300"></div>
+              
+              <div className={`flex items-center gap-2 ${
+                paymentStep === 'payment' ? 'text-blue-600' : 'text-gray-400'
+              }`}>
+                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-semibold ${
+                  paymentStep === 'payment' ? 'border-blue-600 bg-blue-100' : 'border-gray-300'
+                }`}>
+                  2
+                </div>
+                <span className="text-sm">الدفع</span>
+              </div>
+              
+              <div className="w-8 h-px bg-gray-300"></div>
+              
+              <div className={`flex items-center gap-2 ${
+                paymentStep === 'complete' ? 'text-green-600' : 'text-gray-400'
+              }`}>
+                <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-semibold ${
+                  paymentStep === 'complete' ? 'border-green-600 bg-green-100' : 'border-gray-300'
+                }`}>
+                  {paymentStep === 'complete' ? <Check className="w-4 h-4" /> : '3'}
+                </div>
+                <span className="text-sm">إنشاء المنصة</span>
+              </div>
+            </div>
+          </CardHeader>
+        
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* اختيار الباقة - يظهر فقط في مرحلة plan */}
+              {paymentStep === 'plan' && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <CreditCard className="w-5 h-5" />
+                    اختر باقتك
+                  </h3>
+                <div className="space-y-3">
+                  {plans.map((plan) => (
+                    <Card 
+                      key={plan.id} 
+                      className={`cursor-pointer transition-all hover:shadow-md ${
+                        selectedPlan === plan.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                      } ${plan.popular ? 'border-blue-200' : ''}`}
+                      onClick={() => setSelectedPlan(plan.id)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-base font-bold text-gray-900">{plan.name}</h4>
+                              {plan.popular && (
+                                <Badge className="bg-blue-500 text-white text-xs">الأشهر</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{plan.description}</p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl font-bold text-blue-600">{plan.price}</span>
+                              <span className="text-sm text-gray-600">{plan.period}</span>
+                            </div>
+                          </div>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            selectedPlan === plan.id 
+                              ? 'bg-blue-500 border-blue-500' 
+                              : 'border-gray-300'
+                          }`}>
+                            {selectedPlan === plan.id && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* ملخص الباقة المختارة */}
+                <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
+                  <CardContent className="p-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">ميزات باقة {selectedPlanData.name}</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {selectedPlanData.features.slice(0, 6).map((feature, index) => (
+                        <div key={index} className="flex items-center text-sm">
+                          <Check className="h-3 w-3 text-green-500 mr-2 flex-shrink-0" />
+                          <span className="text-gray-700">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedPlanData.features.length > 6 && (
+                      <div className="text-sm text-blue-600 mt-2">
+                        + {selectedPlanData.features.length - 6} ميزات إضافية
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                </div>
+              )}
+
+              {/* معلومات المنصة - يظهر فقط في مرحلة complete */}
+              {paymentStep === 'complete' && (
+                <>
+                  <Separator />
+
+                  <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">معلومات المنصة</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="platformName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Store className="w-4 h-4" />
+                          اسم المنصة
+                        </FormLabel>
+                        <FormControl>
+                          <Input placeholder="متجر أحمد للملابس" {...field} className="placeholder:text-gray-400" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="businessType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <ShoppingBag className="w-4 h-4" />
+                          ماذا يبيع التاجر؟
+                        </FormLabel>
+                        <FormControl>
+                          <Input placeholder="ملابس، إلكترونيات، طعام..." {...field} className="placeholder:text-gray-400" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="subdomain"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>النطاق الفرعي</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center gap-2">
+                          <Input placeholder="ahmed-store" {...field} className="flex-1 placeholder:text-gray-400" />
+                          <span className="text-sm text-gray-500">.platform.com</span>
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        سيكون رابط منصتك: {field.value ? `${field.value}.platform.com` : 'نطاقك.platform.com'}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* معلومات المالك */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">معلومات المالك</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="ownerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>اسم المالك</FormLabel>
+                      <FormControl>
+                        <Input placeholder="أحمد محمد علي" {...field} className="placeholder:text-gray-400" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Phone className="w-4 h-4" />
+                          رقم الهاتف
+                        </FormLabel>
+                        <FormControl>
+                          <Input placeholder="07700000000" {...field} className="placeholder:text-gray-400" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="whatsappNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4" />
+                          رقم الواتساب
+                        </FormLabel>
+                        <FormControl>
+                          <Input placeholder="07700000000" {...field} className="placeholder:text-gray-400" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {/* كلمة المرور */}
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-700">كلمة المرور للمنصة</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Lock className="absolute right-3 top-3 h-4 w-4 text-gray-400" />
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="أدخل كلمة مرور قوية للمنصة"
+                          className="pr-10 pl-10 placeholder:text-gray-400"
+                          {...field}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute left-3 top-3 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-sm text-gray-500 mt-1">
+                      ستحتاج هذه الكلمة للدخول إلى لوحة إدارة المنصة لاحقاً
+                    </p>
+                  </FormItem>
+                )}
+              />
+
+              {/* شعار المنصة */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">شعار المنصة</h3>
+                
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  {logoUrl ? (
+                    <div className="space-y-4">
+                      <img 
+                        src={logoUrl}
+                        alt="شعار المنصة" 
+                        className="w-20 h-20 object-contain mx-auto rounded-lg border"
+                      />
+                      <p className="text-sm text-purple-600">تم رفع الشعار بنجاح</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <Upload className="w-12 h-12 text-gray-400 mx-auto" />
+                      <p className="text-gray-500">ارفع شعار منصتك (اختياري)</p>
+                    </div>
+                  )}
+                  
+                  <LogoUploader
+                    maxNumberOfFiles={1}
+                    maxFileSize={5242880} // 5MB
+                    onComplete={handleLogoUploadComplete}
+                    buttonClassName="mt-4"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      <span>{logoUrl ? 'تغيير الشعار' : 'رفع الشعار'}</span>
+                    </div>
+                  </LogoUploader>
+                </div>
+              </div>
+
+              {/* أزرار الإجراءات */}
+              <div className="flex justify-end gap-4 pt-6">
+                {paymentStep === 'complete' ? (
+                  <Button
+                    type="submit"
+                    disabled={registerPlatform.isPending}
+                    className="gradient-primary text-white px-8"
+                  >
+                    {registerPlatform.isPending ? 'جاري إنشاء المنصة...' : 'إنشاء المنصة'}
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={createPayment.isPending}
+                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-8"
+                  >
+                    {createPayment.isPending ? (
+                      'جاري التوجيه للدفع...'
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" />
+                        <span>ادفع {selectedPlanData.price} دينار واستمر</span>
+                      </div>
+                    )}
+                  </Button>
+                )}
+              </div>
+                </>
+              )}
+              
+              {/* أزرار للمرحلة الأولى */}
+              {paymentStep === 'plan' && (
+                <div className="flex justify-end pt-6">
+                  <Button
+                    type="button"
+                    onClick={() => setPaymentStep('payment')}
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ArrowRight className="w-4 h-4" />
+                      <span>التالي - معلومات الدفع</span>
+                    </div>
+                  </Button>
+                </div>
+              )}
+            </form>
+          </Form>
+        </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

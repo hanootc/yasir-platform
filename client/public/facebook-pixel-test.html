@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Facebook Pixel Helper Test - Enhanced</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- Facebook Pixel Code - Official Implementation -->
+    <script>
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      
+      // Initialize Facebook Pixel
+      fbq('init', '1456109619153946');
+      
+      // Track PageView immediately
+      fbq('track', 'PageView');
+      
+      console.log('✅ Facebook Pixel initialized and PageView tracked');
+      console.log('🔍 Check Facebook Pixel Helper extension now!');
+      
+      // Test events with delays to ensure proper loading
+      setTimeout(function() {
+        console.log('🎯 Sending ViewContent event...');
+        fbq('track', 'ViewContent', {
+          content_name: 'Test Product Page',
+          content_category: 'Electronics',
+          content_ids: ['test-product-123'],
+          content_type: 'product',
+          value: 99.99,
+          currency: 'USD'
+        });
+        console.log('✅ ViewContent event sent');
+      }, 2000);
+      
+      setTimeout(function() {
+        console.log('🛒 Sending AddToCart event...');
+        fbq('track', 'AddToCart', {
+          content_name: 'Test Product',
+          content_category: 'Electronics',
+          content_ids: ['test-product-123'],
+          content_type: 'product',
+          value: 99.99,
+          currency: 'USD'
+        });
+        console.log('✅ AddToCart event sent');
+      }, 4000);
+      
+      setTimeout(function() {
+        console.log('💳 Sending Purchase event...');
+        fbq('track', 'Purchase', {
+          content_name: 'Test Purchase',
+          content_category: 'Electronics',
+          content_ids: ['test-product-123'],
+          content_type: 'product',
+          value: 99.99,
+          currency: 'USD',
+          num_items: 1
+        });
+        console.log('✅ Purchase event sent');
+      }, 6000);
+      
+      // Debug information
+      setTimeout(function() {
+        console.log('🔍 Facebook Pixel Status:');
+        console.log('- fbq function:', typeof fbq);
+        console.log('- Scripts loaded:', document.querySelectorAll('script[src*="fbevents"]').length);
+        console.log('- Page URL:', window.location.href);
+        console.log('- Events queue length:', fbq && fbq.q ? fbq.q.length : 'N/A');
+      }, 1000);
+    </script>
+    <noscript><img height="1" width="1" style="display:none"
+                   src="https://www.facebook.com/tr?id=1456109619153946&ev=PageView&noscript=1"
+    /></noscript>
+    <!-- End Facebook Pixel Code -->
+</head>
+<body style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto;">
+    <h1 style="color: #1877f2;">🔍 Facebook Pixel Helper Test</h1>
+    <div style="background: #f0f2f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <h3>✅ صفحة اختبار Facebook Pixel</h3>
+        <p><strong>Pixel ID:</strong> 1456109619153946</p>
+        <p><strong>Status:</strong> <span id="pixelStatus">Loading...</span></p>
+        <p><strong>Events:</strong> سيتم إرسال أحداث تلقائية كل ثانيتين</p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+        <button onclick="sendViewContent()" style="padding: 10px; background: #42a5f5; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            📄 Send ViewContent
+        </button>
+        <button onclick="sendAddToCart()" style="padding: 10px; background: #66bb6a; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            🛒 Send AddToCart
+        </button>
+        <button onclick="sendPurchase()" style="padding: 10px; background: #ef5350; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            💳 Send Purchase
+        </button>
+        <button onclick="sendLead()" style="padding: 10px; background: #ab47bc; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            📝 Send Lead
+        </button>
+    </div>
+    
+    <div style="background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 8px;">
+        <h4>📊 Console Output:</h4>
+        <div id="logOutput" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; height: 300px; overflow-y: auto;"></div>
+    </div>
+    
+    <script>
+    // Enhanced logging to display on page
+    const originalLog = console.log;
+    const logOutput = document.getElementById('logOutput');
+    
+    console.log = function(...args) {
+        originalLog.apply(console, args);
+        if (logOutput) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg).join(' ');
+            logOutput.innerHTML += `[${timestamp}] ${message}\n`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+    };
+    
+    // Update pixel status
+    setTimeout(() => {
+        const status = typeof fbq === 'function' ? '✅ Active' : '❌ Not Loaded';
+        document.getElementById('pixelStatus').innerHTML = status;
+        document.getElementById('pixelStatus').style.color = typeof fbq === 'function' ? 'green' : 'red';
+    }, 1000);
+    
+    // Manual test functions
+    function sendViewContent() {
+        console.log('🎯 Manual ViewContent event triggered');
+        fbq('track', 'ViewContent', {
+            content_name: 'Manual Test Product',
+            content_category: 'Electronics',
+            content_ids: ['manual-test-viewcontent'],
+            content_type: 'product',
+            value: 149.99,
+            currency: 'USD'
+        });
+    }
+    
+    function sendAddToCart() {
+        console.log('🛒 Manual AddToCart event triggered');
+        fbq('track', 'AddToCart', {
+            content_name: 'Manual Test Product',
+            content_category: 'Electronics',
+            content_ids: ['manual-test-addtocart'],
+            content_type: 'product',
+            value: 149.99,
+            currency: 'USD'
+        });
+    }
+    
+    function sendPurchase() {
+        console.log('💳 Manual Purchase event triggered');
+        fbq('track', 'Purchase', {
+            content_name: 'Manual Test Purchase',
+            content_category: 'Electronics',
+            content_ids: ['manual-test-purchase'],
+            content_type: 'product',
+            value: 149.99,
+            currency: 'USD',
+            num_items: 1
+        });
+    }
+    
+    function sendLead() {
+        console.log('📝 Manual Lead event triggered');
+        fbq('track', 'Lead', {
+            content_name: 'Manual Test Lead',
+            content_category: 'Leads',
+            value: 0,
+            currency: 'USD'
+        });
+    }
+    </script>
+</body>
+</html>
+            content_type: 'product',
+            value: 25.00,
+            currency: 'USD'
+        });
+        alert('Test event sent! Check Facebook Pixel Helper.');
+    }
+    </script>
+</body>
+</html>

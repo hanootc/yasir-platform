@@ -1,0 +1,57 @@
+[root@srv878700 public_html]# cd /home/sanadi.pro/public_html/dist
+mkdir -p logs
+pm2 start ecosystem.config.js --env production
+pm2 save
+[PM2][WARN] Applications  not running, starting...
+[PM2][ERROR] Error: No script path - aborting
+[PM2] Saving current process list...
+[PM2][WARN] PM2 is not managing any process, skipping save...
+[PM2][WARN] To force saving use: pm2 save --force
+[root@srv878700 dist]# cd /home/sanadi.pro/public_html
+[root@srv878700 public_html]# cat > /home/sanadi.pro/public_html/dist/ecosystem.config.js << 'EOF'
+module.exports = {
+  apps: [
+    {
+      name: 'sanadi-pro',
+      script: './index.js',
+      instances: 'max',
+      exec_mode: 'cluster',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 5000
+      },
+      env_file: './.env',
+      env_production: {
+        NODE_ENV: 'production'
+      },
+      log_date_format: 'YYYY-MM-DD HH:mm Z',
+      error_file: './logs/err.log',
+      out_file: './logs/out.log',
+      log_file: './logs/combined.log',
+      time: true,
+      watch: false,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G'
+    }
+  ]
+};
+EOF
+
+pm2 start ecosystem.config.js --env production
+pm2 save
+[PM2][ERROR] File ecosystem.config.js malformated
+ReferenceError: module is not defined
+    at file:///home/sanadi.pro/public_html/ecosystem.config.js:1:1
+    at ModuleJobSync.runSync (node:internal/modules/esm/module_job:387:35)
+    at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:323:47)
+    at loadESMFromCJS (node:internal/modules/cjs/loader:1371:24)
+    at Module._compile (node:internal/modules/cjs/loader:1511:5)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1572:16)
+    at Module.load (node:internal/modules/cjs/loader:1275:32)
+    at Module._load (node:internal/modules/cjs/loader:1096:12)
+    at Module.require (node:internal/modules/cjs/loader:1298:19)
+    at require (node:internal/modules/helpers:182:18)
+[PM2] Saving current process list...
+[PM2][WARN] PM2 is not managing any process, skipping save...
+[PM2][WARN] To force saving use: pm2 save --force
