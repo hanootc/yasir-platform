@@ -1,16 +1,16 @@
-import { useState } from "react";
+import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Eye, EyeOff, Shield, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Eye, EyeOff, Shield, Lock } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 
 const loginSchema = z.object({
-  email: z.string().email("البريد الإلكتروني غير صالح"),
+  email: z.string().email("البريد الإلكتروني غير صحيح"),
   password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل")
 });
 
@@ -20,34 +20,42 @@ export default function SystemAdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
+  const { register, handleSubmit: handleFormSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema)
   });
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
-    setError("");
+    setError('');
 
     try {
-      const response = await fetch("/api/admin/login", {
-        method: "POST",
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ email: data.email, password: data.password }),
       });
 
-      const result = await response.json();
-
       if (response.ok) {
-        // نجح تسجيل الدخول - توجيه للوحة التحكم
-        window.location.href = "/admin-dashboard";
+        const responseData = await response.json();
+        // Save admin session to localStorage with activity tracking
+        localStorage.setItem('sanadi-admin-session', JSON.stringify({
+          adminId: responseData.admin.id,
+          email: responseData.admin.email,
+          loginTime: Date.now(),
+          lastActivity: Date.now()
+        }));
+        window.location.href = '/admin-dashboard';
       } else {
-        setError(result.error || "حدث خطأ في تسجيل الدخول");
+        const errorData = await response.json();
+        setError(errorData.error || 'فشل في تسجيل الدخول');
       }
     } catch (err) {
-      setError("خطأ في الاتصال بالخادم");
+      setError('حدث خطأ في الاتصال');
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +95,7 @@ export default function SystemAdminLogin() {
               </Alert>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={handleFormSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">البريد الإلكتروني</Label>
                 <Input

@@ -231,13 +231,11 @@ echo "🔑 Password: admin123"
     console.log('✅ Uploads folder copied!');
   }
   
-    // Restore public folder if it was backed up
-    if (publicBackup && existsSync('/tmp/sanadi-public-backup')) {
-      console.log('📁 Restoring additional public files...');
-      execSync('cp -r /tmp/sanadi-public-backup/uploads dist/public/ 2>/dev/null || true', { stdio: 'inherit' });
-      execSync('rm -rf /tmp/sanadi-public-backup', { stdio: 'inherit' });
-      console.log('✅ Public folder restored!');
-    }  
+  // Clean up any temporary backup (if exists)
+  if (existsSync('/tmp/sanadi-public-backup')) {
+    execSync('rm -rf /tmp/sanadi-public-backup', { stdio: 'inherit' });
+    console.log('✅ Temporary backup cleaned up!');
+  }
 
   console.log('\n✅ Standalone build completed successfully!');
   console.log('📁 Files ready in ./dist/');

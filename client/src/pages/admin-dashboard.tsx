@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
+import { AdminProtectedRoute } from '../components/AdminProtectedRoute';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -16,6 +17,63 @@ import { apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { useAuth } from "@/hooks/useAuth";
+
+// Custom hook for admin authentication
+function useAdminAuth() {
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    // Simplified auth check - just check localStorage first
+    const checkAdminAuth = () => {
+      try {
+        // Check localStorage for admin session first
+        const adminSession = localStorage.getItem('adminSession');
+        if (adminSession) {
+          try {
+            const session = JSON.parse(adminSession);
+            if (session.email === 'admin@sanadi.pro' && session.role === 'super_admin') {
+              setIsAdminAuthenticated(true);
+              setIsCheckingAuth(false);
+              return;
+            }
+          } catch (e) {
+            localStorage.removeItem('adminSession');
+          }
+        }
+        
+        // If no localStorage session, assume not authenticated
+        setIsAdminAuthenticated(false);
+        setIsCheckingAuth(false);
+      } catch (error) {
+        console.log('Admin auth check failed:', error);
+        setIsAdminAuthenticated(false);
+        setIsCheckingAuth(false);
+      }
+    };
+
+    // Run check immediately
+    checkAdminAuth();
+  }, []);
+
+  const loginAdmin = (userData: any) => {
+    setIsAdminAuthenticated(true);
+    localStorage.setItem('adminSession', JSON.stringify(userData));
+  };
+
+  const logoutAdmin = () => {
+    setIsAdminAuthenticated(false);
+    localStorage.removeItem('adminSession');
+    window.location.href = '/system-admin-login';
+  };
+
+  return {
+    isAdminAuthenticated,
+    isCheckingAuth,
+    loginAdmin,
+    logoutAdmin
+  };
+}
 import jsPDF from "jspdf";
 
 interface Platform {
@@ -106,9 +164,11 @@ interface SystemSettings {
   zaincashMsisdn: string;
 }
 
-export default function AdminDashboard() {
+function AdminDashboardContent() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAdminAuthenticated, isCheckingAuth, logoutAdmin } = useAdminAuth();
+  // Remove regular auth check that causes infinite loading
+  // const { isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<SubscriptionFeature | null>(null);
@@ -913,38 +973,52 @@ export default function AdminDashboard() {
     return diffDays;
   };
 
-  // Authentication check
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "غير مصرح",
-        description: "تم تسجيل خروجك. يتم إعادة تسجيل الدخول...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
-    }
-  }, [isAuthenticated, isLoading, toast]);
+  // Remove the old authentication check that was redirecting to /api/login
+  // Admin dashboard now uses its own authentication system
 
-  if (isLoading) {
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
     return (
-      <div className="min-h-screen bg-theme-primary-lighter dark:bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-theme-primary mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">جارٍ التحميل...</p>
+          <i className="fas fa-spinner fa-spin text-4xl text-gray-400 mb-4"></i>
+          <p className="text-gray-600 dark:text-gray-400">جاري التحقق من صلاحية الدخول...</p>
         </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
+  // Show login prompt if not authenticated
+  if (!isAdminAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
+          <div className="text-center">
+            <i className="fas fa-shield-alt text-4xl text-blue-600 mb-4"></i>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              صفحة الإدارة العامة
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              يجب تسجيل الدخول كمدير نظام للوصول إلى هذه الصفحة
+            </p>
+            <Button 
+              onClick={() => window.location.href = '/system-admin-login'}
+              className="w-full"
+            >
+              تسجيل دخول الإدارة
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
+  // Remove the loading check that was causing infinite loading
+
+  // Remove duplicate loading check and null return that causes black screen
+
   return (
-    <div className="flex h-screen bg-theme-primary-lighter dark:bg-gray-900">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       <Sidebar />
       
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -953,7 +1027,7 @@ export default function AdminDashboard() {
           subtitle="إدارة شاملة للمنصات والاشتراكات والصلاحيات"
         />
         
-        <main className="flex-1 overflow-y-auto p-6 bg-theme-primary-lighter dark:bg-gray-900">
+        <main className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
           <div className="max-w-7xl mx-auto space-y-6">
 
             {/* شريط التنقل السريع */}
@@ -2020,5 +2094,13 @@ export default function AdminDashboard() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function AdminDashboard() {
+  return (
+    <AdminProtectedRoute>
+      <AdminDashboardContent />
+    </AdminProtectedRoute>
   );
 }

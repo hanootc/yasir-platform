@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { PlatformThemeSelector } from "@/components/platform-theme-selector";
+import { AdminThemeSelector } from "@/components/admin-theme-selector";
 
 interface HeaderProps {
   title: string;
@@ -14,9 +14,9 @@ export default function Header({ title, subtitle, onCreateProduct, onCreateLandi
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4 space-x-reverse">
-            {/* Platform Theme Controls */}
+            {/* Admin Theme Controls */}
             <div className="flex items-center gap-2">
-              <PlatformThemeSelector />
+              <AdminThemeSelector />
             </div>
 
             {/* Notification Bell */}

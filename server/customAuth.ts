@@ -2,9 +2,8 @@ import type { Express, RequestHandler } from "express";
 import express from "express";
 import session from "express-session";
 import bcrypt from "bcrypt";
-import connectPg from "connect-pg-simple";
 import { db } from "./db";
-import { adminUsers } from "@shared/schema";
+import { adminUsers } from "@shared/schema-sqlite";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -16,17 +15,10 @@ const loginSchema = z.object({
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // أسبوع واحد
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
   
+  // استخدام MemoryStore للتطوير المحلي مع SQLite
   return session({
     secret: process.env.SESSION_SECRET || 'your-super-secret-key-change-this-in-production',
-    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -51,6 +43,7 @@ export async function setupCustomAuth(app: Express) {
         .select()
         .from(adminUsers)
         .where(eq(adminUsers.email, email));
+      console.log('ADMIN FROM DB:', admin);
       
       if (!admin) {
         return res.status(401).json({ 
@@ -104,6 +97,9 @@ export async function setupCustomAuth(app: Express) {
       
     } catch (error) {
       console.error("خطأ في تسجيل الدخول:", error);
+      if (error && error.stack) {
+        console.error('STACK:', error.stack);
+      }
       if (error instanceof z.ZodError) {
         return res.status(400).json({ 
           error: error.errors[0].message 

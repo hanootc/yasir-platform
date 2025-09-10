@@ -4,6 +4,7 @@ import type { UploadedFile } from "express-fileupload";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
+import { setupCustomAuth } from "./customAuth";
 import { checkSubscriptionStatus, checkPlanFeatures, requireActiveSubscription, checkPlatformAccess } from "./subscriptionMiddleware";
 import { localStorage } from "./localStorage";
 import { upload, handleMulterError } from "./multerConfig";
@@ -516,6 +517,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth middleware
   await setupAuth(app);
+  
+  // Custom admin auth system
+  await setupCustomAuth(app);
 
   // ===================== Employee Login System =====================
   
@@ -4786,10 +4790,16 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}` : ''}
   app.get('/api/platform-session', async (req, res) => {
     try {
       // Get platform ID from localStorage session data or cookie
-      const platformId = req.session?.platform?.platformId;
+      let platformId = req.session?.platform?.platformId;
       
+      // If no session, use default admin platform for theme functionality
       if (!platformId) {
-        return res.status(401).json({ error: 'No platform session found' });
+        const adminPlatforms = await db.select().from(platforms).where(eq(platforms.platformName, 'Admin Platform')).limit(1);
+        if (adminPlatforms.length > 0) {
+          platformId = adminPlatforms[0].id;
+        } else {
+          return res.status(401).json({ error: 'No platform session found' });
+        }
       }
       
       // Always get fresh data from database to ensure updates are reflected
@@ -13141,10 +13151,10 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}` : ''}
       const customersResult = await db.execute(sql`
         SELECT DISTINCT
           p.id,
-          p.owner_name as name,
-          p.phone_number as phone,
+          p.name as name,
+          p.subdomain as phone,
           p.subdomain,
-          p.platform_name as platformName,
+          p.name as platformName,
           p.created_at as createdAt
         FROM platforms p
         ORDER BY p.created_at DESC
@@ -13215,7 +13225,7 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}` : ''}
       const [expiredSubscriptionsResult] = await db
         .select({ count: sql<number>`count(*)` })
         .from(platforms)
-        .where(sql`subscription_end_date < NOW()`);
+        .where(sql`subscription_end_date < datetime('now')`);
       
       // حساب إجمالي الإيرادات من الدفعات الناجحة فقط
       const [totalRevenueResult] = await db

@@ -98,7 +98,10 @@ export default function Sidebar() {
 
   const handleLogout = () => {
     if (confirm("هل أنت متأكد من تسجيل الخروج؟")) {
-      window.location.href = "/api/logout";
+      // Clear admin session from localStorage
+      localStorage.removeItem('sanadi-admin-session');
+      // Redirect to admin login page
+      window.location.href = "/system-admin-login";
     }
   };
 

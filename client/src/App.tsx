@@ -86,30 +86,6 @@ function Router() {
 
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
-        <>
-          <Route path="/" component={MarketingHome} />
-          <Route path="/original-landing" component={Landing} />
-        </>
-      ) : (
-        <>
-          <Route path="/" component={Dashboard} />
-
-          <Route path="/admin-dashboard" component={AdminDashboard} />
-          <Route path="/products" component={Products} />
-          <Route path="/categories" component={Categories} />
-          <Route path="/landing-pages" component={LandingPages} />
-          <Route path="/orders" component={OrdersTable} />
-          <Route path="/orders-table" component={OrdersTable} />
-          <Route path="/accounting" component={Accounting} />
-          <Route path="/employees" component={Employees} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/direct-access" component={DirectAccess} />
-          <Route path="/admin-profile" component={AdminProfile} />
-          <Route path="/platform-dashboard" component={PlatformDashboard} />
-        </>
-      )}
       <Route path="/thank-you/:orderId" component={ThankYou} />
       <Route path="/view-landing/:slug" component={LandingPageView} />
       <Route path="/product-preview/:id" component={ProductPreview} />
@@ -191,6 +167,20 @@ function Router() {
       <Route path="/souqnaiq/settings" component={PlatformSettings} />
       
       <Route path="/:platform/:slug" component={LandingPageView} />
+      <Route path="/" component={Dashboard} />
+
+      <Route path="/admin-dashboard" component={AdminDashboard} />
+      <Route path="/products" component={Products} />
+      <Route path="/categories" component={Categories} />
+      <Route path="/landing-pages" component={LandingPages} />
+      <Route path="/orders" component={OrdersTable} />
+      <Route path="/orders-table" component={OrdersTable} />
+      <Route path="/accounting" component={Accounting} />
+      <Route path="/employees" component={Employees} />
+      <Route path="/reports" component={Reports} />
+      <Route path="/settings" component={Settings} />
+      <Route path="/direct-access" component={DirectAccess} />
+      <Route path="/admin-profile" component={AdminProfile} />
       <Route component={NotFound} />
     </Switch>
   );
