@@ -49,6 +49,7 @@ const extractQuantityFromOffer = (offer: string): string => {
 import { apiRequest } from "@/lib/queryClient";
 import CreateOrderModal from "@/components/modals/create-order-modal";
 import PrintInvoiceModal from "@/components/modals/print-invoice-modal";
+import { PlatformSelector } from "@/components/PlatformSelector";
 
 const statusColors = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -82,6 +83,7 @@ export default function Orders() {
   const [dateTo, setDateTo] = useState("");
   const [showCreateOrder, setShowCreateOrder] = useState(false);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<any>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -95,28 +97,63 @@ export default function Orders() {
     queryKey: ['/api/platform-session'],
   });
 
-  const platformId = platformSession?.platformId;
+  const platformId = platformSession?.platformId || null;
 
   const { data: orders, isLoading, error, refetch } = useQuery({
-    queryKey: ["/api/orders"],
+    queryKey: selectedPlatform && selectedPlatform !== 'none' ? ["/api/admin/platforms", selectedPlatform, "orders"] : ["empty-orders"],
+    queryFn: async () => {
+      if (!selectedPlatform || selectedPlatform === 'none') {
+        return [];
+      }
+      
+      const url = `/api/admin/platforms/${selectedPlatform}/orders`;
+      
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return response.json();
+    },
     staleTime: 0, // Always fresh data
     gcTime: 0, // Don't cache (TanStack Query v5 uses gcTime instead of cacheTime)
     refetchOnMount: true, // Always refetch on mount
-    enabled: !!userInfo, // Only fetch when user is authenticated
+    enabled: false, // Disable automatic fetching
   });
 
-  // Fetch platform products for filtering (only if we have platform ID)
+  // Fetch platform products for filtering
   const { data: products } = useQuery({
-    queryKey: [`/api/platforms/${platformId}/products`],
-    enabled: !!userInfo && !!platformId,
+    queryKey: selectedPlatform && selectedPlatform !== 'none' ? [`/api/admin/platforms/${selectedPlatform}/products`] : ["empty-products"],
+    queryFn: async () => {
+      if (!selectedPlatform || selectedPlatform === 'none') {
+        return [];
+      }
+      const response = await fetch(`/api/admin/platforms/${selectedPlatform}/products`, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    },
+    enabled: false,
   });
 
 
 
-  // Force refetch every time component mounts
+  // Manually trigger refetch when platform changes
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    if (selectedPlatform && selectedPlatform !== 'none') {
+      refetch();
+      // Also refetch products for the selected platform
+      queryClient.refetchQueries({ 
+        queryKey: [`/api/admin/platforms/${selectedPlatform}/products`] 
+      });
+    }
+  }, [selectedPlatform, refetch, queryClient]);
 
   const updateOrderMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
@@ -143,7 +180,9 @@ export default function Orders() {
 
   // Calculate date statistics
   const dateStats = useMemo(() => {
-    if (!orders || !Array.isArray(orders)) return { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0 };
+    if (!orders || !Array.isArray(orders) || !selectedPlatform || selectedPlatform === 'none') {
+      return { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0 };
+    }
     
     const filtered = orders.filter((order: any) => {
       const orderDate = new Date(order.createdAt);
@@ -162,9 +201,9 @@ export default function Orders() {
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
     
     return { totalOrders, totalRevenue, avgOrderValue };
-  }, [orders, dateFrom, dateTo]);
+  }, [orders, dateFrom, dateTo, selectedPlatform]);
 
-  const filteredOrders = Array.isArray(orders) ? orders.filter((order: any) => {
+  const filteredOrders = (Array.isArray(orders) && selectedPlatform && selectedPlatform !== 'none') ? orders.filter((order: any) => {
     const matchesSearch = 
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -219,6 +258,9 @@ export default function Orders() {
         description: "تم تحديث أرقام الطلبات إلى الترقيم التسلسلي الجديد",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+      if (selectedPlatform) {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/platforms", selectedPlatform, "orders"] });
+      }
     },
     onError: (error) => {
       toast({
@@ -302,6 +344,16 @@ export default function Orders() {
             <Card className="theme-border bg-theme-primary-lighter">
               <CardContent className="p-4">
                 <div className="space-y-4">
+                  {/* Platform Selector */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-medium text-theme-primary whitespace-nowrap">اختر المنصة:</label>
+                    <PlatformSelector 
+                      value={selectedPlatform || undefined}
+                      onValueChange={setSelectedPlatform}
+                      placeholder="جميع المنصات"
+                    />
+                  </div>
+                  
                   {/* Date Range Filter */}
                   <div className="flex flex-col md:flex-row gap-4 items-center">
                     <div className="flex items-center gap-2 flex-1">
@@ -482,6 +534,14 @@ export default function Orders() {
                   </Card>
                 ))}
               </div>
+            ) : !selectedPlatform || selectedPlatform === 'none' ? (
+              <div className="text-center py-12">
+                <div className="text-gray-500 mb-4">
+                  <i className="fas fa-shopping-cart text-6xl mb-4"></i>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">اختر منصة لعرض الطلبات</h3>
+                <p className="text-gray-500">يرجى اختيار منصة من القائمة أعلاه لعرض وإدارة الطلبات</p>
+              </div>
             ) : filteredOrders.length > 0 ? (
               <div className="grid grid-cols-1 gap-4">
                 {filteredOrders.map((order: any) => (
@@ -551,7 +611,13 @@ export default function Orders() {
                                   {order.productName}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                  سعر القطعة: {formatCurrency(parseFloat(order.productPrice))}
+                                  المبلغ: {(() => {
+                                    // عرض سعر العرض الأصلي بدون خصم
+                                    const offerPrice = order.offer ? 
+                                      parseFloat(order.offer.split(' - ')[1]?.replace(/[^\d.]/g, '') || order.productPrice) : 
+                                      parseFloat(order.productPrice);
+                                    return formatCurrency(offerPrice);
+                                  })()}
                                 </p>
                               </div>
                             </div>
@@ -621,6 +687,16 @@ export default function Orders() {
                             )}
                           </div>
                           
+                          {/* عرض الخصم إذا كان موجوداً */}
+                          {order.discountAmount && parseFloat(order.discountAmount) > 0 && (
+                            <div className="text-sm bg-gradient-to-r from-red-100 to-pink-100 p-2 rounded-lg mb-2 border-2 border-red-200">
+                              <span className="font-medium text-red-700">الخصم:</span>
+                              <span className="text-red-600 mr-1 font-bold">
+                                {formatCurrency(parseFloat(order.discountAmount))}
+                              </span>
+                            </div>
+                          )}
+                          
                           {order.offer && (
                             <div className="text-sm bg-gradient-to-r from-green-100 to-blue-100 p-2 rounded-lg mb-2 border-2 border-green-200">
                               <span className="font-medium text-green-700">العرض المختار:</span>
@@ -648,9 +724,16 @@ export default function Orders() {
                             </div>
                           )}
                           <p className="text-lg font-bold text-purple-700 text-center">
-                            {order.total ? formatCurrency(order.total) : 
-                             (order.offer ? order.offer.split(' - ')[1] || 'غير محدد' : 'غير محدد')
-                            }
+                            {(() => {
+                              // حساب الإجمالي: سعر العرض - الخصم
+                              const offerPrice = order.offer ? 
+                                parseFloat(order.offer.split(' - ')[1]?.replace(/[^\d.]/g, '') || order.productPrice) : 
+                                parseFloat(order.productPrice);
+                              const discount = (order.discountAmount && parseFloat(order.discountAmount)) || 
+                                              (order.discount && parseFloat(order.discount)) || 0;
+                              const total = offerPrice - discount;
+                              return formatCurrency(total);
+                            })()}
                           </p>
                           <p className="text-sm text-gray-600 text-center">
                             {order.type === 'landing_page' ? 

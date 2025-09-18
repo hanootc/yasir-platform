@@ -113,9 +113,9 @@ interface OrderFormData {
   selectedOffer: string;
   quantity: number;
   notes: string;
-  selectedColorId: string;
-  selectedShapeId: string;
-  selectedSizeId: string;
+  selectedColorIds: string[];
+  selectedShapeIds: string[];
+  selectedSizeIds: string[];
 }
 
 export default function ProductLanding() {
@@ -134,12 +134,110 @@ export default function ProductLanding() {
     selectedOffer: '',
     quantity: 1,
     notes: '',
-    selectedColorId: '',
-    selectedShapeId: '',
-    selectedSizeId: ''
+    selectedColorIds: [],
+    selectedShapeIds: [],
+    selectedSizeIds: []
   });
+  const [variantErrors, setVariantErrors] = useState<string[]>([]);
 
   const { toast } = useToast();
+
+  // Get selected offer quantity
+  const getSelectedOfferQuantity = (): number => {
+    if (!product?.priceOffers || !formData.selectedOffer) return 1;
+    
+    const selectedOfferData = product.priceOffers.find(offer => 
+      formData.selectedOffer.includes(offer.label)
+    );
+    return selectedOfferData?.quantity || 1;
+  };
+
+  // Validate variant selections based on offer quantity
+  const validateVariantSelections = (): string[] => {
+    const errors: string[] = [];
+    const maxSelections = getSelectedOfferQuantity();
+    
+    if (formData.selectedColorIds.length > maxSelections) {
+      errors.push(`لقد اخترت العرض ${maxSelections} قطعة، يجب أن تحدد ${maxSelections} لون فقط (حددت ${formData.selectedColorIds.length})`);
+    }
+    
+    if (formData.selectedShapeIds.length > maxSelections) {
+      errors.push(`لقد اخترت العرض ${maxSelections} قطعة، يجب أن تحدد ${maxSelections} شكل فقط (حددت ${formData.selectedShapeIds.length})`);
+    }
+    
+    if (formData.selectedSizeIds.length > maxSelections) {
+      errors.push(`لقد اخترت العرض ${maxSelections} قطعة، يجب أن تحدد ${maxSelections} حجم فقط (حددت ${formData.selectedSizeIds.length})`);
+    }
+    
+    return errors;
+  };
+
+  // Update variant selection handlers
+  const handleColorSelection = (colorId: string) => {
+    const maxSelections = getSelectedOfferQuantity();
+    const currentSelections = formData.selectedColorIds;
+    
+    if (currentSelections.includes(colorId)) {
+      // Remove selection
+      setFormData({
+        ...formData, 
+        selectedColorIds: currentSelections.filter(id => id !== colorId)
+      });
+    } else {
+      // Add selection if under limit
+      if (currentSelections.length < maxSelections) {
+        setFormData({
+          ...formData, 
+          selectedColorIds: [...currentSelections, colorId]
+        });
+      }
+    }
+    
+    // Clear errors when selection changes
+    setVariantErrors([]);
+  };
+
+  const handleShapeSelection = (shapeId: string) => {
+    const maxSelections = getSelectedOfferQuantity();
+    const currentSelections = formData.selectedShapeIds;
+    
+    if (currentSelections.includes(shapeId)) {
+      setFormData({
+        ...formData, 
+        selectedShapeIds: currentSelections.filter(id => id !== shapeId)
+      });
+    } else {
+      if (currentSelections.length < maxSelections) {
+        setFormData({
+          ...formData, 
+          selectedShapeIds: [...currentSelections, shapeId]
+        });
+      }
+    }
+    
+    setVariantErrors([]);
+  };
+
+  const handleSizeSelection = (sizeId: string) => {
+    const maxSelections = getSelectedOfferQuantity();
+    const currentSelections = formData.selectedSizeIds;
+    
+    if (currentSelections.includes(sizeId)) {
+      setFormData({
+        ...formData, 
+        selectedSizeIds: currentSelections.filter(id => id !== sizeId)
+      });
+    } else {
+      if (currentSelections.length < maxSelections) {
+        setFormData({
+          ...formData, 
+          selectedSizeIds: [...currentSelections, sizeId]
+        });
+      }
+    }
+    
+    setVariantErrors([]);
+  };
 
   // جلب بيانات صفحة الهبوط
   const { data: landingPage, isLoading: landingLoading } = useQuery<LandingPage>({
@@ -279,25 +377,34 @@ export default function ProductLanding() {
       // تتبع بداية عملية الشراء
       trackEvent('initiate_checkout', { quantity: formData.quantity });
 
+      // Validate variant selections before submitting
+      const validationErrors = validateVariantSelections();
+      if (validationErrors.length > 0) {
+        setVariantErrors(validationErrors);
+        toast({
+          title: "خطأ في اختيار المتغيرات",
+          description: validationErrors[0],
+          variant: "destructive"
+        });
+        return;
+      }
+
       // إرسال الطلب
-      const orderResponse = await apiRequest('/api/landing-page-orders', {
-        method: 'POST',
-        body: {
-          productId: product.id,
-          landingPageId: landingPage.id,
-          customerName: formData.customerName,
-          customerPhone: formData.customerPhone,
-          customerEmail: formData.customerEmail,
-          customerGovernorate: formData.customerGovernorate,
-          customerAddress: formData.customerAddress,
-          offer: formData.selectedOffer,
-          quantity: formData.quantity,
-          notes: formData.notes,
-          selectedColorId: formData.selectedColorId || null,
-          selectedShapeId: formData.selectedShapeId || null,
-          selectedSizeId: formData.selectedSizeId || null,
-          platformId: landingPage.platformId
-        }
+      const orderResponse = await apiRequest('/api/landing-page-orders', 'POST', {
+        productId: product.id,
+        landingPageId: landingPage.id,
+        customerName: formData.customerName,
+        customerPhone: formData.customerPhone,
+        customerEmail: formData.customerEmail,
+        customerGovernorate: formData.customerGovernorate,
+        customerAddress: formData.customerAddress,
+        offer: formData.selectedOffer,
+        quantity: formData.quantity,
+        notes: formData.notes,
+        selectedColorIds: formData.selectedColorIds,
+        selectedShapeIds: formData.selectedShapeIds,
+        selectedSizeIds: formData.selectedSizeIds,
+        platformId: landingPage.platformId
       });
 
       // تتبع إتمام الشراء
@@ -332,10 +439,11 @@ export default function ProductLanding() {
         selectedOffer: '',
         quantity: 1,
         notes: '',
-        selectedColorId: '',
-        selectedShapeId: '',
-        selectedSizeId: ''
+        selectedColorIds: [],
+        selectedShapeIds: [],
+        selectedSizeIds: []
       });
+      setVariantErrors([]);
       setShowOrderForm(false);
 
     } catch (error) {
@@ -907,7 +1015,23 @@ export default function ProductLanding() {
               {/* خيارات المنتج: الألوان والأشكال والأحجام */}
               {(productColors.length > 0 || productShapes.length > 0 || productSizes.length > 0) && (
                 <div className="space-y-4">
-                  <Label className="text-base font-semibold">خيارات المنتج</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">خيارات المنتج</Label>
+                    <div className="text-sm text-blue-600">
+                      يمكنك اختيار حتى {getSelectedOfferQuantity()} خيارات
+                    </div>
+                  </div>
+                  
+                  {/* عرض رسائل الخطأ */}
+                  {variantErrors.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      {variantErrors.map((error, index) => (
+                        <div key={index} className="text-red-700 text-sm">
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   
                   {/* اختيار اللون */}
                   {productColors.length > 0 && (
@@ -919,10 +1043,10 @@ export default function ProductLanding() {
                           .map((color) => (
                           <div
                             key={color.id}
-                            onClick={() => setFormData({...formData, selectedColorId: color.id})}
+                            onClick={() => handleColorSelection(color.id)}
                             className={`
-                              cursor-pointer p-3 border-2 rounded-lg text-center transition-all
-                              ${formData.selectedColorId === color.id 
+                              cursor-pointer p-3 border-2 rounded-lg text-center transition-all relative
+                              ${formData.selectedColorIds.includes(color.id) 
                                 ? 'border-blue-500 bg-blue-50' 
                                 : 'border-gray-200 hover:border-gray-300'
                               }
@@ -940,8 +1064,16 @@ export default function ProductLanding() {
                               style={{ backgroundColor: color.colorCode }}
                             />
                             <span className="text-sm font-medium">{color.colorName}</span>
+                            {formData.selectedColorIds.includes(color.id) && (
+                              <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                                ✓
+                              </div>
+                            )}
                           </div>
                         ))}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        محدد: {formData.selectedColorIds.length} من {getSelectedOfferQuantity()}
                       </div>
                     </div>
                   )}
@@ -956,10 +1088,10 @@ export default function ProductLanding() {
                           .map((shape) => (
                           <div
                             key={shape.id}
-                            onClick={() => setFormData({...formData, selectedShapeId: shape.id})}
+                            onClick={() => handleShapeSelection(shape.id)}
                             className={`
-                              cursor-pointer p-3 border-2 rounded-lg text-center transition-all
-                              ${formData.selectedShapeId === shape.id 
+                              cursor-pointer p-3 border-2 rounded-lg text-center transition-all relative
+                              ${formData.selectedShapeIds.includes(shape.id) 
                                 ? 'border-blue-500 bg-blue-50' 
                                 : 'border-gray-200 hover:border-gray-300'
                               }
@@ -992,10 +1124,10 @@ export default function ProductLanding() {
                           .map((size) => (
                           <div
                             key={size.id}
-                            onClick={() => setFormData({...formData, selectedSizeId: size.id})}
+                            onClick={() => handleSizeSelection(size.id)}
                             className={`
-                              cursor-pointer p-3 border-2 rounded-lg text-center transition-all
-                              ${formData.selectedSizeId === size.id 
+                              cursor-pointer p-3 border-2 rounded-lg text-center transition-all relative
+                              ${formData.selectedSizeIds.includes(size.id) 
                                 ? 'border-blue-500 bg-blue-50' 
                                 : 'border-gray-200 hover:border-gray-300'
                               }
@@ -1003,8 +1135,16 @@ export default function ProductLanding() {
                           >
                             <div className="text-sm font-medium">{size.sizeName}</div>
                             <div className="text-xs text-gray-500 uppercase">{size.sizeValue}</div>
+                            {formData.selectedSizeIds.includes(size.id) && (
+                              <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                                ✓
+                              </div>
+                            )}
                           </div>
                         ))}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        محدد: {formData.selectedSizeIds.length} من {getSelectedOfferQuantity()}
                       </div>
                     </div>
                   )}

@@ -66,7 +66,7 @@ export default defineConfig({
 # Generated on ${new Date().toISOString()}
 
 # Database Configuration
-DATABASE_URL="postgresql://app.sanadi.pro:%40yaserxp1992@localhost:5432/sanadi_pro"
+DATABASE_URL="postgres://sanad:yaserxp1992@127.0.0.1:5432/sanadi_db"
 
 # Application Configuration
 NODE_ENV="production"

@@ -151,8 +151,11 @@ const ClassicInvoice = forwardRef<HTMLDivElement, ClassicInvoiceProps>(
                       style={{
                         width: '30px',
                         height: '30px',
-                        objectFit: 'contain',
-                        borderRadius: '4px'
+                        objectFit: 'contain'
+                      }}
+                      onError={(e) => {
+                        console.log('Delivery logo failed to load:', deliverySettings.companyLogo);
+                        e.currentTarget.style.display = 'none';
                       }}
                     />
                   )}

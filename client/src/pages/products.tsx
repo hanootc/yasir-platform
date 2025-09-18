@@ -48,9 +48,11 @@ export default function Products() {
   const { data: products, isLoading } = useQuery({
     queryKey: selectedPlatform ? ["/api/products", { platformId: selectedPlatform }] : ["/api/products"],
     queryFn: async () => {
-      const url = selectedPlatform 
-        ? `/api/products?platformId=${selectedPlatform}`
-        : '/api/products';
+      if (!selectedPlatform) {
+        return [];
+      }
+      
+      const url = `/api/products?platformId=${selectedPlatform}`;
       
       console.log("🔍 Fetching products from:", url);
       const response = await fetch(url, {
@@ -65,13 +67,7 @@ export default function Products() {
       
       return response.json();
     },
-    onSuccess: (data) => {
-      // فتح نافذة التعديل تلقائياً للمنتج الأول
-      if (data && Array.isArray(data) && data.length > 0 && !showEditProduct && !selectedProduct) {
-        setSelectedProduct(data[0]);
-        setShowEditProduct(true);
-      }
-    }
+    enabled: !!selectedPlatform
   });
 
   const { data: categories } = useQuery({
@@ -99,10 +95,13 @@ export default function Products() {
 
   const deleteProductMutation = useMutation({
     mutationFn: async (productId: string) => {
-      return apiRequest(`/api/products/${productId}`, "DELETE");
+      if (!selectedPlatform) {
+        throw new Error("No platform selected");
+      }
+      return apiRequest(`/api/platforms/${selectedPlatform}/products/${productId}`, "DELETE");
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${selectedPlatform}/products`] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/top-products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
@@ -224,7 +223,7 @@ export default function Products() {
                 {/* Platform Filter */}
                 <div className="flex items-center gap-3">
                   <PlatformSelector
-                    value={selectedPlatform}
+                    value={selectedPlatform || undefined}
                     onValueChange={setSelectedPlatform}
                     placeholder="اختر منصة..."
                   />
@@ -242,7 +241,7 @@ export default function Products() {
                     <SelectContent className="bg-theme-primary-lighter theme-border">
                       <SelectItem value="all" className="hover:bg-theme-primary-light">جميع التصنيفات</SelectItem>
                       <SelectItem value="uncategorized" className="hover:bg-theme-primary-light">غير مصنف</SelectItem>
-                      {categories && Array.isArray(categories) && categories
+                      {categories && Array.isArray(categories) ? (categories as any[])
                         .sort((a, b) => {
                           if (a.name === 'منزلية') return -1;
                           if (b.name === 'منزلية') return 1;
@@ -252,7 +251,7 @@ export default function Products() {
                         <SelectItem key={category.id} value={category.id} className="hover:bg-theme-primary-light">
                           {category.name}
                         </SelectItem>
-                      ))}
+                      )) : null}
                     </SelectContent>
                   </Select>
                   <label className="text-sm font-medium text-theme-primary whitespace-nowrap">
@@ -281,6 +280,14 @@ export default function Products() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : !selectedPlatform ? (
+            <div className="text-center py-12">
+              <div className="text-gray-500 mb-4">
+                <i className="fas fa-box text-6xl mb-4"></i>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">اختر منصة لعرض المنتجات</h3>
+              <p className="text-gray-500">يرجى اختيار منصة من القائمة أعلاه لعرض وإدارة المنتجات</p>
             </div>
           ) : filteredProducts && Array.isArray(filteredProducts) && filteredProducts.length > 0 ? (
             <div className="space-y-3">
@@ -319,7 +326,7 @@ export default function Products() {
                           <>
                             <i className="fas fa-tag text-xs text-theme-accent"></i>
                             <span className="text-xs text-theme-secondary">
-                              {categories.find((cat: any) => cat.id === product.categoryId)?.name || 'غير محدد'}
+                              {(categories as any[])?.find((cat: any) => cat.id === product.categoryId)?.name || 'غير محدد'}
                             </span>
                           </>
                         )}
@@ -426,21 +433,23 @@ export default function Products() {
       </div>
 
       <CreateProductModal 
-        open={showCreateProduct} 
-        onOpenChange={setShowCreateProduct}
+        isOpen={showCreateProduct} 
+        onClose={() => setShowCreateProduct(false)}
+        platformId={selectedPlatform || undefined}
       />
       
       <EditProductModal
         isOpen={showEditProduct}
         onClose={handleCloseEditProduct}
         product={selectedProduct}
+        platformId={selectedPlatform || ''}
       />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent aria-describedby="delete-product-description">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد حذف المنتج</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription id="delete-product-description">
               هل أنت متأكد من حذف المنتج "{productToDelete?.name}"؟
               <br />
               سيتم حذف جميع البيانات والصور المرتبطة بهذا المنتج نهائياً ولا يمكن التراجع عن هذا الإجراء.

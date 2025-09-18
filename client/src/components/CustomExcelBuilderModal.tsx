@@ -95,7 +95,9 @@ export default function CustomExcelBuilderModal({
   const [templateName, setTemplateName] = useState('');
   const [columns, setColumns] = useState<ExcelColumn[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [showPricesWithZeros, setShowPricesWithZeros] = useState(true);
+  const [showPricesWithZeros, setShowPricesWithZeros] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
 
   // تهيئة الأعمدة عند فتح المودال
   useEffect(() => {
@@ -132,10 +134,53 @@ export default function CustomExcelBuilderModal({
 
   // فلترة الطلبات المحددة  
   const filteredOrders = selectedOrders.length > 0 
-    ? orders.filter(order => selectedOrders.includes(order.id))
-    : orders;
-  
+    ? orders?.filter(order => selectedOrders.includes(order.id)) || []
+    : orders || [];
 
+  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
+    setDraggedItem(columnKey);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, columnKey: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverItem(columnKey);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverItem(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetColumnKey: string) => {
+    e.preventDefault();
+    
+    if (!draggedItem || draggedItem === targetColumnKey) {
+      setDraggedItem(null);
+      setDragOverItem(null);
+      return;
+    }
+
+    setColumns(prev => {
+      const newColumns = [...prev];
+      const draggedIndex = newColumns.findIndex(col => col.key === draggedItem);
+      const targetIndex = newColumns.findIndex(col => col.key === targetColumnKey);
+      
+      // Remove dragged item and insert at target position
+      const [draggedColumn] = newColumns.splice(draggedIndex, 1);
+      newColumns.splice(targetIndex, 0, draggedColumn);
+      
+      // Update order numbers
+      newColumns.forEach((col, idx) => {
+        col.order = idx;
+      });
+      
+      return newColumns;
+    });
+    
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
 
   const moveColumn = (columnKey: string, direction: 'up' | 'down') => {
     setColumns(prev => {
@@ -363,55 +408,56 @@ export default function CustomExcelBuilderModal({
             <ScrollArea className="h-[400px] border border-gray-600 rounded-lg p-3 bg-gray-900">
               <div className="space-y-3">
                 {columns.map((column, index) => (
-                  <div key={column.key} className="flex items-center gap-3 p-3 border border-gray-700 rounded-lg bg-gray-800">
-                    <Checkbox
-                      checked={column.enabled}
-                      onCheckedChange={() => handleColumnToggle(column.key)}
-                      className="border-gray-600"
-                    />
-                    
-                    <div className="flex-1">
-                      <div className="font-medium text-white">{column.label}</div>
-                      <div className="text-xs text-gray-400">مفتاح: {column.key}</div>
+                  <div 
+                    key={column.key} 
+                    draggable={column.enabled}
+                    onDragStart={(e) => handleDragStart(e, column.key)}
+                    onDragOver={(e) => handleDragOver(e, column.key)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, column.key)}
+                    className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${
+                      column.enabled 
+                        ? 'bg-gray-800 border-gray-700 cursor-move hover:bg-gray-750' 
+                        : 'bg-gray-900 border-gray-800'
+                    } ${
+                      draggedItem === column.key 
+                        ? 'opacity-50 scale-95' 
+                        : ''
+                    } ${
+                      dragOverItem === column.key && draggedItem !== column.key
+                        ? 'border-blue-500 bg-blue-900/20'
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {column.enabled && (
+                        <div className="text-gray-400 cursor-move">
+                          <i className="fas fa-grip-vertical"></i>
+                        </div>
+                      )}
+                      <Checkbox
+                        checked={column.enabled}
+                        onCheckedChange={(checked) => handleColumnToggle(column.key)}
+                        className="border-gray-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-white font-medium">{column.label}</span>
+                        <span className="text-gray-400 text-sm">{column.key}</span>
+                      </div>
                     </div>
 
                     {column.enabled && (
-                      <>
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-gray-300">العرض</Label>
-                          <Input
-                            type="number"
-                            min="5"
-                            max="50"
-                            value={column.width}
-                            onChange={(e) => handleColumnWidthChange(column.key, parseInt(e.target.value) || 15)}
-                            className="w-16 h-8 text-xs bg-gray-700 border-gray-600 text-white"
-                          />
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => moveColumn(column.key, 'up')}
-                            disabled={index === 0}
-                            className="h-6 px-2 text-gray-300 hover:bg-gray-700"
-                          >
-                            ↑
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => moveColumn(column.key, 'down')}
-                            disabled={index === columns.length - 1}
-                            className="h-6 px-2 text-gray-300 hover:bg-gray-700"
-                          >
-                            ↓
-                          </Button>
-                        </div>
-                      </>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-gray-300">العرض</Label>
+                        <Input
+                          type="number"
+                          min="5"
+                          max="50"
+                          value={column.width}
+                          onChange={(e) => handleColumnWidthChange(column.key, parseInt(e.target.value) || 15)}
+                          className="w-16 h-8 text-xs bg-gray-700 border-gray-600 text-white"
+                        />
+                      </div>
                     )}
                   </div>
                 ))}

@@ -122,26 +122,23 @@ const ADMIN_THEME_KEY = 'sanadi-admin-theme';
 
 export const useAdminTheme = () => {
   const [adminTheme, setAdminTheme] = useState<AdminTheme>({
-    themeId: 'ocean-breeze',
-    darkMode: false
+    themeId: 'ruby-red',
+    darkMode: true
   });
   const [isLoading, setIsLoading] = useState(true);
 
   // تحميل الثيم من localStorage عند بدء التطبيق
   useEffect(() => {
-    const savedTheme = localStorage.getItem(ADMIN_THEME_KEY);
-    if (savedTheme) {
-      try {
-        const parsed = JSON.parse(savedTheme);
-        setAdminTheme(parsed);
-        applyTheme(parsed);
-      } catch (error) {
-        console.error('خطأ في تحميل ثيم الإدارة:', error);
-      }
-    } else {
-      // تطبيق الثيم الافتراضي
-      applyTheme(adminTheme);
-    }
+    // دائماً استخدم الثيم الثابت (ruby-red + dark mode) حتى لو كان محفوظ في localStorage
+    const fixedTheme = {
+      themeId: 'ruby-red',
+      darkMode: true
+    };
+    
+    setAdminTheme(fixedTheme);
+    applyTheme(fixedTheme);
+    // حفظ الثيم الثابت في localStorage
+    localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(fixedTheme));
     setIsLoading(false);
   }, []);
 
@@ -168,20 +165,38 @@ export const useAdminTheme = () => {
     console.log('🎨 تم تطبيق ثيم الإدارة:', theme);
   };
 
-  // حفظ الثيم في localStorage وتطبيقه
+  // حفظ الثيم في localStorage وتطبيقه - لكن دائماً استخدم الثيم الثابت
   const updateTheme = (newTheme: Partial<AdminTheme>) => {
-    const updatedTheme = { ...adminTheme, ...newTheme };
-    setAdminTheme(updatedTheme);
-    localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(updatedTheme));
-    applyTheme(updatedTheme);
+    // تجاهل أي محاولة لتغيير الثيم - استخدم الثيم الثابت دائماً
+    const fixedTheme = {
+      themeId: 'ruby-red',
+      darkMode: true
+    };
+    setAdminTheme(fixedTheme);
+    localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(fixedTheme));
+    applyTheme(fixedTheme);
   };
 
   const toggleDarkMode = () => {
-    updateTheme({ darkMode: !adminTheme.darkMode });
+    // تجاهل محاولة تغيير النمط - استخدم النمط الليلي دائماً
+    const fixedTheme = {
+      themeId: 'ruby-red',
+      darkMode: true
+    };
+    setAdminTheme(fixedTheme);
+    localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(fixedTheme));
+    applyTheme(fixedTheme);
   };
 
   const changeColorTheme = (themeId: string) => {
-    updateTheme({ themeId });
+    // تجاهل محاولة تغيير اللون - استخدم ruby-red دائماً
+    const fixedTheme = {
+      themeId: 'ruby-red',
+      darkMode: true
+    };
+    setAdminTheme(fixedTheme);
+    localStorage.setItem(ADMIN_THEME_KEY, JSON.stringify(fixedTheme));
+    applyTheme(fixedTheme);
   };
 
   return {

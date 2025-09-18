@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     // تحديد المجلد بناءً على نوع الملف أو المعامل
-    let uploadPath = "./public/uploads/";
+    let uploadPath = "./uploads/";
     
     if (req.query.category === 'products') {
       uploadPath += "products/";
@@ -22,6 +22,8 @@ const storage = multer.diskStorage({
       uploadPath += "videos/";
     } else if (req.query.category === 'tiktok') {
       uploadPath += "tiktok/";
+    } else if (req.url && req.url.includes('store-banner')) {
+      uploadPath += "store-banners/";
     } else {
       uploadPath += "general/";
     }
@@ -57,9 +59,18 @@ export const upload = multer({
 
 // معالج الأخطاء
 export const handleMulterError = (error: any, req: any, res: any, next: any) => {
+  console.log('🚨 Multer error handler called:', error);
+  console.log('🚨 Error type:', typeof error);
+  console.log('🚨 Error instanceof MulterError:', error instanceof multer.MulterError);
+  console.log('🚨 Error message:', error?.message);
+  console.log('🚨 Error code:', error?.code);
+  
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: 'File too large' });
+    }
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Unexpected field' });
     }
   }
   
@@ -67,5 +78,10 @@ export const handleMulterError = (error: any, req: any, res: any, next: any) => 
     return res.status(400).json({ error: 'Only image and video files are allowed' });
   }
   
+  if (error.message && error.message.includes('Unexpected end of form')) {
+    return res.status(400).json({ error: 'Invalid form data' });
+  }
+  
+  console.error('Multer error:', error);
   next(error);
 };

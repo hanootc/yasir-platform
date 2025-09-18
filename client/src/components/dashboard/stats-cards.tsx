@@ -8,6 +8,7 @@ import { TrendingUp, TrendingDown, DollarSign, ShoppingBag, Package, BarChart3 }
 export default function StatsCards() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["/api/dashboard/stats"],
+    enabled: false, // Disable automatic loading
   });
 
   // Log stats data for debugging

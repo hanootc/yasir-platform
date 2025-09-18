@@ -174,11 +174,8 @@ export default function PlatformWhatsApp() {
   const createSessionMutation = useMutation({
     mutationFn: async (data: { phoneNumber: string, businessName: string }) => {
       console.log('API Request: POST /api/whatsapp/connect', data);
-      const response = await apiRequest('/api/whatsapp/connect', {
-        method: 'POST',
-        body: data
-      });
-      return await response.json();
+      const response = await apiRequest('/api/whatsapp/connect', 'POST', data);
+      return response;
     },
     onSuccess: (data) => {
       console.log('WhatsApp connection successful:', data);
@@ -214,9 +211,7 @@ export default function PlatformWhatsApp() {
   // قطع الاتصال
   const disconnectMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest(`/api/whatsapp/disconnect`, {
-        method: "POST"
-      });
+      return await apiRequest(`/api/whatsapp/disconnect`, "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/whatsapp/session`] });
@@ -230,9 +225,7 @@ export default function PlatformWhatsApp() {
   // إعادة الاتصال التلقائي
   const reconnectMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest(`/api/whatsapp/reconnect`, {
-        method: "POST"
-      });
+      return await apiRequest(`/api/whatsapp/reconnect`, "POST");
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: [`/api/whatsapp/session`] });
@@ -271,23 +264,46 @@ export default function PlatformWhatsApp() {
   // إرسال رسالة
   const sendMessageMutation = useMutation({
     mutationFn: async (data: { chatId: string, content: string, type: string }) => {
-      return await apiRequest(`/api/whatsapp/send`, {
-        method: "POST",
-        body: data
-      });
+      console.log('📤 Sending message:', data);
+      const result = await apiRequest(`/api/whatsapp/send-to-chat`, "POST", data);
+      console.log('✅ Message sent result:', result);
+      return result;
     },
     onSuccess: () => {
+      console.log('✅ Message sent successfully, updating queries');
       queryClient.invalidateQueries({ queryKey: [`/api/whatsapp/messages`, selectedChat] });
       queryClient.invalidateQueries({ queryKey: [`/api/whatsapp/chats`] });
       refetchMessages(); // تحديث فوري للرسائل
       refetchChats(); // تحديث فوري للمحادثات
       setNewMessage("");
     },
+    onError: (error) => {
+      console.error('❌ Error sending message:', error);
+      toast({
+        title: "خطأ في إرسال الرسالة",
+        description: error.message || "فشل في إرسال الرسالة",
+        variant: "destructive",
+      });
+    },
   });
 
   // معالج إرسال الرسائل
   const handleSendMessage = () => {
-    if (!selectedChat || !newMessage.trim()) return;
+    console.log('🚀 handleSendMessage called');
+    console.log('🚀 selectedChat:', selectedChat);
+    console.log('🚀 newMessage:', newMessage);
+    console.log('🚀 mutation pending:', sendMessageMutation.isPending);
+    
+    if (!selectedChat || !newMessage.trim()) {
+      console.log('❌ Cannot send: no chat selected or empty message');
+      return;
+    }
+
+    console.log('✅ Calling mutation with data:', {
+      chatId: selectedChat,
+      content: newMessage,
+      type: 'text',
+    });
 
     sendMessageMutation.mutate({
       chatId: selectedChat,
@@ -296,12 +312,29 @@ export default function PlatformWhatsApp() {
     });
   };
 
-  // معالج تحديث حالة الطلب
+  // معالج تحديث حالة الطلب - استخدام endpoint المنصة الجديد
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    console.log('🔄 Updating order status:', { orderId, newStatus });
+    
     try {
-      await apiRequest(`/api/orders/${orderId}`, 'PATCH', {
-        status: newStatus
+      const response = await fetch(`/api/platform/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // استخدام cookies للمصادقة
+        body: JSON.stringify({
+          status: newStatus
+        })
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Order status updated successfully:', result);
 
       // إعادة تحميل بيانات الطلبات للعميل
       queryClient.invalidateQueries({ queryKey: [`/api/whatsapp/chat-orders/${selectedChat}`] });
@@ -310,11 +343,12 @@ export default function PlatformWhatsApp() {
         title: "تم تحديث الحالة",
         description: "تم تحديث حالة الطلب بنجاح",
       });
-    } catch (error) {
-      console.error('Error updating order status:', error);
+    } catch (error: any) {
+      console.error('❌ Error updating order status:', error);
+      
       toast({
         title: "خطأ في التحديث",
-        description: "حدث خطأ في تحديث حالة الطلب",
+        description: error.message || "حدث خطأ في تحديث حالة الطلب",
         variant: "destructive",
       });
     }
@@ -494,7 +528,7 @@ export default function PlatformWhatsApp() {
         <div className="p-4 lg:p-8">
           {whatsappSession?.isConnected ? (
             // واجهة الواتساب المتصلة
-            <div className="h-[calc(100vh-160px)] lg:h-[calc(100vh-200px)]">
+            <div className="h-[calc(100vh-120px)] lg:h-[calc(100vh-140px)]">
               {/* الشاشات الكبيرة */}
               <div className="hidden lg:grid lg:grid-cols-3 gap-6 h-full">
                 {/* قائمة المحادثات */}
@@ -510,7 +544,7 @@ export default function PlatformWhatsApp() {
                   </CardHeader>
                   <CardContent className="p-0">
                     {chats && chats.length > 0 ? (
-                      <div className="max-h-[500px] overflow-y-auto">
+                      <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
                         {chats.map((chat: any) => (
                           <div
                             key={chat.id}
@@ -518,9 +552,9 @@ export default function PlatformWhatsApp() {
                               setSelectedChat(chat.id);
                               setShowChatList(false); // إخفاء قائمة المحادثات في الشاشات الصغيرة
                             }}
-                            className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                            className={`p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                               selectedChat === chat.id ? 'bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 border-r-2 border-r-purple-500' : ''
-                            }`}
+                            } selection:bg-purple-100 dark:selection:bg-purple-900/50 selection:text-purple-900 dark:selection:text-purple-100`}
                           >
                             <div className="flex items-center gap-3">
                               {(() => {
@@ -549,20 +583,21 @@ export default function PlatformWhatsApp() {
                                   <img 
                                     src={(chat as any).profilePicUrl} 
                                     alt={chat.name}
-                                    className={`w-10 h-10 rounded-full object-cover border-2 ${borderColor}`}
+                                    className={`w-12 h-12 rounded-full object-cover border-2 ${borderColor}`}
                                     onError={(e) => {
                                       e.currentTarget.style.display = 'none';
                                       const fallback = document.createElement('div');
-                                      fallback.className = `w-10 h-10 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`;
-                                      fallback.innerHTML = '<i class="fas fa-user text-purple-600 text-sm"></i>';
+                                      fallback.className = `w-12 h-12 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`;
+                                      fallback.innerHTML = '<i class="fas fa-user text-purple-600 text-base"></i>';
                                       if (e.currentTarget.parentNode) {
-                                        e.currentTarget.parentNode.insertBefore(fallback, e.currentTarget);
+                                        (e.currentTarget.parentNode as HTMLElement)?.classList.remove('animate-pulse');
+                                        e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
                                       }
                                     }}
                                   />
                                 ) : (
-                                  <div className={`w-10 h-10 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`}>
-                                    <i className="fas fa-user text-purple-600 text-sm"></i>
+                                  <div className={`w-12 h-12 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`}>
+                                    <i className="fas fa-user text-purple-600 text-base"></i>
                                   </div>
                                 );
                               })()}
@@ -572,13 +607,13 @@ export default function PlatformWhatsApp() {
                                     {formatTime(chat.lastMessageTime)}
                                   </span>
                                   <div className="text-right">
-                                    <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                                    <p className="font-semibold text-base text-gray-900 dark:text-gray-100 truncate">
                                       {chat.name}
                                     </p>
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono" dir="ltr">
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 font-mono" dir="ltr">
                                     +{chat.id.replace('@c.us', '')}
                                   </p>
                                 </div>
@@ -608,7 +643,7 @@ export default function PlatformWhatsApp() {
                 {/* منطقة المحادثة للشاشات الكبيرة */}
                 <Card className="lg:col-span-2">
                 {selectedChat ? (
-                  <div className="h-[500px] flex flex-col">
+                  <div className="h-[calc(100vh-200px)] flex flex-col">
                     {/* رأس المحادثة */}
                     <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                       <div className="flex items-center justify-between">
@@ -654,9 +689,9 @@ export default function PlatformWhatsApp() {
                               'border-gray-300'
                             ) : 'border-gray-300';
                             
-                            return currentChat?.profilePicUrl ? (
+                            return (currentChat as any)?.profilePicUrl ? (
                               <img 
-                                src={currentChat.profilePicUrl} 
+                                src={(currentChat as any).profilePicUrl} 
                                 alt="صورة البروفايل"
                                 className={`w-10 h-10 rounded-full object-cover border-2 ${borderColor}`}
                                 onError={(e) => {
@@ -664,7 +699,8 @@ export default function PlatformWhatsApp() {
                                   const fallback = document.createElement('div');
                                   fallback.className = `w-10 h-10 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`;
                                   fallback.innerHTML = '<i class="fas fa-user text-purple-600"></i>';
-                                  e.currentTarget.parentNode.insertBefore(fallback, e.currentTarget);
+                                  (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                  e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
                                 }}
                               />
                             ) : (
@@ -915,7 +951,8 @@ export default function PlatformWhatsApp() {
                                           const fallback = document.createElement('div');
                                           fallback.className = 'text-xs text-gray-500 italic';
                                           fallback.textContent = '❌ فشل في تحميل الصورة';
-                                          e.currentTarget.parentNode.appendChild(fallback);
+                                          (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                          e.currentTarget.parentNode?.appendChild(fallback);
                                         }}
                                       />
                                       {message.content && <p className="text-sm">{message.content}</p>}
@@ -930,7 +967,8 @@ export default function PlatformWhatsApp() {
                                           const fallback = document.createElement('div');
                                           fallback.className = 'text-xs text-gray-500 italic';
                                           fallback.textContent = '❌ فشل في تحميل الفيديو';
-                                          e.currentTarget.parentNode.appendChild(fallback);
+                                          (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                          e.currentTarget.parentNode?.appendChild(fallback);
                                         }}
                                       >
                                         <source src={message.mediaUrl} />
@@ -947,7 +985,8 @@ export default function PlatformWhatsApp() {
                                           const fallback = document.createElement('div');
                                           fallback.className = 'text-xs text-gray-500 italic';
                                           fallback.textContent = '❌ فشل في تحميل الصوت';
-                                          e.currentTarget.parentNode.appendChild(fallback);
+                                          (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                          e.currentTarget.parentNode?.appendChild(fallback);
                                         }}
                                       >
                                         <source src={message.mediaUrl} />
@@ -1047,9 +1086,9 @@ export default function PlatformWhatsApp() {
                                 setSelectedChat(chat.id);
                                 setShowChatList(false);
                               }}
-                              className={`p-3 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                                selectedChat === chat.id ? 'bg-gradient-to-r from-purple-50 to-blue-50 border-r-2 border-r-purple-500' : ''
-                              }`}
+                              className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                                selectedChat === chat.id ? 'bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 border-r-2 border-r-purple-500' : ''
+                              } selection:bg-purple-100 dark:selection:bg-purple-900/50 selection:text-purple-900 dark:selection:text-purple-100`}
                             >
                               <div className="flex items-center gap-3">
                                 {(() => {
@@ -1083,7 +1122,8 @@ export default function PlatformWhatsApp() {
                                         const fallback = document.createElement('div');
                                         fallback.className = `w-10 h-10 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`;
                                         fallback.innerHTML = '<i class="fas fa-user text-purple-600 text-sm"></i>';
-                                        e.currentTarget.parentNode.insertBefore(fallback, e.currentTarget);
+                                        (e.currentTarget.parentNode as HTMLElement)?.classList.remove('animate-pulse');
+                                        e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
                                       }}
                                     />
                                   ) : (
@@ -1183,17 +1223,18 @@ export default function PlatformWhatsApp() {
                                 
                                 return (
                                   <div className="flex items-center gap-2">
-                                    {currentChat?.profilePicUrl ? (
+                                    {(currentChat as any)?.profilePicUrl ? (
                                       <img 
-                                        src={currentChat.profilePicUrl} 
-                                        alt={currentChat.name}
+                                        src={(currentChat as any).profilePicUrl} 
+                                        alt={currentChat?.name}
                                         className={`w-8 h-8 rounded-full object-cover border-2 ${borderColor}`}
                                         onError={(e) => {
                                           e.currentTarget.style.display = 'none';
                                           const fallback = document.createElement('div');
                                           fallback.className = `w-8 h-8 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center border-2 ${borderColor}`;
                                           fallback.innerHTML = '<i class="fas fa-user text-purple-600 text-xs"></i>';
-                                          e.currentTarget.parentNode.insertBefore(fallback, e.currentTarget);
+                                          (e.currentTarget.parentNode as HTMLElement)?.classList.remove('animate-pulse');
+                                          e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
                                         }}
                                       />
                                     ) : (
@@ -1346,7 +1387,8 @@ export default function PlatformWhatsApp() {
                                                 const fallback = document.createElement('div');
                                                 fallback.className = 'text-xs text-gray-400 italic';
                                                 fallback.textContent = '❌ فشل في تحميل الصورة';
-                                                e.currentTarget.parentNode.appendChild(fallback);
+                                                (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                                e.currentTarget.parentNode?.appendChild(fallback);
                                               }}
                                             />
                                             {(message.body || message.content) && <div className="break-words">{message.body || message.content}</div>}
@@ -1361,7 +1403,8 @@ export default function PlatformWhatsApp() {
                                                 const fallback = document.createElement('div');
                                                 fallback.className = 'text-xs text-gray-400 italic';
                                                 fallback.textContent = '❌ فشل في تحميل الفيديو';
-                                                e.currentTarget.parentNode.appendChild(fallback);
+                                                (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                                e.currentTarget.parentNode?.appendChild(fallback);
                                               }}
                                             >
                                               <source src={message.mediaUrl} />
@@ -1378,7 +1421,8 @@ export default function PlatformWhatsApp() {
                                                 const fallback = document.createElement('div');
                                                 fallback.className = 'text-xs text-gray-400 italic';
                                                 fallback.textContent = '❌ فشل في تحميل الصوت';
-                                                e.currentTarget.parentNode.appendChild(fallback);
+                                                (e.currentTarget.parentNode as HTMLElement)?.classList.add('animate-pulse');
+                                                e.currentTarget.parentNode?.appendChild(fallback);
                                               }}
                                             >
                                               <source src={message.mediaUrl} />
@@ -1586,26 +1630,25 @@ export default function PlatformWhatsApp() {
                       
                       <Input
                         type="text"
-                        placeholder={sessionData?.whatsappNumber || sessionData?.contactPhone ? 
-                          `${sessionData?.whatsappNumber || sessionData?.contactPhone} (من إعدادات المنصة)` : 
-                          "رقم الواتساب بيزنس (+9647xxxxxxxx)"
-                        }
+                        placeholder={(sessionData as any)?.whatsappNumber || (sessionData as any)?.contactPhone ? 
+                          `${(sessionData as any).whatsappNumber || (sessionData as any).contactPhone}` : 
+                          "رقم الواتساب (مثال: 9647801234567)"}
                         className="text-center"
                         id="phoneNumber"
-                        key={`phone-${sessionData?.whatsappNumber || sessionData?.contactPhone || 'empty'}`}
-                        defaultValue={sessionData?.whatsappNumber || sessionData?.contactPhone || ''}
+                        key={`phone-${(sessionData as any)?.whatsappNumber || (sessionData as any)?.contactPhone || 'empty'}`}
+                        defaultValue={(sessionData as any)?.whatsappNumber || (sessionData as any)?.contactPhone || ''}
                       />
                       
                       <Input
                         type="text"
-                        placeholder={sessionData?.platformName ? 
-                          `${sessionData?.platformName} (من إعدادات المنصة)` : 
+                        placeholder={(sessionData as any)?.platformName ? 
+                          `${(sessionData as any)?.platformName} (من إعدادات المنصة)` : 
                           "اسم النشاط التجاري (اختياري)"
                         }
                         className="text-center"
                         id="businessName"
-                        key={`business-${sessionData?.platformName || 'empty'}`}
-                        defaultValue={sessionData?.platformName || ''}
+                        key={`business-${(sessionData as any)?.platformName || 'empty'}`}
+                        defaultValue={(sessionData as any)?.platformName || ''}
                       />
                       
                       <Button

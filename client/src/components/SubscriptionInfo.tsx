@@ -7,9 +7,21 @@ interface SubscriptionInfoProps {
   className?: string;
 }
 
+// Define subscription data interface
+interface SubscriptionData {
+  isExpired?: boolean;
+  isExpiringSoon?: boolean;
+  daysExpired?: number;
+  daysRemaining?: number;
+  subscriptionStartDate?: string;
+  createdAt?: string;
+  subscriptionEndDate?: string;
+  subscriptionPlan?: string;
+}
+
 export function SubscriptionInfo({ className = "" }: SubscriptionInfoProps) {
   // جلب بيانات الاشتراك الحقيقية من الخادم
-  const { data: subscriptionData, isLoading } = useQuery({
+  const { data: subscriptionData, isLoading } = useQuery<SubscriptionData>({
     queryKey: ['/api/platform/subscription-status'],
     retry: false,
   });
@@ -43,12 +55,12 @@ export function SubscriptionInfo({ className = "" }: SubscriptionInfoProps) {
 
   const getWarningMessage = () => {
     if (subscriptionData?.isExpired) {
-      return `انتهى منذ ${subscriptionData.daysExpired} يوم`;
+      return `انتهى منذ ${subscriptionData.daysExpired || 0} يوم`;
     }
     if (subscriptionData?.isExpiringSoon) {
-      return `ينتهي خلال ${subscriptionData.daysRemaining} يوم`;
+      return `ينتهي خلال ${subscriptionData.daysRemaining || 0} يوم`;
     }
-    return `ينتهي خلال ${subscriptionData.daysRemaining} يوم`;
+    return `ينتهي خلال ${subscriptionData.daysRemaining || 0} يوم`;
   };
 
   const handleRenewal = () => {
@@ -58,8 +70,8 @@ export function SubscriptionInfo({ className = "" }: SubscriptionInfoProps) {
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      {/* معلومات الاشتراك */}
-      <div className="flex items-center gap-2 text-sm">
+      {/* معلومات الاشتراك - مخفية على الشاشات الصغيرة */}
+      <div className="hidden md:flex items-center gap-2 text-sm">
         <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
           <Calendar className="w-4 h-4" />
           <span>البداية:</span>

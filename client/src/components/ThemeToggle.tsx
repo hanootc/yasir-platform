@@ -5,16 +5,18 @@ const ThemeToggle: React.FC = () => {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    // تحميل المظهر المحفوظ من localStorage
+    // تحميل المظهر المحفوظ من localStorage - الوضع الليلي افتراضي
     const savedTheme = localStorage.getItem('theme');
-    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    const shouldBeDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+    const shouldBeDark = savedTheme !== 'light'; // دائماً dark إلا إذا اختار المستخدم light صراحة
     setIsDark(shouldBeDark);
     
     // تطبيق المظهر على العنصر الجذر
     if (shouldBeDark) {
       document.documentElement.classList.add('dark');
+      if (!savedTheme) {
+        localStorage.setItem('theme', 'dark'); // حفظ الوضع الليلي كافتراضي
+      }
     } else {
       document.documentElement.classList.remove('dark');
     }

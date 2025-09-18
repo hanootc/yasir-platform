@@ -14,9 +14,6 @@ app.use(express.urlencoded({ extended: false }));
 // إعداد الملفات الثابتة - خدمة مجلد uploads
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
-// خدمة ملفات الواجهة الأمامية المبنية
-// app.use(express.static(path.join(__dirname, '../dist/client')));
-
 // إضافة دعم رفع الملفات
 app.use(fileUpload({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max file size
@@ -80,6 +77,14 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // Serve static files from dist/public, but exclude API routes
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    express.static(path.join(__dirname, '../dist/public'))(req, res, next);
+  });
+
   // معالجة الأخطاء
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -89,9 +94,13 @@ app.use((req, res, next) => {
     console.error(err);
   });
 
-  // خدمة الواجهة الأمامية لجميع المسارات الأخرى
+  // خدمة الواجهة الأمامية لجميع المسارات الأخرى (exclude API routes)
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, './public/index.html'));
+    // Don't serve HTML for API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.sendFile(path.join(__dirname, '../dist/public/index.html'));
   });
 
   // تشغيل الخادم

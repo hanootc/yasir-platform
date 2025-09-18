@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,20 +57,63 @@ export default function CreateLandingPageModal({ open, onOpenChange }: CreateLan
     },
   });
 
-  const { data: products } = useQuery({
-    queryKey: [`/api/platforms/${JSON.parse(localStorage.getItem('platformSession') || '{}').platformId}/products`],
+  // Get platform session from API
+  const { data: platformSession, isLoading: sessionLoading } = useQuery({
+    queryKey: ["/api/platform-session"],
+    retry: false,
     enabled: open,
   });
 
-  // Get platform session
-  const platformSession = JSON.parse(localStorage.getItem('platformSession') || '{}');
+  // Get employee session if available
+  const { data: employeeSession } = useQuery({
+    queryKey: ["/api/employee-session"],
+    retry: false,
+    enabled: open,
+  });
+
+  // Extract platform ID with proper typing - handle both platform and employee sessions
+  const platformId = (employeeSession as any)?.success 
+    ? (employeeSession as any).employee.platformId 
+    : (platformSession as any)?.platformId;
+
+  const { data: products, isLoading: productsLoading, error: productsError } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/products`],
+    enabled: open && !!platformId,
+  });
+
+  // Debug logging
+  console.log('Modal Debug:', {
+    open,
+    sessionLoading,
+    platformSession,
+    platformId,
+    productsLoading,
+    products,
+    productsError
+  });
 
   const createLandingPageMutation = useMutation({
     mutationFn: async (data: CreateLandingPageForm) => {
-      return apiRequest(`/api/platforms/${platformSession.platformId}/landing-pages`, "POST", data);
+      console.log('🚀 Creating landing page with data:', data);
+      console.log('🔗 API URL:', `/api/platforms/${platformId}/landing-pages`);
+      
+      try {
+        const result = await apiRequest(`/api/platforms/${platformId}/landing-pages`, "POST", data);
+        console.log('✅ Landing page created successfully:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ Error creating landing page:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        });
+        throw error;
+      }
     },
     onSuccess: (landingPage) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformSession.platformId}/landing-pages`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/landing-pages`] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
       
       toast({
@@ -83,6 +126,8 @@ export default function CreateLandingPageModal({ open, onOpenChange }: CreateLan
       setSelectedTemplate("modern_minimal");
     },
     onError: (error) => {
+      console.error('❌ Mutation error handler:', error);
+      
       if (isUnauthorizedError(error)) {
         toast({
           title: "غير مصرح",
@@ -95,21 +140,33 @@ export default function CreateLandingPageModal({ open, onOpenChange }: CreateLan
         return;
       }
       
+      // Show detailed error message
+      const errorMessage = error.response?.data?.error || error.message || "حدث خطأ غير معروف";
+      const errorDetails = error.response?.data?.details || "";
+      
       toast({
-        title: "خطأ",
-        description: "حدث خطأ أثناء إنشاء صفحة الهبوط",
+        title: "خطأ في إنشاء صفحة الهبوط",
+        description: `${errorMessage}${errorDetails ? ` - ${errorDetails}` : ''}`,
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: CreateLandingPageForm) => {
+    console.log('📝 Form submitted with data:', data);
+    console.log('🎨 Selected template:', selectedTemplate);
+    console.log('🆔 Platform ID:', platformId);
+    
     const payload = {
       ...data,
       template: selectedTemplate,
       // Auto-generate customUrl if not provided
       customUrl: data.customUrl || generateSlugFromArabic(data.title),
     };
+    
+    console.log('🚀 Final payload for API:', payload);
+    console.log('📡 About to call mutation...');
+    
     createLandingPageMutation.mutate(payload);
   };
 
@@ -147,10 +204,16 @@ export default function CreateLandingPageModal({ open, onOpenChange }: CreateLan
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto modal-content-solid theme-border">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-theme-primary">إنشاء صفحة هبوط جديدة</DialogTitle>
+          <DialogDescription className="text-right text-gray-600">
+            قم بإنشاء صفحة هبوط جديدة لمنتجاتك لزيادة المبيعات
+          </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
+            console.log('❌ Form validation errors:', errors);
+            console.log('📋 Current form values:', form.getValues());
+          })} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* المنتج المرتبط - يمين في RTL */}
               <FormField
@@ -166,11 +229,25 @@ export default function CreateLandingPageModal({ open, onOpenChange }: CreateLan
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {(products as any[])?.map((product: any) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name}
+                        {productsLoading ? (
+                          <SelectItem value="loading" disabled>
+                            جاري تحميل المنتجات...
                           </SelectItem>
-                        ))}
+                        ) : productsError ? (
+                          <SelectItem value="error" disabled>
+                            خطأ في تحميل المنتجات
+                          </SelectItem>
+                        ) : !products || (Array.isArray(products) && products.length === 0) ? (
+                          <SelectItem value="no-products" disabled>
+                            لا توجد منتجات متاحة
+                          </SelectItem>
+                        ) : (
+                          (products as any[]).map((product: any) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />

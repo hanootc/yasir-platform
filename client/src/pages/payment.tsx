@@ -30,7 +30,7 @@ const Payment = () => {
   const plans = {
     basic: {
       name: 'البداية',
-      price: '49,000',
+      price: '1,000',
       currency: 'IQD',
       period: 'دينار/شهر',
       description: 'مثالي للمتاجر الصغيرة والمبتدئين',

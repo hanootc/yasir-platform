@@ -605,7 +605,7 @@ export default function ThankYouPage() {
               <Button 
                 onClick={() => {
                   if ((platform as any)?.subdomain) {
-                    window.location.href = `/${(platform as any).subdomain}`;
+                    window.location.href = `https://sanadi.pro/${(platform as any).subdomain}`;
                   } else {
                     window.location.href = "/";
                   }

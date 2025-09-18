@@ -17,12 +17,14 @@ import { LocalImageUploader } from "@/components/LocalImageUploader";
 interface ProductColor {
   id: string;
   productId: string;
+  platformId: string;
   colorName: string;
   colorCode: string;
   colorImageUrl: string | null;
-  description: string | null;
-  sortOrder: number;
+  priceAdjustment: string;
+  stockQuantity: number;
   isActive: boolean;
+  sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,28 +64,39 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
   });
 
   // Helper function for API requests with JSON response
-  const fetchJson = async (url: string, options?: RequestInit) => {
-    const response = await apiRequest(url, {
-      method: options?.method || "GET",
-      body: options?.body ? JSON.parse(options.body as string) : undefined
-    });
-    return response.json();
+  const fetchJson = async (url: string, method: string = "GET", body?: unknown) => {
+    const response = await apiRequest(url, method, body);
+    return response; // apiRequest already returns parsed JSON
   };
 
   // Fetch product colors
-  const { data: colors = [], isLoading } = useQuery({
+  const { data: colors = [], isLoading, error } = useQuery({
     queryKey: ["products", productId, "colors"],
-    queryFn: () => fetchJson(`/api/products/${productId}/colors`),
+    queryFn: async () => {
+      const result = await fetchJson(`/api/products/${productId}/colors`);
+      return Array.isArray(result) ? result : [];
+    },
+    staleTime: 0, // إجبار إعادة التحميل
+    gcTime: 0, // منع التخزين المؤقت (gcTime بدلاً من cacheTime في الإصدار الجديد)
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   // Create color mutation
   const createColorMutation = useMutation({
-    mutationFn: (colorData: ColorFormData) =>
-      fetchJson(`/api/products/${productId}/colors`, {
-        method: "POST",
-        body: JSON.stringify({ ...colorData, platformId }),
-      }),
-    onSuccess: () => {
+    mutationFn: async (colorData: ColorFormData) => {
+      console.log('🎨 Sending color data:', colorData);
+      const result = await apiRequest(`/api/products/${productId}/colors`, "POST", { 
+        colorName: colorData.colorName,
+        colorCode: colorData.colorCode,
+        colorImageUrl: colorData.colorImageUrl || null,
+        description: colorData.description || null,
+        sortOrder: colorData.sortOrder || 0
+      });
+      console.log('🎨 Color creation result:', result);
+      return result;
+    },
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "colors"] });
       setIsAddDialogOpen(false);
       form.reset();
@@ -92,10 +105,12 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
         description: "تم إضافة اللون بنجاح",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("❌ خطأ في إضافة اللون:", error);
+      console.error("Full error details:", JSON.stringify(error, null, 2));
       toast({
         title: "خطأ",
-        description: "فشل في إضافة اللون",
+        description: error?.message || "فشل في إضافة اللون",
         variant: "destructive",
       });
     },
@@ -104,10 +119,7 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
   // Update color mutation
   const updateColorMutation = useMutation({
     mutationFn: ({ colorId, colorData }: { colorId: string; colorData: Partial<ColorFormData> }) =>
-      fetchJson(`/api/product-colors/${colorId}`, {
-        method: "PUT",
-        body: JSON.stringify(colorData),
-      }),
+      apiRequest(`/api/product-colors/${colorId}`, "PUT", colorData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "colors"] });
       setEditingColor(null);
@@ -129,9 +141,7 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
   // Delete color mutation
   const deleteColorMutation = useMutation({
     mutationFn: (colorId: string) =>
-      fetchJson(`/api/product-colors/${colorId}`, {
-        method: "DELETE",
-      }),
+      apiRequest(`/api/product-colors/${colorId}`, "DELETE"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "colors"] });
       toast({
@@ -162,7 +172,7 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
       colorName: color.colorName,
       colorCode: color.colorCode,
       colorImageUrl: color.colorImageUrl || "",
-      description: color.description || "",
+      description: "",
       sortOrder: color.sortOrder,
       isActive: color.isActive,
     });
@@ -197,11 +207,14 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
               إضافة لون
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" aria-describedby="color-dialog-description">
             <DialogHeader>
               <DialogTitle>
                 {editingColor ? "تعديل اللون" : "إضافة لون جديد"}
               </DialogTitle>
+              <div id="color-dialog-description" className="sr-only">
+                نافذة لإضافة أو تعديل لون المنتج مع إمكانية رفع صورة
+              </div>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -342,7 +355,11 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
         </Dialog>
       </CardHeader>
       <CardContent>
-        {colors.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-8 text-muted-foreground">
+            جارٍ تحميل الألوان...
+          </div>
+        ) : !Array.isArray(colors) || colors.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             لا توجد ألوان مضافة لهذا المنتج
           </div>
@@ -402,7 +419,6 @@ export function ProductColorsManager({ productId, platformId }: ProductColorsMan
                 
                 <div className="text-sm text-muted-foreground">
                   <div>الكود: {color.colorCode}</div>
-                  {color.description && <div>الوصف: {color.description}</div>}
                   <div>الترتيب: {color.sortOrder}</div>
                 </div>
               </div>

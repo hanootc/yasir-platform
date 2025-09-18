@@ -5,10 +5,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Star, Package, Eye, MessageCircle, Phone, Home, Menu, X } from 'lucide-react';
+import { navigateToProduct } from '@/lib/productUtils';
 
 interface Product {
   id: string;
   name: string;
+  slug: string;
   description: string;
   price: number;
   imageUrls: string[];
@@ -33,12 +35,21 @@ interface LandingPage {
 interface Platform {
   id: string;
   platformName: string;
-  ownerName: string;
-  phoneNumber: string;
+  ownerName?: string;
+  phoneNumber?: string;
   whatsappNumber?: string;
+  logoURL?: string;
   logoUrl?: string;
   subdomain: string;
   storeTemplate?: string;
+  storeBannerUrl?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  description?: string;
+  isActive?: boolean;
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
 }
 
 interface Category {
@@ -57,7 +68,12 @@ export default function CustomerStore() {
 
   // جلب معلومات المنصة
   const { data: platform, isLoading: platformLoading } = useQuery<Platform>({
-    queryKey: ['/api/public/platform', subdomain],
+    queryKey: [`/api/public/platform/${subdomain}`],
+    queryFn: async () => {
+      const response = await fetch(`/api/public/platform/${subdomain}`);
+      if (!response.ok) throw new Error('Failed to fetch platform');
+      return response.json();
+    },
     enabled: !!subdomain && subdomain !== 'platform-registration' && subdomain !== 'register-platform',
   });
 
@@ -81,11 +97,16 @@ export default function CustomerStore() {
   // جلب التصنيفات
   const { data: categories, isLoading: categoriesLoading } = useQuery<Category[]>({
     queryKey: [`/api/public/platform/${subdomain}/categories`],
+    queryFn: async () => {
+      const response = await fetch(`/api/public/platform/${subdomain}/categories`);
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      return response.json();
+    },
     enabled: !!subdomain,
   });
 
   // جلب جميع صفحات الهبوط للمنصة
-  const { data: allLandingPages } = useQuery<LandingPage[]>({
+  const { data: allLandingPages = [] } = useQuery<LandingPage[]>({
     queryKey: [`/api/platforms/${platform?.id}/landing-pages`],
     queryFn: async () => {
       if (!platform?.id) return [];
@@ -96,11 +117,20 @@ export default function CustomerStore() {
     enabled: !!platform?.id,
   });
 
-  // إزالة الوضع المظلم من صفحة المتجر نهائياً
+  // تطبيق الوضع المظلم حسب إعدادات المتجر
   useEffect(() => {
-    document.documentElement.classList.remove('dark');
-    document.body.style.backgroundColor = 'white';
-    document.body.style.color = 'black';
+    const storeTemplate = platform?.storeTemplate || 'grid';
+    const isDarkTheme = storeTemplate?.startsWith('dark_');
+    
+    if (isDarkTheme) {
+      document.documentElement.classList.add('dark');
+      document.body.style.backgroundColor = '#111827';
+      document.body.style.color = 'white';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.style.backgroundColor = 'white';
+      document.body.style.color = 'black';
+    }
     
     // إضافة CSS لضمان عدم شفافية القوائم في صفحة المتجر
     const storePageStyle = document.createElement('style');
@@ -112,16 +142,16 @@ export default function CustomerStore() {
       html textarea,
       body input,
       body textarea {
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
-        border-color: #d1d5db !important;
-        color: #374151 !important;
+        background-color: ${isDarkTheme ? '#374151' : '#f9fafb'} !important;
+        background: ${isDarkTheme ? '#374151' : '#f9fafb'} !important;
+        border-color: ${isDarkTheme ? '#6b7280' : '#d1d5db'} !important;
+        color: ${isDarkTheme ? '#f9fafb' : '#374151'} !important;
       }
       
       * input:focus,
       * textarea:focus {
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
+        background-color: ${isDarkTheme ? '#374151' : '#f9fafb'} !important;
+        background: ${isDarkTheme ? '#374151' : '#f9fafb'} !important;
         border-color: #3b82f6 !important;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
       }
@@ -130,11 +160,11 @@ export default function CustomerStore() {
       * [data-radix-select-content],
       html [data-radix-select-content],
       html body [data-radix-select-content] {
-        background-color: #f9fafb !important;
-        border: 1px solid #d1d5db !important;
+        background-color: ${isDarkTheme ? '#374151' : '#f9fafb'} !important;
+        border: 1px solid ${isDarkTheme ? '#6b7280' : '#d1d5db'} !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
-        color: #374151 !important;
+        color: ${isDarkTheme ? '#f9fafb' : '#374151'} !important;
         z-index: 9999 !important;
         filter: none !important;
       }
@@ -142,8 +172,8 @@ export default function CustomerStore() {
       * [data-radix-select-item],
       html [data-radix-select-item],
       html body [data-radix-select-item] {
-        background-color: #f9fafb !important;
-        color: #374151 !important;
+        background-color: ${isDarkTheme ? '#374151' : '#f9fafb'} !important;
+        color: ${isDarkTheme ? '#f9fafb' : '#374151'} !important;
         opacity: 1 !important;
         padding: 8px 12px !important;
         margin: 4px 3px !important;
@@ -154,17 +184,22 @@ export default function CustomerStore() {
       * [data-radix-select-item][data-highlighted],
       * [data-radix-select-item][data-state="checked"],
       * [data-radix-select-item][aria-selected="true"] {
-        background-color: #f3f4f6 !important;
-        color: #374151 !important;
+        background-color: ${isDarkTheme ? '#4b5563' : '#f3f4f6'} !important;
+        color: ${isDarkTheme ? '#f9fafb' : '#374151'} !important;
       }
     `;
     document.head.appendChild(storePageStyle);
     
-    // مراقبة التغييرات ومنع تطبيق الوضع المظلم + تطبيق أنماط القوائم
+    // مراقبة التغييرات وتطبيق الوضع المظلم حسب الإعدادات + تطبيق أنماط القوائم
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          if (document.documentElement.classList.contains('dark')) {
+          // تطبيق الوضع المظلم حسب إعدادات المتجر
+          if (isDarkTheme && !document.documentElement.classList.contains('dark')) {
+            document.documentElement.classList.add('dark');
+            document.body.style.backgroundColor = '#111827';
+            document.body.style.color = 'white';
+          } else if (!isDarkTheme && document.documentElement.classList.contains('dark')) {
             document.documentElement.classList.remove('dark');
             document.body.style.backgroundColor = 'white';
             document.body.style.color = 'black';
@@ -244,7 +279,7 @@ export default function CustomerStore() {
       observer.disconnect();
       document.head.removeChild(storePageStyle);
     };
-  }, []);
+  }, [platform?.storeTemplate]);
 
   const formatPrice = (price: number) => {
     const formattedNumber = new Intl.NumberFormat('en-US', {
@@ -352,33 +387,40 @@ export default function CustomerStore() {
   };
 
   const handleProductClick = (product: Product) => {
-    // البحث عن صفحة هبوط نشطة للمنتج
-    const productLandingPage = allLandingPages?.find(
-      (page: LandingPage) => page.productId === product.id && page.isActive
-    );
-
-    if (productLandingPage) {
-      // التوجه لصفحة الهبوط ضمن المتجر
-      window.location.href = `/${subdomain}/${productLandingPage.customUrl}`;
-    } else {
-      // إذا لم توجد صفحة هبوط، يمكن فتح صفحة المنتج العامة أو عرض رسالة
-      alert('لا توجد صفحة هبوط متاحة لهذا المنتج');
-    }
+    // استخدام الدالة المساعدة للتنقل إلى المنتج مع تمرير صفحات الهبوط
+    navigateToProduct(product, subdomain, allLandingPages);
   };
 
   const handleWhatsAppClick = () => {
+    if (!platform?.whatsappNumber && !platform?.contactPhone) return;
     const message = encodeURIComponent("مرحباً، لقد أتيت من صفحة المنتجات");
-    const whatsappUrl = `https://wa.me/${platform.phoneNumber.replace(/\D/g, '')}?text=${message}`;
+    const phoneNumber = platform.whatsappNumber || platform.contactPhone || '';
+    const whatsappUrl = `https://wa.me/${phoneNumber.replace(/\D/g, '')}?text=${message}`;
     window.open(whatsappUrl, '_blank');
   };
 
   const handleCallClick = () => {
-    window.location.href = `tel:${platform.phoneNumber}`;
+    if (!platform?.contactPhone && !platform?.whatsappNumber) return;
+    const phoneNumber = platform.contactPhone || platform.whatsappNumber || '';
+    window.location.href = `tel:${phoneNumber}`;
   };
 
   const handleHomeClick = () => {
     window.location.href = `/${subdomain}`;
   };
+
+  // Apply theme colors dynamically
+  useEffect(() => {
+    if (platform?.primaryColor) {
+      document.documentElement.style.setProperty('--primary-color', platform.primaryColor);
+    }
+    if (platform?.secondaryColor) {
+      document.documentElement.style.setProperty('--secondary-color', platform.secondaryColor);
+    }
+    if (platform?.accentColor) {
+      document.documentElement.style.setProperty('--accent-color', platform.accentColor);
+    }
+  }, [platform?.primaryColor, platform?.secondaryColor, platform?.accentColor]);
 
   if (platformLoading || productsLoading) {
     return (
@@ -408,15 +450,26 @@ export default function CustomerStore() {
 
   return (
     <div className={`min-h-screen ${isDarkTheme ? 'bg-gray-900' : 'bg-gray-50'}`} dir="rtl">
+      {/* Store Banner Image */}
+      {platform.storeBannerUrl && (
+        <div className="w-full">
+          <img 
+            src={platform.storeBannerUrl} 
+            alt="صورة المتجر"
+            className="w-full h-32 sm:h-48 lg:h-64 object-cover"
+          />
+        </div>
+      )}
+
       {/* Header مع معلومات المتجر */}
       <header className={`${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm border-b sticky top-0 z-50`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-start py-3 sm:py-4 lg:py-6">
             <div className="flex items-center gap-3 sm:gap-4">
               <div className="flex-shrink-0">
-                {platform.logoUrl ? (
+                {(platform.logoURL || platform.logoUrl) ? (
                   <img 
-                    src={platform.logoUrl} 
+                    src={platform.logoURL || platform.logoUrl} 
                     alt={platform.platformName}
                     className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full object-cover border-2 border-gray-200 shadow-sm"
                   />
@@ -607,7 +660,7 @@ export default function CustomerStore() {
                               
                               <div className="flex items-center justify-between mb-2">
                                 <div className="text-theme-primary font-bold">
-                                  <span className="text-lg sm:text-xl">{new Intl.NumberFormat('en-US').format(parseFloat(product.price))}</span>
+                                  <span className="text-lg sm:text-xl">{new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()))}</span>
                                   <span className="text-xs text-gray-500 mr-1">د.ع</span>
                                 </div>
                                 <Badge variant="outline" className="text-xs border-primary/20 text-theme-primary">
@@ -681,7 +734,7 @@ export default function CustomerStore() {
                           {/* السعر بتصميم مضغوط */}
                           <div className="mb-3 text-center">
                             <div className="bg-theme-gradient text-white rounded-md px-2 py-1 text-sm shadow-md">
-                              <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price))}</span>
+                              <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()))}</span>
                               <span className="text-xs mr-1">د.ع</span>
                             </div>
                           </div>
@@ -761,7 +814,7 @@ export default function CustomerStore() {
                           {/* السعر مع توهج */}
                           <div className="mb-3 text-center">
                             <div className="bg-theme-gradient text-white rounded-lg px-3 py-2 text-sm shadow-lg shadow-primary/25">
-                              <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price))}</span>
+                              <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()))}</span>
                               <span className="text-xs mr-1">د.ع</span>
                             </div>
                           </div>
@@ -823,7 +876,7 @@ export default function CustomerStore() {
                           {/* سعر بسيط بدون خلفية */}
                           <div className="text-center">
                             <div className="text-white">
-                              <span className="text-lg font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price))}</span>
+                              <span className="text-lg font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()))}</span>
                               <span className="text-sm text-gray-400 mr-1">د.ع</span>
                             </div>
                           </div>
@@ -894,7 +947,7 @@ export default function CustomerStore() {
                           {/* سعر فاخر مع إطار ذهبي */}
                           <div className="mb-3 text-center">
                             <div className="bg-theme-gradient text-white rounded-lg px-3 py-2 text-sm shadow-lg shadow-primary/25 border border-primary/40">
-                              <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price))}</span>
+                              <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()))}</span>
                               <span className="text-xs mr-1">د.ع</span>
                             </div>
                           </div>
@@ -978,11 +1031,11 @@ export default function CustomerStore() {
                         {/* السعر بتصميم مضغوط */}
                         <div className="mb-2 text-center">
                           <div className="bg-theme-gradient text-white rounded-md px-2 py-1 text-sm shadow-sm">
-                            <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price))}</span>
+                            <span className="text-base font-bold">{new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()))}</span>
                             <span className="text-xs mr-1">د.ع</span>
                           </div>
                           <div className="text-xs text-gray-400 mt-1 line-through">
-                            {new Intl.NumberFormat('en-US').format(parseFloat(product.price) + 5000)} د.ع
+                            {new Intl.NumberFormat('en-US').format(parseFloat(product.price.toString()) + 5000)} د.ع
                           </div>
                         </div>
                         

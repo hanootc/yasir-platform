@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import PlatformSidebar from "@/components/PlatformSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -18,6 +18,45 @@ import CreateOrderModal from "@/components/modals/create-order-modal";
 import { apiRequest } from "@/lib/queryClient";
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
+import { 
+  Search, 
+  Filter, 
+  Download, 
+  Eye, 
+  Edit, 
+  Trash2, 
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Settings,
+  X,
+  GripVertical,
+  ArrowUpDown
+} from 'lucide-react';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
+
+// CSS Animation for strikethrough glow effect
+const strikethroughAnimation = `
+  @keyframes strikethroughGlow {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+`;
 
 const formatTimeAgo = (date: string | Date) => {
   const now = new Date();
@@ -170,8 +209,19 @@ export default function PlatformOrders() {
     ? JSON.parse(sessionStorage.getItem('platformSession') || '{}')
     : {};
 
+  // Define platform session type
+  interface PlatformSession {
+    platformId: string;
+    id: string;
+    platformName: string;
+    subdomain: string;
+    userType: string;
+    name?: string;
+    logoUrl?: string;
+  }
+
   // Fetch platform session to get platformId
-  const { data: platformSession } = useQuery({
+  const { data: platformSession } = useQuery<PlatformSession>({
     queryKey: ['/api/platform-session'],
   });
 
@@ -549,6 +599,32 @@ export default function PlatformOrders() {
         );
       
       case 'color':
+        // Handle multiple color selections
+        const colorIds = order.selectedColorIds || [];
+        if (colorIds.length > 0) {
+          return (
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-wrap gap-2 justify-center max-w-[160px]">
+                {colorIds.map((colorId: string) => {
+                  const color = (platformColors as any[])?.find((c: any) => c.id === colorId);
+                  return (
+                    <div key={colorId} className="flex flex-col items-center gap-1">
+                      <div 
+                        className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm"
+                        style={{ backgroundColor: color?.colorCode || '#ccc' }}
+                        title={color?.colorName || colorId}
+                      />
+                      <span className="text-[8px] text-gray-700 font-medium truncate max-w-[35px]">
+                        {color?.colorName?.slice(0, 5) || colorId.slice(-3)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+        // Fallback to single color display
         return (order.selectedColor || order.color) ? (
           <div className="flex flex-col items-center gap-0.5">
             {order.selectedColorImageUrl ? (
@@ -574,6 +650,43 @@ export default function PlatformOrders() {
         );
       
       case 'shape':
+        // Handle multiple shape selections
+        const shapeIds = order.selectedShapeIds || [];
+        if (shapeIds.length > 0) {
+          return (
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-wrap gap-2 justify-center max-w-[160px]">
+                {shapeIds.map((shapeId: string) => {
+                  const shape = (platformShapes as any[])?.find((s: any) => s.id === shapeId);
+                  return (
+                    <div key={shapeId} className="flex flex-col items-center gap-1">
+                      {shape?.shapeImageUrl ? (
+                        <img 
+                          src={shape.shapeImageUrl}
+                          alt={shape.shapeName}
+                          className="w-6 h-6 object-cover rounded border-2 border-gray-300 shadow-sm"
+                          title={shape.shapeName}
+                          onError={(e) => {
+                            console.log('Shape image failed to load:', shape.shapeImageUrl);
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-6 h-6 rounded border-2 border-gray-300 bg-gray-200 flex items-center justify-center shadow-sm">
+                          <span className="text-[7px] text-gray-600 font-medium">شكل</span>
+                        </div>
+                      )}
+                      <span className="text-[8px] text-gray-700 font-medium truncate max-w-[35px]">
+                        {shape?.shapeName?.slice(0, 5) || shapeId.slice(-3)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+        // Fallback to single shape display
         return (order.selectedShape || order.shape) ? (
           <div className="flex flex-col items-center gap-0.5">
             {(typeof order.selectedShape === 'object' ? order.selectedShape?.imageUrl : order.selectedShapeImageUrl) ? (
@@ -594,6 +707,30 @@ export default function PlatformOrders() {
         );
       
       case 'size':
+        // Handle multiple size selections
+        const sizeIds = order.selectedSizeIds || [];
+        if (sizeIds.length > 0) {
+          return (
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-wrap gap-2 justify-center max-w-[160px]">
+                {sizeIds.map((sizeId: string) => {
+                  const size = (platformSizes as any[])?.find((s: any) => s.id === sizeId);
+                  return (
+                    <div key={sizeId} className="flex flex-col items-center gap-1">
+                      <div className="w-6 h-6 rounded border-2 border-gray-300 bg-gray-200 flex items-center justify-center shadow-sm">
+                        <span className="text-[7px] text-gray-600 font-medium">قياس</span>
+                      </div>
+                      <span className="text-[8px] text-gray-700 font-medium truncate max-w-[35px]">
+                        {size?.sizeName?.slice(0, 5) || size?.sizeValue?.slice(0, 5) || sizeId.slice(-3)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+        // Fallback to single size display
         return (order.selectedSize || order.size) ? (
           <div className="text-[11px] text-gray-600 text-center">
             <div className="truncate max-w-[60px] font-medium">
@@ -785,6 +922,22 @@ export default function PlatformOrders() {
     enabled: !!platformId,
   });
 
+  // Fetch platform colors, shapes, and sizes for variant display
+  const { data: platformColors } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/colors`],
+    enabled: !!platformId,
+  });
+
+  const { data: platformShapes } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/shapes`],
+    enabled: !!platformId,
+  });
+
+  const { data: platformSizes } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/sizes`],
+    enabled: !!platformId,
+  });
+
   // Force refetch every time component mounts
   useEffect(() => {
     if (platformId) {
@@ -814,6 +967,48 @@ export default function PlatformOrders() {
     
     return { totalOrders, totalRevenue, avgOrderValue };
   }, [orders, dateFrom, dateTo]);
+
+  // Function to calculate completeness score for an order
+  const getOrderCompletenessScore = (order: any) => {
+    let score = 0;
+    if (order.customerName) score += 1;
+    if (order.customerPhone) score += 1;
+    if (order.customerAddress) score += 1;
+    if (order.governorate) score += 1;
+    if (order.totalAmount && order.totalAmount > 0) score += 1;
+    if (order.items && order.items.length > 0) score += 1;
+    return score;
+  };
+
+  // Function to find the primary order (most complete) among duplicates
+  const getPrimaryOrderId = (phone: string, allOrders: any[]) => {
+    const duplicates = allOrders.filter((o: any) => o.customerPhone === phone);
+    if (duplicates.length <= 1) return null;
+    
+    // Sort by completeness score (descending), then by creation date (ascending - oldest first)
+    const sorted = duplicates.sort((a, b) => {
+      const scoreA = getOrderCompletenessScore(a);
+      const scoreB = getOrderCompletenessScore(b);
+      if (scoreA !== scoreB) return scoreB - scoreA; // Higher score first
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); // Older first
+    });
+    
+    return sorted[0].id;
+  };
+
+  // Function to check if an order should be shown with strikethrough
+  const shouldShowStrikethrough = (order: any, allOrders: any[]) => {
+    if (!order.customerPhone) return false;
+    
+    const duplicates = allOrders.filter((o: any) => 
+      o.customerPhone === order.customerPhone
+    );
+    
+    if (duplicates.length <= 1) return false;
+    
+    const primaryOrderId = getPrimaryOrderId(order.customerPhone, allOrders);
+    return order.id !== primaryOrderId;
+  };
 
   // Filter orders based on search and filter criteria
   const allFilteredOrders = orders && Array.isArray(orders) ? orders.filter((order: any) => {
@@ -857,11 +1052,8 @@ export default function PlatformOrders() {
 
   const updateOrderMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
-      const response = await apiRequest(`/api/platforms/${platformId}/orders/${orderId}/status`, {
-        method: "PUT",
-        body: { status }
-      });
-      return await response.json();
+      const response = await apiRequest(`/api/platforms/${platformId}/orders/${orderId}/status`, "PUT", { status });
+      return response;
     },
     onSuccess: (data, variables) => {
       // تحديث cache الطلبات
@@ -932,10 +1124,8 @@ export default function PlatformOrders() {
   // دالة لإرسال رسائل تأكيد لجميع الطلبات المعلقة
   const sendBulkPendingMessages = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest(`/api/platforms/${platformId}/orders/bulk-pending-messages`, {
-        method: "POST"
-      });
-      return await response.json();
+      const response = await apiRequest(`/api/platforms/${platformId}/orders/bulk-pending-messages`, "POST");
+      return response;
     },
     onSuccess: (data) => {
       console.log('Bulk message response:', data);
@@ -1007,45 +1197,64 @@ export default function PlatformOrders() {
   };
 
   const handleViewOrder = (order: any) => {
+    console.log('Order data being passed to modal:', order);
     setSelectedOrderForView(order);
     setShowViewOrder(true);
   };
 
   const handleBulkStatusChange = async (newStatus: string) => {
-    try {
-      if (!selectedOrders.length) {
-        toast({
-          title: "خطأ",
-          description: "لم يتم اختيار أي طلبات للتحويل",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!platformId) {
-        toast({
-          title: "خطأ",
-          description: "معرف المنصة غير متوفر",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      for (const orderId of selectedOrders) {
-        await updateOrderMutation.mutateAsync({ orderId, status: newStatus });
-      }
-      
-      setSelectedOrders([]);
-      toast({
-        title: "تم تحديث الحالات",
-        description: `تم تحديث حالة ${selectedOrders.length} طلب`,
-      });
-    } catch (error) {
-      console.error('خطأ في التحويل الجماعي:', error);
+    if (!selectedOrders.length) {
       toast({
         title: "خطأ",
-        description: "فشل في تحديث بعض الطلبات",
+        description: "لم يتم اختيار أي طلبات للتحويل",
         variant: "destructive",
+      });
+      return;
+    }
+
+    if (!platformId) {
+      toast({
+        title: "خطأ",
+        description: "معرف المنصة غير متوفر",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
+    const totalOrders = selectedOrders.length;
+
+    // معالجة كل طلب بشكل منفصل
+    for (const orderId of selectedOrders) {
+      try {
+        await updateOrderMutation.mutateAsync({ orderId, status: newStatus });
+        successCount++;
+      } catch (error) {
+        console.error(`خطأ في تحديث الطلب ${orderId}:`, error);
+        failedCount++;
+      }
+    }
+    
+    setSelectedOrders([]);
+
+    // عرض النتيجة النهائية
+    if (failedCount === 0) {
+      toast({
+        title: "تم تحديث الحالات",
+        description: `تم تحديث حالة ${successCount} طلب بنجاح`,
+      });
+    } else if (successCount === 0) {
+      toast({
+        title: "خطأ",
+        description: `فشل في تحديث جميع الطلبات (${failedCount} طلب)`,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "تحديث جزئي",
+        description: `تم تحديث ${successCount} طلب بنجاح، فشل في تحديث ${failedCount} طلب`,
+        variant: "default",
       });
     }
   };
@@ -1230,7 +1439,7 @@ export default function PlatformOrders() {
   // Function to handle Shipping Excel export
   const handleExportShipping = async () => {
     // Get platform ID from session or URL params
-    const currentPlatformId = platformSession?.id || platformSession?.platformId || platformId || params.platformId;
+    const currentPlatformId = (platformSession as any)?.id || (platformSession as any)?.platformId || platformId || params.platformId;
     
     if (!currentPlatformId) {
       toast({
@@ -1264,13 +1473,28 @@ export default function PlatformOrders() {
       
       const url = `/api/platforms/${currentPlatformId}/orders/export-shipping?${params.toString()}`;
       
-      // Create a temporary link to download the file
+      // Use fetch with credentials to download the file
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
-      link.href = url;
+      link.href = downloadUrl;
       link.download = `شحنات-${new Date().toISOString().split('T')[0]}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(downloadUrl);
       
       toast({
         title: "تم تصدير البيانات بنجاح",
@@ -1290,7 +1514,7 @@ export default function PlatformOrders() {
   // Function to handle Excel export
   const handleExportToExcel = async () => {
     // Get platform ID from session or URL params
-    const currentPlatformId = platformSession?.id || platformSession?.platformId || platformId || params.platformId;
+    const currentPlatformId = (platformSession as any)?.id || (platformSession as any)?.platformId || platformId || params.platformId;
     
     if (!currentPlatformId) {
       toast({
@@ -1324,13 +1548,28 @@ export default function PlatformOrders() {
       
       const exportUrl = `/api/platforms/${currentPlatformId}/orders/export?${params.toString()}`;
       
-      // Create a temporary link and trigger download
+      // Use fetch with credentials to download the file
+      const response = await fetch(exportUrl, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
-      link.href = exportUrl;
+      link.href = downloadUrl;
       link.download = `طلبات_محددة_${new Date().toISOString().split('T')[0]}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(downloadUrl);
       
       toast({
         title: "تم التصدير بنجاح",
@@ -1350,7 +1589,7 @@ export default function PlatformOrders() {
   // Function to handle Store Custom Excel export
   const handleExportStoreCustom = async () => {
     // Get platform ID from session or URL params
-    const currentPlatformId = platformSession?.id || platformSession?.platformId || platformId || params.platformId;
+    const currentPlatformId = (platformSession as any)?.id || (platformSession as any)?.platformId || platformId || params.platformId;
     
     if (!currentPlatformId) {
       toast({
@@ -1384,13 +1623,28 @@ export default function PlatformOrders() {
       
       const exportUrl = `/api/platforms/${currentPlatformId}/orders/export-store?${params.toString()}`;
       
-      // Create a temporary link and trigger download
+      // Use fetch with credentials to download the file
+      const response = await fetch(exportUrl, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
-      link.href = exportUrl;
+      link.href = downloadUrl;
       link.download = `اكسل_جيني_محدد_${new Date().toISOString().split('T')[0]}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(downloadUrl);
       
       toast({
         title: "تم التصدير بنجاح",
@@ -1409,10 +1663,26 @@ export default function PlatformOrders() {
 
   if (!platformSession) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">جاري التحميل...</p>
+      <div className="min-h-screen bg-theme-background">
+        <style>{`
+          @keyframes strikethroughGlow {
+            0% {
+              background-position: -200% 0;
+            }
+            100% {
+              background-position: 200% 0;
+            }
+          }
+        `}</style>
+        <PlatformSidebar 
+          session={{} as any} 
+          currentPath="/platform-orders" 
+        />
+        <div className="lg:mr-64 p-4 lg:p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-300">جاري التحميل...</p>
+          </div>
         </div>
       </div>
     );
@@ -1420,8 +1690,18 @@ export default function PlatformOrders() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
+      <style>{`
+        @keyframes strikethroughGlow {
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
+        }
+      `}</style>
       <PlatformSidebar 
-        session={platformSession} 
+        session={platformSession || {} as PlatformSession} 
         currentPath="/platform-orders" 
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -1454,7 +1734,7 @@ export default function PlatformOrders() {
         
         {/* Content */}
         <div className="p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="w-full space-y-6">
 
 
 
@@ -1462,9 +1742,10 @@ export default function PlatformOrders() {
             {/* Filters */}
             <Card className="theme-border bg-theme-primary-lighter">
               <CardHeader className="border-b border-theme-primary bg-theme-primary-light">
-                <div className="flex items-center justify-end">
-                  {/* Status Cards in Header */}
-                  <div className="grid grid-cols-5 md:grid-cols-10 gap-2">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    {/* Status Cards in Header */}
+                    <div className="grid grid-cols-5 md:grid-cols-10 gap-2">
                     {/* Total Orders */}
                     <div 
                       className="bg-theme-gradient px-2 py-1 text-center theme-shadow cursor-pointer hover:opacity-90 transition-all duration-300 rounded-sm"
@@ -1484,7 +1765,7 @@ export default function PlatformOrders() {
 
                     {/* Pending Orders */}
                     <div 
-                      className="bg-yellow-500 hover:bg-yellow-600 px-2 py-1 text-center theme-shadow cursor-pointer transition-all duration-300 rounded-sm"
+                      className="bg-blue-500 hover:bg-blue-600 px-2 py-1 text-center theme-shadow cursor-pointer transition-all duration-300 rounded-sm"
                       onClick={() => {
                         setSelectedStatus('pending');
                         setShowStatusPopup(true);
@@ -1633,6 +1914,13 @@ export default function PlatformOrders() {
                           {filteredOrders ? filteredOrders.filter(order => order.status === 'postponed').length : 0}
                         </span>
                       </div>
+                    </div>
+                    </div>
+                    
+                    {/* Instructional Text */}
+                    <div className="text-base text-theme-primary font-medium flex items-center gap-2">
+                      <i className="fas fa-arrow-left text-theme-primary text-sm"></i>
+                      انقر لمعرفة العدد والمنتج
                     </div>
                   </div>
                 </div>
@@ -1798,11 +2086,11 @@ export default function PlatformOrders() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">جميع المنتجات</SelectItem>
-                          {products && Array.isArray(products) && products.map((product: any) => (
+                          {products && Array.isArray(products) ? products.map((product: any) => (
                             <SelectItem key={product.id} value={product.id}>
-                              {String(product.name)}
+                              {product?.name ? String(product.name) : 'منتج غير محدد'}
                             </SelectItem>
-                          ))}
+                          )) : null}
                         </SelectContent>
                       </Select>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -2054,7 +2342,7 @@ export default function PlatformOrders() {
                   </div>
                 ) : filteredOrders && filteredOrders.length > 0 ? (
                   <div className="overflow-x-auto overflow-y-hidden mobile-table-scroll" style={{ overscrollBehaviorX: 'contain' }}>
-                    <table className="w-full" dir="rtl" style={{ direction: 'rtl', minWidth: '1400px' }}>
+                    <table className="w-full" dir="rtl" style={{ direction: 'rtl', minWidth: '100%', width: '100%' }}>
                       <thead className="border-b border-theme-primary">
                         <tr>
                           <th className="py-2 px-0 text-sm font-medium text-theme-primary" style={{ textAlign: 'center', direction: 'rtl', width: '14px', minWidth: '14px', maxWidth: '14px' }}></th>
@@ -2090,10 +2378,28 @@ export default function PlatformOrders() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-theme-primary">
-                        {filteredOrders.map((order: any) => (
+                        {filteredOrders.map((order: any) => {
+                          const showStrikethrough = shouldShowStrikethrough(order, Array.isArray(orders) ? orders : []);
+                          return (
                           <tr key={order.id} className={`hover:bg-theme-primary-light dark:hover:bg-gray-700 transition-colors duration-200 ${selectedOrders.includes(order.id) ? 'bg-theme-gradient/20 border-l-4 border-theme-primary' : ''}`}>
                             {/* الشريط الملون للحالة */}
-                            <td className={`py-0 px-0 text-center status-column ${getStatusColor(order.status)}`} style={{ width: '14px', minWidth: '14px', maxWidth: '14px' }}>
+                            <td className={`py-0 px-0 text-center status-column ${getStatusColor(order.status)} ${showStrikethrough ? 'relative' : ''}`} style={{ width: '14px', minWidth: '14px', maxWidth: '14px' }}>
+                              {/* خط الشطب للطلبات المكررة */}
+                              {showStrikethrough && (
+                                <div 
+                                  className="absolute inset-0 pointer-events-none z-10"
+                                  style={{
+                                    background: 'linear-gradient(90deg, #ef4444 0%, #ef4444 30%, rgba(255,255,255,0.8) 50%, #ef4444 70%, #ef4444 100%)',
+                                    backgroundSize: '200% 100%',
+                                    animation: 'strikethroughGlow 2s ease-in-out infinite alternate',
+                                    height: '1px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    left: '0',
+                                    right: '0'
+                                  }}
+                                />
+                              )}
                               <div className="flex items-center justify-center h-full py-1 px-0">
                                 <span className="text-white text-[9px] font-medium transform -rotate-90 whitespace-nowrap">
                                   {getStatusText(order.status)}
@@ -2102,7 +2408,22 @@ export default function PlatformOrders() {
                             </td>
                             
                             {/* Checkbox */}
-                            <td className="py-3 px-2 text-center">
+                            <td className={`py-3 px-2 text-center ${showStrikethrough ? 'relative' : ''}`}>
+                              {showStrikethrough && (
+                                <div 
+                                  className="absolute inset-0 pointer-events-none z-10"
+                                  style={{
+                                    background: 'linear-gradient(90deg, #ef4444 0%, #ef4444 30%, rgba(255,255,255,0.8) 50%, #ef4444 70%, #ef4444 100%)',
+                                    backgroundSize: '200% 100%',
+                                    animation: 'strikethroughGlow 2s ease-in-out infinite alternate',
+                                    height: '1px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    left: '0',
+                                    right: '0'
+                                  }}
+                                />
+                              )}
                               <Checkbox 
                                 checked={selectedOrders.includes(order.id)}
                                 onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)}
@@ -2115,13 +2436,29 @@ export default function PlatformOrders() {
                               if (!column) return null;
                               
                               return (
-                                <td key={columnKey} className={`py-2 px-1 text-center ${column.width}`}>
+                                <td key={columnKey} className={`py-2 px-1 text-center ${column.width} ${showStrikethrough ? 'relative' : ''}`}>
+                                  {showStrikethrough && (
+                                    <div 
+                                      className="absolute inset-0 pointer-events-none z-10"
+                                      style={{
+                                        background: 'linear-gradient(90deg, #ef4444 0%, #ef4444 30%, rgba(255,255,255,0.8) 50%, #ef4444 70%, #ef4444 100%)',
+                                        backgroundSize: '200% 100%',
+                                        animation: 'strikethroughGlow 2s ease-in-out infinite alternate',
+                                        height: '1px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        left: '0',
+                                        right: '0'
+                                      }}
+                                    />
+                                  )}
                                   {renderCellContent(order, columnKey)}
                                 </td>
                               );
                             })}
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
 
@@ -2320,9 +2657,9 @@ export default function PlatformOrders() {
       {/* مودال طباعة الفواتير */}
       <OrderInvoicePrintModal
         orders={selectedOrdersForPrint}
-        platformName={platformData?.name || sessionData?.platformName || platformSession?.platformName || 'منصة التجارة'}
-        platformLogo={platformData?.logoUrl || sessionData?.logoUrl || platformSession?.logoUrl || null}
-        platformId={platformId}
+        platformName={(platformData as any)?.name || (sessionData as any)?.platformName || (platformSession as any)?.platformName || 'منصة التجارة'}
+        platformLogo={(platformData as any)?.logoUrl || (sessionData as any)?.logoUrl || (platformSession as any)?.logoUrl || undefined}
+        platformId={platformId || undefined}
         isOpen={showPrintModal}
         onClose={() => setShowPrintModal(false)}
       />

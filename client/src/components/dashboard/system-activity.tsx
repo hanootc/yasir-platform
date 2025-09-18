@@ -37,9 +37,21 @@ const formatTimeAgo = (date: string) => {
   }
 };
 
+interface Activity {
+  id: string;
+  type: string;
+  description: string;
+  createdAt: string;
+  user?: {
+    firstName?: string;
+    email: string;
+  };
+}
+
 export default function SystemActivity() {
-  const { data: activities, isLoading } = useQuery({
+  const { data: activities, isLoading } = useQuery<Activity[]>({
     queryKey: ["/api/dashboard/activities"],
+    enabled: false, // Disable automatic loading
   });
 
   return (

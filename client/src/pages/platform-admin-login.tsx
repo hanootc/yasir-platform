@@ -1,15 +1,14 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useMutation } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Store, Lock, Eye, EyeOff } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Store, Eye, EyeOff, Lock } from "lucide-react";
 
 const loginSchema = z.object({
   subdomain: z.string().min(3, "النطاق الفرعي مطلوب"),
@@ -22,6 +21,8 @@ export default function PlatformAdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
+  // Don't check for existing session on login page - let user login fresh
+
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -32,13 +33,21 @@ export default function PlatformAdminLogin() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
-      return await apiRequest('/api/platforms/login', {
+      const response = await fetch('/api/platforms/login', {
         method: 'POST',
         body: JSON.stringify(data),
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'فشل في تسجيل الدخول');
+      }
+      
+      return await response.json();
     },
     onSuccess: (data: any) => {
       toast({
@@ -57,8 +66,13 @@ export default function PlatformAdminLogin() {
         logoUrl: data.logoUrl || '/bastia-logo.png'
       }));
       
-      // توجيه للوحة التحكم
-      window.location.href = `/admin/${data.subdomain}`;
+      // توجيه للوحة التحكم - طباعة البيانات للتشخيص
+      console.log('Login response data:', data);
+      
+      // توجيه للوحة إدارة المنصة
+      setTimeout(() => {
+        window.location.href = `/platform/${data.subdomain}/dashboard`;
+      }, 1000);
     },
     onError: (error: Error) => {
       toast({
@@ -74,8 +88,8 @@ export default function PlatformAdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-theme-primary-lighter flex items-center justify-center p-4" dir="rtl">
-      <Card className="w-full max-w-md shadow-2xl theme-border bg-theme-primary-lighter">
+    <div className="min-h-screen bg-gradient-to-br from-theme-primary-lighter to-theme-secondary-lighter flex items-center justify-center p-4" dir="rtl">
+      <Card className="w-full max-w-md shadow-2xl theme-border bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-theme-primary flex items-center justify-center gap-2">
             <Store className="w-6 h-6" />
@@ -104,10 +118,10 @@ export default function PlatformAdminLogin() {
                         <Input 
                           placeholder="ahmed-shop" 
                           {...field} 
-                          className="rounded-l-none placeholder:text-gray-400" 
+                          className="rounded-l-none placeholder:text-gray-400 bg-transparent dark:bg-transparent border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100" 
                         />
-                        <span className="bg-gray-100 dark:bg-gray-700 border border-l-0 rounded-l-md px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
-                          .platform.com
+                        <span className="bg-theme-primary-lighter dark:bg-gray-700 border border-l-0 rounded-l-md px-3 py-2 text-sm text-theme-primary dark:text-gray-300">
+                          sanadi.pro/
                         </span>
                       </div>
                     </FormControl>
@@ -128,17 +142,17 @@ export default function PlatformAdminLogin() {
                     </FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Lock className="absolute right-3 top-3 h-4 w-4 text-gray-400" />
+                        <Lock className="absolute right-3 top-3 h-4 w-4 text-gray-400 dark:text-gray-300" />
                         <Input
                           type={showPassword ? "text" : "password"}
                           placeholder="أدخل كلمة المرور"
-                          className="pr-10 pl-10 placeholder:text-gray-400"
+                          className="pr-10 pl-10 placeholder:text-gray-400 bg-transparent dark:bg-transparent border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                           {...field}
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute left-3 top-3 text-gray-400 hover:text-gray-600 transition-colors"
+                          className="absolute left-3 top-3 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100 transition-colors"
                         >
                           {showPassword ? (
                             <EyeOff className="h-4 w-4" />

@@ -28,17 +28,17 @@ function useAdminAuth() {
     const checkAdminAuth = () => {
       try {
         // Check localStorage for admin session first
-        const adminSession = localStorage.getItem('adminSession');
+        const adminSession = localStorage.getItem('sanadi-admin-session');
         if (adminSession) {
           try {
             const session = JSON.parse(adminSession);
-            if (session.email === 'admin@sanadi.pro' && session.role === 'super_admin') {
+            if (session.email === 'admin@sanadi.pro' && session.adminId) {
               setIsAdminAuthenticated(true);
               setIsCheckingAuth(false);
               return;
             }
           } catch (e) {
-            localStorage.removeItem('adminSession');
+            localStorage.removeItem('sanadi-admin-session');
           }
         }
         

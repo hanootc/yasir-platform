@@ -96,7 +96,7 @@ export default function PlatformRegistration() {
     {
       id: "basic",
       name: "البداية",
-      price: "49,000",
+      price: "1,000",
       period: "دينار/شهر",
       description: "مثالي للمتاجر الصغيرة والمبتدئين",
       features: [
@@ -217,7 +217,10 @@ export default function PlatformRegistration() {
       console.log('🔄 Creating payment for:', platformData);
       setPaymentLoading(true);
       
-      const response = await apiRequest('/api/payments/zaincash/create', 'POST', platformData);
+      const response = await apiRequest('/api/payments/zaincash/create', {
+        method: 'POST',
+        body: platformData
+      });
       const data = await response.json();
       
       console.log('✅ Payment API response:', data);
@@ -253,16 +256,36 @@ export default function PlatformRegistration() {
         // Add small delay for UI feedback then redirect
         setTimeout(() => {
           try {
+            console.log('🚀 Attempting redirect to:', data.paymentUrl);
+            
+            // Try direct redirect first
             window.location.href = data.paymentUrl;
+            
+            // Fallback after 2 seconds if redirect doesn't work
+            setTimeout(() => {
+              console.log('⚠️ Direct redirect may have failed, trying window.open');
+              const popup = window.open(data.paymentUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+              if (!popup) {
+                console.log('❌ Popup blocked, showing manual link');
+                toast({
+                  title: "يرجى فتح رابط الدفع يدوياً", 
+                  description: `انقر هنا: ${data.paymentUrl}`,
+                  variant: "default"
+                });
+              } else {
+                console.log('✅ Popup opened successfully');
+              }
+            }, 2000);
+            
           } catch (error) {
-            console.error('Redirect failed:', error);
-            // Fallback: try popup
+            console.error('❌ Redirect failed:', error);
+            // Immediate fallback: try popup
             const popup = window.open(data.paymentUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
             if (!popup) {
               toast({
                 title: "يرجى فتح رابط الدفع يدوياً", 
                 description: `الرابط: ${data.paymentUrl}`,
-                variant: "default",
+                variant: "default"
               });
             }
           }
@@ -289,7 +312,10 @@ export default function PlatformRegistration() {
 
   const registerPlatform = useMutation({
     mutationFn: async (data: InsertPlatform) => {
-      const response = await apiRequest('/api/platforms', 'POST', data);
+      const response = await apiRequest('/api/platforms', {
+        method: 'POST',
+        body: data
+      });
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -410,8 +436,17 @@ export default function PlatformRegistration() {
     if (paymentStep === 'complete') {
       // Register platform - validate all required fields
       const finalData = {
-        ...data,
-        logoUrl: logoUrl || data.logoUrl || '',
+        subdomain: data.subdomain,
+        platformName: data.platformName,
+        businessType: data.businessType || 'retail',
+        ownerName: data.ownerName,
+        phoneNumber: data.phoneNumber,
+        whatsappNumber: data.whatsappNumber || data.phoneNumber,
+        password: data.password,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+        description: data.description || 'منصة تجارية جديدة',
+        logoUrl: logoUrl || null,
         subscriptionPlan: selectedPlan as any
       };
       
@@ -423,7 +458,7 @@ export default function PlatformRegistration() {
       });
       
       // Check if all required fields are present
-      const requiredFields = ['platformName', 'ownerName', 'phoneNumber'];
+      const requiredFields = ['subdomain', 'platformName', 'ownerName', 'phoneNumber', 'password'];
       const missingFields = requiredFields.filter(field => !finalData[field as keyof typeof finalData]);
       
       if (missingFields.length > 0) {
@@ -432,9 +467,11 @@ export default function PlatformRegistration() {
           title: "بيانات مفقودة",
           description: `يرجى إدخال: ${missingFields.map(field => {
             const fieldNames: { [key: string]: string } = {
+              subdomain: 'النطاق الفرعي',
               platformName: 'اسم المنصة',
-              ownerName: 'اسم المالك', 
-              phoneNumber: 'رقم الهاتف'
+              ownerName: 'اسم المالك',
+              phoneNumber: 'رقم الهاتف',
+              password: 'كلمة المرور'
             };
             return fieldNames[field] || field;
           }).join(', ')}`,
@@ -498,11 +535,34 @@ export default function PlatformRegistration() {
             </div>
             
             <div className="bg-theme-primary-light theme-border rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-4 h-4 bg-theme-gradient rounded-full"></div>
-                <p className="text-sm text-theme-primary font-bold">
-                  الدفع الآمن بزين كاش
-                </p>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-theme-gradient rounded-full"></div>
+                  <p className="text-sm text-theme-primary font-bold">
+                    الدفع الآمن بزين كاش
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="text-xs px-2 py-1 h-auto"
+                  onClick={() => {
+                    // Test ZainCash payment flow directly
+                    const testData = {
+                      platformName: "test-platform",
+                      subscriptionPlan: "premium",
+                      customerName: "أحمد محمد",
+                      customerPhone: "9647801234567",
+                      customerEmail: "test@example.com"
+                    };
+                    
+                    console.log('🧪 Testing ZainCash payment flow...');
+                    createPayment.mutate(testData);
+                  }}
+                >
+                  اختبار سريع
+                </Button>
               </div>
               <p className="text-xs text-theme-primary">
                 نظام دفع حقيقي متصل بزين كاش - بيانات اختبار: 9647802999569 (PIN: 1234, OTP: 1111)

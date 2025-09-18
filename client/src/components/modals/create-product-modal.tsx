@@ -129,11 +129,8 @@ export default function CreateProductModal({ isOpen, onClose, platformId }: Crea
     },
     onSuccess: (product) => {
       if (platformId) {
-        // Invalidate platform-specific queries
-        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/products`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/landing-pages`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/product-names`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/stats`] });
+        // Force refetch products immediately
+        queryClient.refetchQueries({ queryKey: [`/api/platforms/${platformId}/products`] });
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/products"] });
         queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });

@@ -1,6 +1,7 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-import * as schema from "@shared/schema-sqlite";
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { sql, SQL } from 'drizzle-orm';
+import { Pool } from 'pg';
+import * as schema from "@shared/schema";
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -8,7 +9,19 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Extract file path from DATABASE_URL (remove 'file:' prefix)
-const dbPath = process.env.DATABASE_URL.replace('file:', '');
-const sqlite = new Database(dbPath);
-export const db = drizzle(sqlite, { schema });
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle(pool, {
+  schema,
+  logger: {
+    logQuery: (query, params) => {
+      console.log('SQL Query:', query);
+      console.log('SQL Params:', params);
+    }
+  }
+});
+
+// Helper to execute raw SQL built with drizzle's sql tag across Node-Postgres
+export async function exec(q: SQL) {
+  const { sql: text, params } = q.toQuery();
+  return pool.query(text, params as any[]);
+}

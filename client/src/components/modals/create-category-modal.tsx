@@ -28,13 +28,10 @@ export default function CreateCategoryModal({ isOpen, onClose, platformId }: Cre
 
   const mutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await fetch(`/api/platforms/${platformId}/categories`, {
+      return apiRequest(`/api/platforms/${platformId}/categories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: data
       });
-      if (!response.ok) throw new Error('فشل في إنشاء التصنيف');
-      return response.json();
     },
     onSuccess: () => {
       toast({

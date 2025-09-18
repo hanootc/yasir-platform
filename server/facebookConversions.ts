@@ -56,7 +56,7 @@ export async function sendFacebookConversion(
   events: FacebookConversionEvent[]
 ): Promise<boolean> {
   try {
-    const url = `https://graph.facebook.com/v18.0/${pixelId}/events`;
+    const url = `https://graph.facebook.com/v23.0/${pixelId}/events`;
     
     const payload = {
       data: events,

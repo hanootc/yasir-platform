@@ -115,38 +115,63 @@ export function ProductVariantsManager({ productId, platformId }: ProductVariant
   // Fetch product variants
   const { data: variants = [], isLoading } = useQuery({
     queryKey: ["products", productId, "variants"],
-    queryFn: () => fetchJson(`/api/products/${productId}/variants`),
+    queryFn: () => apiRequest(`/api/products/${productId}/variants`, "GET"),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
+
+  console.log('🔄 Variants data:', variants);
 
   // Fetch colors, shapes, and sizes for dropdowns
   const { data: colors = [] } = useQuery({
     queryKey: ["products", productId, "colors"],
-    queryFn: () => fetchJson(`/api/products/${productId}/colors`),
+    queryFn: () => apiRequest(`/api/products/${productId}/colors`, "GET"),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
+
+  console.log('🎨 Colors data in variants:', colors);
 
   const { data: shapes = [] } = useQuery({
     queryKey: ["products", productId, "shapes"],
-    queryFn: () => fetchJson(`/api/products/${productId}/shapes`),
+    queryFn: () => apiRequest(`/api/products/${productId}/shapes`, "GET"),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
+
+  console.log('🔶 Shapes data in variants:', shapes);
 
   const { data: sizes = [] } = useQuery({
     queryKey: ["products", productId, "sizes"],
-    queryFn: () => fetchJson(`/api/products/${productId}/sizes`),
+    queryFn: () => apiRequest(`/api/products/${productId}/sizes`, "GET"),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
+
+  console.log('📏 Sizes data in variants:', sizes);
 
   // Create variant mutation
   const createVariantMutation = useMutation({
-    mutationFn: (variantData: VariantFormData) =>
-      fetchJson(`/api/products/${productId}/variants`, {
-        method: "POST",
-        body: JSON.stringify({
-          ...variantData,
-          platformId,
-          colorId: variantData.colorId === "none" ? null : variantData.colorId,
-          shapeId: variantData.shapeId === "none" ? null : variantData.shapeId,
-          sizeId: variantData.sizeId === "none" ? null : variantData.sizeId,
-        }),
-      }),
+    mutationFn: async (variantData: VariantFormData) => {
+      console.log('🔄 Creating variant with data:', variantData);
+      const result = await apiRequest(`/api/products/${productId}/variants`, "POST", {
+        ...variantData,
+        platformId,
+        colorId: variantData.colorId === "none" ? null : variantData.colorId,
+        shapeId: variantData.shapeId === "none" ? null : variantData.shapeId,
+        sizeId: variantData.sizeId === "none" ? null : variantData.sizeId,
+      });
+      console.log('🔄 Variant creation result:', result);
+      return result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "variants"] });
       setIsAddDialogOpen(false);
@@ -156,10 +181,12 @@ export function ProductVariantsManager({ productId, platformId }: ProductVariant
         description: "تم إضافة المتغير بنجاح",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('❌ Variant creation error:', error);
+      console.error('Full error details:', JSON.stringify(error, null, 2));
       toast({
         title: "خطأ",
-        description: "فشل في إضافة المتغير",
+        description: error?.message || "فشل في إضافة المتغير",
         variant: "destructive",
       });
     },
@@ -197,10 +224,12 @@ export function ProductVariantsManager({ productId, platformId }: ProductVariant
 
   // Delete variant mutation
   const deleteVariantMutation = useMutation({
-    mutationFn: (variantId: string) =>
-      fetchJson(`/api/product-variants/${variantId}`, {
-        method: "DELETE",
-      }),
+    mutationFn: async (variantId: string) => {
+      console.log('🗑️ Deleting variant:', variantId);
+      const result = await apiRequest(`/api/product-variants/${variantId}`, "DELETE");
+      console.log('🗑️ Variant deletion result:', result);
+      return result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "variants"] });
       toast({
@@ -208,10 +237,12 @@ export function ProductVariantsManager({ productId, platformId }: ProductVariant
         description: "تم حذف المتغير بنجاح",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('❌ Variant deletion error:', error);
+      console.error('Full error details:', JSON.stringify(error, null, 2));
       toast({
         title: "خطأ",
-        description: "فشل في حذف المتغير",
+        description: error?.message || "فشل في حذف المتغير",
         variant: "destructive",
       });
     },
@@ -293,11 +324,14 @@ export function ProductVariantsManager({ productId, platformId }: ProductVariant
               إضافة متغير
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="variant-dialog-description">
             <DialogHeader>
               <DialogTitle>
                 {editingVariant ? "تعديل المتغير" : "إضافة متغير جديد"}
               </DialogTitle>
+              <div id="variant-dialog-description" className="sr-only">
+                نافذة لإضافة أو تعديل متغير المنتج مع اختيار الألوان والأشكال والأحجام
+              </div>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

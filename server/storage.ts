@@ -111,6 +111,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, count, sum, sql, and, gte, lte, inArray, or, like, isNull, isNotNull, exists, ilike } from "drizzle-orm";
+import { localStorage } from "./localStorage";
 
 export interface IStorage {
   // User operations for authentication
@@ -125,6 +126,7 @@ export interface IStorage {
   getAllPlatforms(): Promise<Platform[]>;
   getPlatformBySlug(slug: string): Promise<Platform | undefined>;
   getPlatformStats(platformId: string): Promise<any>;
+  getPlatformGovernorateStats(platformId: string): Promise<any>;
   getPlatformChartData(platformId: string, period: string): Promise<any>;
   getPlatformOrders(platformId: string): Promise<any[]>;
   getPlatformRecentOrders(platformId: string): Promise<any[]>;
@@ -136,6 +138,9 @@ export interface IStorage {
   getActiveProductsByPlatformAndCategory(platformId: string, categoryId: string): Promise<Product[]>;
   getActiveCategoriesWithProductCount(platformId: string): Promise<any[]>;
   getOrdersByPlatform(platformId: string): Promise<Order[]>;
+  getPlatformColors(platformId: string): Promise<ProductColor[]>;
+  getPlatformShapes(platformId: string): Promise<ProductShape[]>;
+  getPlatformSizes(platformId: string): Promise<ProductSize[]>;
   
 
 
@@ -573,6 +578,31 @@ export class DatabaseStorage implements IStorage {
     return stats;
   }
 
+  async getPlatformGovernorateStats(platformId: string): Promise<any> {
+    try {
+      // جلب إحصائيات المحافظات من طلبات صفحات الهبوط
+      const governorateStats = await db.execute(
+        sql`SELECT 
+          customer_governorate as governorate,
+          COUNT(*) as orders,
+          SUM(total_amount) as revenue
+        FROM landing_page_orders 
+        WHERE platform_id = ${platformId}
+        GROUP BY customer_governorate
+        ORDER BY orders DESC`
+      );
+
+      return governorateStats.rows.map((row: any) => ({
+        governorate: row.governorate || 'غير محدد',
+        orders: parseInt(row.orders) || 0,
+        revenue: parseFloat(row.revenue) || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching governorate stats:', error);
+      return [];
+    }
+  }
+
   async getPlatformOrders(platformId: string): Promise<any[]> {
     try {
       // جلب الطلبات من جدول landing_page_orders
@@ -581,7 +611,10 @@ export class DatabaseStorage implements IStorage {
           lpo.id, lpo.order_number, lpo.customer_name, lpo.customer_phone, 
           lpo.customer_governorate, lpo.customer_address, lpo.total_amount, lpo.discount_amount,
           lpo.status, lpo.created_at, lpo.platform_id, lpo.offer, lpo.notes, lpo.quantity,
-          lpo.landing_page_id, lp.product_id, p.name as product_name, p.image_urls as product_image_urls,
+          lpo.landing_page_id, 
+          COALESCE(lpo.product_id, lp.product_id) as product_id, 
+          p.name as product_name, p.image_urls as product_image_urls,
+          lpo.selected_color_ids, lpo.selected_shape_ids, lpo.selected_size_ids,
           lpo.selected_color_id, lpo.selected_shape_id, lpo.selected_size_id,
           pc.color_name, pc.color_code, pc.color_image_url,
           ps.shape_name, ps.shape_image_url, 
@@ -589,7 +622,7 @@ export class DatabaseStorage implements IStorage {
           'landing_page' as order_type
         FROM landing_page_orders lpo
         LEFT JOIN landing_pages lp ON lpo.landing_page_id = lp.id
-        LEFT JOIN products p ON lp.product_id = p.id
+        LEFT JOIN products p ON COALESCE(lpo.product_id, lp.product_id) = p.id
         LEFT JOIN product_colors pc ON lpo.selected_color_id = pc.id
         LEFT JOIN product_shapes ps ON lpo.selected_shape_id = ps.id  
         LEFT JOIN product_sizes psize ON lpo.selected_size_id = psize.id
@@ -604,14 +637,18 @@ export class DatabaseStorage implements IStorage {
           o.discount_amount::text as discount_amount, o.status, o.created_at, o.platform_id,
           oi.offer, o.notes, oi.quantity, null as landing_page_id,
           oi.product_id, p.name as product_name, p.image_urls as product_image_urls,
-          null as selected_color_id, null as selected_shape_id, null as selected_size_id,
-          null as color_name, null as color_code, null as color_image_url,
-          null as shape_name, null as shape_image_url,
-          null as size_name, null as size_value,
+          oi.selected_color_ids, oi.selected_shape_ids, oi.selected_size_ids,
+          oi.selected_color_id, oi.selected_shape_id, oi.selected_size_id,
+          pc.color_name, pc.color_code, pc.color_image_url,
+          ps.shape_name, ps.shape_image_url,
+          psize.size_name, psize.size_value,
           'regular' as order_type
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         LEFT JOIN products p ON oi.product_id = p.id
+        LEFT JOIN product_colors pc ON oi.selected_color_id = pc.id
+        LEFT JOIN product_shapes ps ON oi.selected_shape_id = ps.id  
+        LEFT JOIN product_sizes psize ON oi.selected_size_id = psize.id
         WHERE o.platform_id = ${platformId}`
       );
 
@@ -621,7 +658,7 @@ export class DatabaseStorage implements IStorage {
       console.log(`Found ${allOrders.length} orders for platform ${platformId} (${landingOrders.rows.length} landing, ${regularOrders.rows.length} regular)`);
 
       // ترتيب الطلبات حسب التاريخ (الأحدث أولاً)
-      allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      allOrders.sort((a: any, b: any) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime());
 
       // Transform the data to match expected format
       return allOrders.map((row: any) => ({
@@ -644,7 +681,11 @@ export class DatabaseStorage implements IStorage {
         productId: row.product_id,
         productName: row.product_name,
         imageUrls: row.product_image_urls,
-        // معلومات المتغيرات المختارة
+        // معلومات المتغيرات المختارة (متعددة)
+        selectedColorIds: row.selected_color_ids ? (typeof row.selected_color_ids === 'string' ? JSON.parse(row.selected_color_ids) : row.selected_color_ids) : [],
+        selectedShapeIds: row.selected_shape_ids ? (typeof row.selected_shape_ids === 'string' ? JSON.parse(row.selected_shape_ids) : row.selected_shape_ids) : [],
+        selectedSizeIds: row.selected_size_ids ? (typeof row.selected_size_ids === 'string' ? JSON.parse(row.selected_size_ids) : row.selected_size_ids) : [],
+        // معلومات المتغيرات المختارة (مفردة - للتوافق مع النظام القديم)
         selectedColorId: row.selected_color_id,
         selectedShapeId: row.selected_shape_id,
         selectedSizeId: row.selected_size_id,
@@ -747,32 +788,89 @@ export class DatabaseStorage implements IStorage {
         categoriesMap.set(cat.id, cat);
       });
 
-      // Add category info to products
-      const productsWithCategories = platformProducts.map(product => ({
-        ...product,
-        category: product.categoryId && categoriesMap.has(product.categoryId) 
-          ? {
-              id: product.categoryId,
-              name: categoriesMap.get(product.categoryId).name
-            }
-          : undefined
-      }));
+      // Get variants for each product
+      const productsWithVariants = await Promise.all(
+        platformProducts.map(async (product) => {
+          // Get colors for this product
+          const colors = await db
+            .select()
+            .from(productColors)
+            .where(eq(productColors.productId, product.id));
+
+          // Get shapes for this product
+          const shapes = await db
+            .select()
+            .from(productShapes)
+            .where(eq(productShapes.productId, product.id));
+
+          // Get sizes for this product
+          const sizes = await db
+            .select()
+            .from(productSizes)
+            .where(eq(productSizes.productId, product.id));
+
+          return {
+            ...product,
+            category: product.categoryId && categoriesMap.has(product.categoryId) 
+              ? {
+                  id: product.categoryId,
+                  name: categoriesMap.get(product.categoryId)?.name
+                }
+              : undefined,
+            colors,
+            shapes,
+            sizes
+          };
+        })
+      );
       
-      return productsWithCategories as Product[];
+      return productsWithVariants as Product[];
     } catch (error) {
       console.error('Error fetching platform products:', error);
       return [];
     }
   }
 
-  async getPlatformCategories(platformId: string): Promise<Category[]> {
-    const platformCategories = await db
-      .select()
-      .from(categories)
-      .where(eq(categories.platformId, platformId))
-      .orderBy(asc(categories.name));
-    
-    return platformCategories;
+  async getPlatformCategories(platformId: string): Promise<any[]> {
+    try {
+      const platformCategories = await db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          description: categories.description,
+          icon: categories.icon,
+          platformId: categories.platformId,
+          isActive: categories.isActive,
+          createdAt: categories.createdAt
+        })
+        .from(categories)
+        .where(eq(categories.platformId, platformId))
+        .orderBy(asc(categories.name));
+      
+      // Add product count manually for each category
+      const categoriesWithCount = await Promise.all(
+        platformCategories.map(async (category) => {
+          const productCount = await db
+            .select({ count: count() })
+            .from(products)
+            .where(and(
+              eq(products.categoryId, category.id),
+              eq(products.platformId, platformId),
+              eq(products.isActive, true)
+            ));
+          
+          return {
+            ...category,
+            productCount: productCount[0]?.count || 0
+          };
+        })
+      );
+      
+      return categoriesWithCount;
+    } catch (error) {
+      console.error('Error fetching platform categories:', error);
+      return [];
+    }
   }
 
   async getProductsByPlatform(platformId: string): Promise<Product[]> {
@@ -800,7 +898,7 @@ export class DatabaseStorage implements IStorage {
       const categoriesData = categoryIds.length > 0 ? await db
         .select()
         .from(categories)
-        .where(inArray(categories.id, categoryIds)) : [];
+        .where(inArray(categories.id, categoryIds.filter((id): id is string => id !== null))) : [];
 
       // Create a map for quick category lookup
       const categoriesMap = new Map(
@@ -813,7 +911,7 @@ export class DatabaseStorage implements IStorage {
         category: product.categoryId && categoriesMap.has(product.categoryId) 
           ? {
               id: product.categoryId,
-              name: categoriesMap.get(product.categoryId).name
+              name: categoriesMap.get(product.categoryId)?.name
             }
           : undefined
       }));
@@ -919,6 +1017,93 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getPlatformColors(platformId: string): Promise<ProductColor[]> {
+    try {
+      const colors = await db
+        .select({
+          id: productColors.id,
+          productId: productColors.productId,
+          platformId: productColors.platformId,
+          colorName: productColors.colorName,
+          colorCode: productColors.colorCode,
+          colorImageUrl: productColors.colorImageUrl,
+          priceAdjustment: productColors.priceAdjustment,
+          stockQuantity: productColors.stockQuantity,
+          isActive: productColors.isActive,
+          sortOrder: productColors.sortOrder,
+          createdAt: productColors.createdAt,
+          updatedAt: productColors.updatedAt
+        })
+        .from(productColors)
+        .innerJoin(products, eq(productColors.productId, products.id))
+        .where(eq(products.platformId, platformId))
+        .orderBy(asc(productColors.colorName));
+
+      return colors;
+    } catch (error) {
+      console.error('Error getting platform colors:', error);
+      return [];
+    }
+  }
+
+  async getPlatformShapes(platformId: string): Promise<ProductShape[]> {
+    try {
+      const shapes = await db
+        .select({
+          id: productShapes.id,
+          productId: productShapes.productId,
+          platformId: productShapes.platformId,
+          shapeName: productShapes.shapeName,
+          shapeDescription: productShapes.shapeDescription,
+          shapeImageUrl: productShapes.shapeImageUrl,
+          priceAdjustment: productShapes.priceAdjustment,
+          stockQuantity: productShapes.stockQuantity,
+          isActive: productShapes.isActive,
+          sortOrder: productShapes.sortOrder,
+          createdAt: productShapes.createdAt,
+          updatedAt: productShapes.updatedAt
+        })
+        .from(productShapes)
+        .innerJoin(products, eq(productShapes.productId, products.id))
+        .where(eq(products.platformId, platformId))
+        .orderBy(asc(productShapes.shapeName));
+
+      return shapes;
+    } catch (error) {
+      console.error('Error getting platform shapes:', error);
+      return [];
+    }
+  }
+
+  async getPlatformSizes(platformId: string): Promise<ProductSize[]> {
+    try {
+      const sizes = await db
+        .select({
+          id: productSizes.id,
+          productId: productSizes.productId,
+          platformId: productSizes.platformId,
+          sizeName: productSizes.sizeName,
+          sizeValue: productSizes.sizeValue,
+          sizeDescription: productSizes.sizeDescription,
+          priceAdjustment: productSizes.priceAdjustment,
+          stockQuantity: productSizes.stockQuantity,
+          isActive: productSizes.isActive,
+          sortOrder: productSizes.sortOrder,
+          createdAt: productSizes.createdAt,
+          updatedAt: productSizes.updatedAt
+        })
+        .from(productSizes)
+        .innerJoin(products, eq(productSizes.productId, products.id))
+        .where(eq(products.platformId, platformId))
+        .orderBy(asc(productSizes.sizeName));
+
+      return sizes;
+    } catch (error) {
+      console.error('Error getting platform sizes:', error);
+      return [];
+    }
+  }
+
   // Product operations
   async getProducts(): Promise<Product[]> {
     return await db.select().from(products).orderBy(desc(products.createdAt));
@@ -971,6 +1156,7 @@ export class DatabaseStorage implements IStorage {
           name: products.name,
           description: products.description,
           price: products.price,
+          cost: products.cost,
           imageUrls: products.imageUrls,
           additionalImages: products.additionalImages, // إضافة الصور الإضافية
           offers: products.offers,
@@ -986,6 +1172,8 @@ export class DatabaseStorage implements IStorage {
           stock: products.stock,
           lowStockThreshold: products.lowStockThreshold,
           sku: products.sku,
+          defaultLandingTemplate: products.defaultLandingTemplate,
+          createdBy: products.createdBy,
           createdAt: products.createdAt,
           updatedAt: products.updatedAt
         })
@@ -1002,6 +1190,7 @@ export class DatabaseStorage implements IStorage {
         name: products.name,
         description: products.description,
         price: products.price,
+        cost: products.cost,
         imageUrls: products.imageUrls,
         additionalImages: products.additionalImages,
         offers: products.offers,
@@ -1017,6 +1206,8 @@ export class DatabaseStorage implements IStorage {
         stock: products.stock,
         lowStockThreshold: products.lowStockThreshold,
         sku: products.sku,
+        defaultLandingTemplate: products.defaultLandingTemplate,
+        createdBy: products.createdBy,
         createdAt: products.createdAt,
         updatedAt: products.updatedAt
       }).from(products).where(eq(products.id, id));
@@ -1039,10 +1230,69 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProduct(id: string): Promise<void> {
-    // حذف صفحات الهبوط المرتبطة بالمنتج أولاً
-    await db.delete(landingPages).where(eq(landingPages.productId, id));
-    // ثم حذف المنتج
-    await db.delete(products).where(eq(products.id, id));
+    try {
+      // الحصول على بيانات المنتج قبل الحذف
+      const product = await this.getProduct(id);
+      if (!product) {
+        throw new Error("Product not found");
+      }
+
+      // جمع جميع الملفات التي يجب حذفها
+      const filesToDelete: string[] = [];
+
+      // إضافة صور المنتج الرئيسية
+      if (product.imageUrls && Array.isArray(product.imageUrls)) {
+        filesToDelete.push(...product.imageUrls);
+      }
+
+      // الحصول على ألوان المنتج وإضافة صورها
+      const productColors = await this.getProductColors(id);
+      for (const color of productColors) {
+        if (color.colorImageUrl) {
+          filesToDelete.push(color.colorImageUrl);
+        }
+      }
+
+      // الحصول على أشكال المنتج وإضافة صورها
+      const productShapes = await this.getProductShapes(id);
+      for (const shape of productShapes) {
+        if (shape.shapeImageUrl) {
+          filesToDelete.push(shape.shapeImageUrl);
+        }
+      }
+
+      // الحصول على أحجام المنتج وإضافة صورها (إن وجدت)
+      const productSizes = await this.getProductSizes(id);
+      for (const size of productSizes) {
+        if (size.sizeImageUrl) {
+          filesToDelete.push(size.sizeImageUrl);
+        }
+      }
+
+      // حذف جميع الملفات من نظام الملفات
+      for (const filePath of filesToDelete) {
+        if (filePath) {
+          try {
+            await localStorage.deleteFile(filePath);
+            console.log(`✅ Deleted file: ${filePath}`);
+          } catch (error) {
+            console.error(`❌ Failed to delete file: ${filePath}`, error);
+            // نستمر في الحذف حتى لو فشل حذف ملف واحد
+          }
+        }
+      }
+
+      // حذف صفحات الهبوط المرتبطة بالمنتج أولاً
+      await db.delete(landingPages).where(eq(landingPages.productId, id));
+      
+      // حذف المنتج (سيتم حذف الألوان والأشكال والأحجام تلقائياً بسبب cascade)
+      await db.delete(products).where(eq(products.id, id));
+
+      console.log(`✅ Product ${id} and all associated files deleted successfully`);
+    } catch (error) {
+      console.error("Error in deleteProduct:", error);
+      throw error;
+    }
   }
 
   async checkProductHasOrders(productId: string): Promise<boolean> {
@@ -1153,16 +1403,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLandingPage(page: InsertLandingPage): Promise<LandingPage> {
+    // التحقق من وجود customUrl مكرر قبل الإدراج
+    if (page.customUrl) {
+      const existingPage = await this.getLandingPageByCustomUrl(page.customUrl);
+      if (existingPage) {
+        throw new Error(`الرابط المخصص '${page.customUrl}' مستخدم بالفعل`);
+      }
+    }
+    
     const [newPage] = await db.insert(landingPages).values(page).returning();
+    console.log(`✅ Created landing page: ${newPage.id} with URL: ${newPage.customUrl}`);
     return newPage;
   }
 
   async updateLandingPage(id: string, page: Partial<InsertLandingPage>): Promise<LandingPage> {
+    // التحقق من وجود customUrl مكرر قبل التحديث (إذا تم تغيير الرابط)
+    if (page.customUrl) {
+      const existingPage = await this.getLandingPageByCustomUrl(page.customUrl);
+      if (existingPage && existingPage.id !== id) {
+        throw new Error(`الرابط المخصص '${page.customUrl}' مستخدم بالفعل`);
+      }
+    }
+    
     const [updatedPage] = await db
       .update(landingPages)
       .set({ ...page, updatedAt: new Date() })
       .where(eq(landingPages.id, id))
       .returning();
+    console.log(`✅ Updated landing page: ${updatedPage.id} with URL: ${updatedPage.customUrl}`);
     return updatedPage;
   }
 
@@ -1359,12 +1627,89 @@ export class DatabaseStorage implements IStorage {
 
     // إذا لم يوجد، ابحث في جدول landing_page_orders
     const [landingOrder] = await db.select().from(landingPageOrders).where(eq(landingPageOrders.id, id));
-    return landingOrder as Order;
+    if (landingOrder) {
+      // Convert landing page order to Order format
+      return {
+        ...landingOrder,
+        customerEmail: null,
+        tax: "0",
+        shipping: "0", 
+        total: landingOrder.totalAmount || "0"
+      } as Order;
+    }
+    return undefined;
   }
 
-  async getOrderById(id: string): Promise<Order | undefined> {
-    const [order] = await db.select().from(orders).where(eq(orders.id, id));
-    return order;
+  async getOrderById(id: string): Promise<any> {
+    try {
+      // Get the order
+      const [order] = await db.select().from(orders).where(eq(orders.id, id));
+      if (!order) return undefined;
+
+      // Get order items with variant details
+      const items = await db.execute(
+        sql`SELECT 
+          oi.*, 
+          p.name as product_name, p.image_urls as product_image_urls,
+          oi.selected_color_ids, oi.selected_shape_ids, oi.selected_size_ids,
+          oi.selected_color_id, oi.selected_shape_id, oi.selected_size_id,
+          pc.color_name, pc.color_code, pc.color_image_url,
+          ps.shape_name, ps.shape_image_url,
+          psize.size_name, psize.size_value
+        FROM order_items oi
+        LEFT JOIN products p ON oi.product_id = p.id
+        LEFT JOIN product_colors pc ON oi.selected_color_id = pc.id
+        LEFT JOIN product_shapes ps ON oi.selected_shape_id = ps.id  
+        LEFT JOIN product_sizes psize ON oi.selected_size_id = psize.id
+        WHERE oi.order_id = ${id}`
+      );
+
+      // Parse variant IDs and get variant details for each item
+      const orderItemsWithVariants = await Promise.all(
+        items.rows.map(async (item: any) => {
+          const parsedItem = {
+            ...item,
+            selectedColorIds: item.selected_color_ids ? JSON.parse(item.selected_color_ids) : [],
+            selectedShapeIds: item.selected_shape_ids ? JSON.parse(item.selected_shape_ids) : [],
+            selectedSizeIds: item.selected_size_ids ? JSON.parse(item.selected_size_ids) : [],
+          };
+
+          // Get color details for multiple colors
+          if (parsedItem.selectedColorIds.length > 0) {
+            const colors = await db.select()
+              .from(productColors)
+              .where(sql`${productColors.id} = ANY(${parsedItem.selectedColorIds})`);
+            parsedItem.colors = colors;
+          }
+
+          // Get shape details for multiple shapes
+          if (parsedItem.selectedShapeIds.length > 0) {
+            const shapes = await db.select()
+              .from(productShapes)
+              .where(sql`${productShapes.id} = ANY(${parsedItem.selectedShapeIds})`);
+            parsedItem.shapes = shapes;
+          }
+
+          // Get size details for multiple sizes
+          if (parsedItem.selectedSizeIds.length > 0) {
+            const sizes = await db.select()
+              .from(productSizes)
+              .where(sql`${productSizes.id} = ANY(${parsedItem.selectedSizeIds})`);
+            parsedItem.sizes = sizes;
+          }
+
+          return parsedItem;
+        })
+      );
+
+      return {
+        ...order,
+        orderItems: orderItemsWithVariants
+      };
+    } catch (error) {
+      console.error('Error getting order by ID:', error);
+      return undefined;
+    }
   }
 
   async createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
@@ -1385,6 +1730,9 @@ export class DatabaseStorage implements IStorage {
           items.map(item => ({
             ...item,
             orderId: newOrder.id,
+            selectedColorIds: item.selectedColorIds ? JSON.stringify(item.selectedColorIds) : null,
+            selectedShapeIds: item.selectedShapeIds ? JSON.stringify(item.selectedShapeIds) : null,
+            selectedSizeIds: item.selectedSizeIds ? JSON.stringify(item.selectedSizeIds) : null,
           }))
         );
       }
@@ -1565,17 +1913,17 @@ export class DatabaseStorage implements IStorage {
 
   async getLandingPageOrdersByPageId(landingPageId: string, limit?: number): Promise<LandingPageOrder[]> {
     try {
-      let query = db
+      const baseQuery = db
         .select()
         .from(landingPageOrders)
         .where(eq(landingPageOrders.landingPageId, landingPageId))
         .orderBy(desc(landingPageOrders.createdAt));
 
       if (limit) {
-        query = query.limit(limit);
+        return await baseQuery.limit(limit);
       }
 
-      return await query;
+      return await baseQuery;
     } catch (error) {
       console.error("Error in getLandingPageOrdersByPageId:", error);
       return [];
@@ -1665,7 +2013,7 @@ export class DatabaseStorage implements IStorage {
       
       if (regularOrder) {
         existingOrder = regularOrder;
-        oldStatus = regularOrder.status;
+        oldStatus = regularOrder.status || '';
         orderType = 'regular';
       }
     } catch (error) {
@@ -1683,7 +2031,7 @@ export class DatabaseStorage implements IStorage {
 
         if (landingPageOrder) {
           existingOrder = landingPageOrder;
-          oldStatus = landingPageOrder.status;
+          oldStatus = landingPageOrder.status || '';
           orderType = 'landing';
         }
       } catch (error) {
@@ -1927,7 +2275,7 @@ export class DatabaseStorage implements IStorage {
       });
 
       // Update cash account balance
-      const newBalance = parseFloat(cashAccount.currentBalance) + amount;
+      const newBalance = parseFloat(cashAccount.currentBalance || '0') + amount;
       await db
         .update(cashAccounts)
         .set({ 
@@ -1956,7 +2304,7 @@ export class DatabaseStorage implements IStorage {
         .limit(1);
 
       if (salesAccount) {
-        const newBalance = parseFloat(salesAccount.creditBalance) + amount;
+        const newBalance = parseFloat(salesAccount.creditBalance || '0') + amount;
         await db
           .update(chartOfAccounts)
           .set({ 
@@ -1975,13 +2323,13 @@ export class DatabaseStorage implements IStorage {
         .from(chartOfAccounts)
         .where(and(
           eq(chartOfAccounts.platformId, platformId),
-          eq(chartOfAccounts.accountType, 'asset'),
+          eq(chartOfAccounts.accountType, 'assets'),
           eq(chartOfAccounts.accountCode, '1100') // Cash
         ))
         .limit(1);
 
       if (cashChartAccount) {
-        const newBalance = parseFloat(cashChartAccount.debitBalance) + amount;
+        const newBalance = parseFloat(cashChartAccount.debitBalance || '0') + amount;
         await db
           .update(chartOfAccounts)
           .set({ 
@@ -2537,8 +2885,8 @@ export class DatabaseStorage implements IStorage {
           const orderQuantity = result.rows[0].quantity || 1; // الحصول على كمية الطلب من النتيجة
           
           // التحقق من تغيير الحالة وتأثيرها على المخزون
-          const oldStatusAffectsStock = (oldStatus === 'confirmed' || oldStatus === 'delivered' || oldStatus === 'processing' || oldStatus === 'postponed');
-          const newStatusAffectsStock = (newStatus === 'confirmed' || newStatus === 'delivered' || newStatus === 'processing' || newStatus === 'postponed');
+          const oldStatusAffectsStock = (oldStatus === 'confirmed' || oldStatus === 'delivered' || oldStatus === 'processing');
+          const newStatusAffectsStock = (newStatus === 'confirmed' || newStatus === 'delivered' || newStatus === 'processing');
           const oldStatusIsReturned = (oldStatus === 'returned');
           const newStatusIsReturned = (newStatus === 'returned');
           
@@ -3038,7 +3386,7 @@ export class DatabaseStorage implements IStorage {
       
       console.log(`🔍 Getting platform for user ${userId}: ${user?.platformId}`);
       
-      return user?.platformId;
+      return user?.platformId || undefined;
     } catch (error) {
       console.error('Error getting user platform:', error);
       return undefined;
@@ -3324,7 +3672,18 @@ export class DatabaseStorage implements IStorage {
     let conditions = [eq(tiktokAds.platformId, platformId)];
     
     if (campaignId) {
-      conditions.push(eq(tiktokAds.campaignId, campaignId));
+      // Get ads through adGroup relationship since tiktokAds doesn't have direct campaignId
+      const adGroupsInCampaign = await db.select({ id: tiktokAdGroups.id })
+        .from(tiktokAdGroups)
+        .where(eq(tiktokAdGroups.campaignId, campaignId));
+      
+      if (adGroupsInCampaign.length > 0) {
+        const adGroupIds = adGroupsInCampaign.map(ag => ag.id);
+        conditions.push(inArray(tiktokAds.adGroupId, adGroupIds));
+      } else {
+        // No ad groups found for this campaign, return empty result
+        return [];
+      }
     }
     
     if (adGroupId) {
@@ -3373,7 +3732,7 @@ export class DatabaseStorage implements IStorage {
     conversionRate?: number;
     conversionCost?: number;
     resultRate?: number;
-  }): Promise<TikTokAd> {
+  }): Promise<TiktokAd> {
     const updateData: any = {
       updatedAt: new Date()
     };
@@ -3609,23 +3968,24 @@ export class DatabaseStorage implements IStorage {
 
   // Transactions
   async getTransactions(platformId: string, page: number, limit: number, filters: any): Promise<any> {
-    let query = db.select().from(transactions)
-      .where(eq(transactions.platformId, platformId));
+    let baseQuery = db.select().from(transactions);
+    let conditions = [eq(transactions.platformId, platformId)];
 
     if (filters.status) {
-      query = query.where(eq(transactions.status, filters.status));
+      conditions.push(eq(transactions.status, filters.status));
     }
     if (filters.type) {
-      query = query.where(eq(transactions.transactionType, filters.type));
+      conditions.push(eq(transactions.transactionType, filters.type));
     }
     if (filters.fromDate && filters.toDate) {
-      query = query.where(and(
+      conditions.push(
         gte(transactions.createdAt, filters.fromDate),
         lte(transactions.createdAt, filters.toDate)
-      ));
+      );
     }
 
-    const results = await query
+    const results = await baseQuery
+      .where(and(...conditions))
       .orderBy(desc(transactions.createdAt))
       .limit(limit)
       .offset((page - 1) * limit);
@@ -3691,23 +4051,24 @@ export class DatabaseStorage implements IStorage {
 
   // Cash Transactions
   async getCashTransactions(platformId: string, page: number, limit: number, filters: any): Promise<any> {
-    let query = db.select().from(cashTransactions)
-      .where(eq(cashTransactions.platformId, platformId));
+    let baseQuery = db.select().from(cashTransactions);
+    let conditions = [eq(cashTransactions.platformId, platformId)];
 
     if (filters.accountId) {
-      query = query.where(eq(cashTransactions.accountId, filters.accountId));
+      conditions.push(eq(cashTransactions.cashAccountId, filters.accountId));
     }
     if (filters.type) {
-      query = query.where(eq(cashTransactions.transactionType, filters.type));
+      conditions.push(eq(cashTransactions.transactionType, filters.type));
     }
     if (filters.fromDate && filters.toDate) {
-      query = query.where(and(
+      conditions.push(
         gte(cashTransactions.createdAt, filters.fromDate),
         lte(cashTransactions.createdAt, filters.toDate)
-      ));
+      );
     }
 
-    const results = await query
+    const results = await baseQuery
+      .where(and(...conditions))
       .orderBy(desc(cashTransactions.createdAt))
       .limit(limit)
       .offset((page - 1) * limit);
@@ -3748,23 +4109,24 @@ export class DatabaseStorage implements IStorage {
 
   // Expenses
   async getExpenses(platformId: string, page: number, limit: number, filters: any): Promise<any> {
-    let query = db.select().from(expenses)
-      .where(eq(expenses.platformId, platformId));
+    let baseQuery = db.select().from(expenses);
+    let conditions = [eq(expenses.platformId, platformId)];
 
     if (filters.categoryId) {
-      query = query.where(eq(expenses.categoryId, filters.categoryId));
+      conditions.push(eq(expenses.categoryId, filters.categoryId));
     }
     if (filters.status) {
-      query = query.where(eq(expenses.status, filters.status));
+      conditions.push(eq(expenses.status, filters.status));
     }
     if (filters.fromDate && filters.toDate) {
-      query = query.where(and(
+      conditions.push(
         gte(expenses.expenseDate, filters.fromDate),
         lte(expenses.expenseDate, filters.toDate)
-      ));
+      );
     }
 
-    const results = await query
+    const results = await baseQuery
+      .where(and(...conditions))
       .orderBy(desc(expenses.expenseDate))
       .limit(limit)
       .offset((page - 1) * limit);
@@ -3824,17 +4186,19 @@ export class DatabaseStorage implements IStorage {
 
   // Budgets
   async getBudgets(platformId: string, filters: any): Promise<any[]> {
-    let query = db.select().from(budgets)
-      .where(eq(budgets.platformId, platformId));
+    let baseQuery = db.select().from(budgets);
+    let conditions = [eq(budgets.platformId, platformId)];
 
     if (filters.year) {
-      query = query.where(eq(budgets.year, filters.year));
+      conditions.push(eq(budgets.budgetYear, filters.year));
     }
     if (filters.status) {
-      query = query.where(eq(budgets.status, filters.status));
+      conditions.push(eq(budgets.status, filters.status));
     }
 
-    return await query.orderBy(desc(budgets.year), budgets.categoryId);
+    return await baseQuery
+      .where(and(...conditions))
+      .orderBy(desc(budgets.budgetYear), budgets.budgetName);
   }
 
   async createBudget(budgetData: any): Promise<any> {
@@ -3966,20 +4330,21 @@ export class DatabaseStorage implements IStorage {
 
   // Journal Entries
   async getJournalEntries(platformId: string, page: number, limit: number, filters: any): Promise<any> {
-    let query = db.select().from(transactions)
-      .where(eq(transactions.platformId, platformId));
+    let baseQuery = db.select().from(transactions);
+    let conditions = [eq(transactions.platformId, platformId)];
 
     if (filters.status) {
-      query = query.where(eq(transactions.status, filters.status));
+      conditions.push(eq(transactions.status, filters.status));
     }
     if (filters.fromDate && filters.toDate) {
-      query = query.where(and(
+      conditions.push(
         gte(transactions.createdAt, filters.fromDate),
         lte(transactions.createdAt, filters.toDate)
-      ));
+      );
     }
 
-    const results = await query
+    const results = await baseQuery
+      .where(and(...conditions))
       .orderBy(desc(transactions.createdAt))
       .limit(limit)
       .offset((page - 1) * limit);
@@ -4154,16 +4519,16 @@ export class DatabaseStorage implements IStorage {
       .values({
         platformId: submissionData.platformId,
         leadFormId: submissionData.leadFormId,
-        name: submissionData.name,
-        phone: submissionData.phone,
-        email: submissionData.email,
-        formData: submissionData.formData,
-        tiktokLeadId: submissionData.tiktokLeadId,
-        submissionData: submissionData.submissionData,
-        status: submissionData.status || 'new',
-        score: submissionData.score || 0,
-        qualificationStatus: submissionData.qualificationStatus || 'unqualified',
-        followUpCount: submissionData.followUpCount || 0,
+        leadId: submissionData.leadId || submissionData.tiktokLeadId,
+        customerName: submissionData.name || submissionData.customerName,
+        customerPhone: submissionData.phone || submissionData.customerPhone,
+        customerEmail: submissionData.email || submissionData.customerEmail,
+        customerData: submissionData.formData || submissionData.customerData,
+        followUpStatus: submissionData.status || submissionData.followUpStatus || 'new',
+        notes: submissionData.notes,
+        assignedTo: submissionData.assignedTo,
+        submittedAt: submissionData.submittedAt || new Date(),
+        lastContactAt: submissionData.lastContactAt,
         createdAt: new Date(),
         updatedAt: new Date()
       })
@@ -4174,7 +4539,7 @@ export class DatabaseStorage implements IStorage {
   async getLeadSubmissionByTikTokId(tiktokLeadId: string): Promise<any> {
     const [submission] = await db.select()
       .from(tiktokLeads)
-      .where(eq(tiktokLeads.tiktokLeadId, tiktokLeadId));
+      .where(eq(tiktokLeads.leadId, tiktokLeadId));
     return submission;
   }
 
@@ -4384,7 +4749,13 @@ export class DatabaseStorage implements IStorage {
         grantedBy: employee.createdBy || 'system'
       }));
       
-      await db.insert(employeePermissions).values(permissionsToInsert);
+      for (const permissionData of permissionsToInsert) {
+        await db.insert(employeePermissions).values({
+          employeeId: permissionData.employeeId,
+          permission: permissionData.permission as any,
+          grantedBy: permissionData.grantedBy
+        });
+      }
     }
     
     return newEmployee;
@@ -4438,7 +4809,13 @@ export class DatabaseStorage implements IStorage {
             grantedBy: 'system'
           }));
           
-          await db.insert(employeePermissions).values(permissionsToInsert);
+          for (const permissionData of permissionsToInsert) {
+            await db.insert(employeePermissions).values({
+              employeeId: permissionData.employeeId,
+              permission: permissionData.permission as any,
+              grantedBy: permissionData.grantedBy
+            });
+          }
         }
       }
     }
@@ -4478,7 +4855,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(employeePermissions.employeeId, employeeId),
-          eq(employeePermissions.permission, permission)
+          eq(employeePermissions.permission, permission as any)
         )
       );
   }
@@ -4522,7 +4899,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Employee activities operations
-  async logEmployeeActivity(activity: InsertEmployeeActivity): Promise<EmployeeActivity | null> {
+  async logEmployeeActivity(activity: InsertEmployeeActivity): Promise<EmployeeActivity> {
     try {
       // Check if platform exists before logging activity
       const [platform] = await db.select()
@@ -4530,8 +4907,21 @@ export class DatabaseStorage implements IStorage {
         .where(eq(platforms.id, activity.platformId));
       
       if (!platform) {
-        console.warn(`Platform ${activity.platformId} not found, skipping activity log`);
-        return null;
+        console.warn(`Platform ${activity.platformId} not found, creating default activity`);
+        // Create a default activity instead of returning null
+        const defaultActivity = {
+          id: 'default-' + Date.now(),
+          platformId: activity.platformId,
+          employeeId: activity.employeeId,
+          action: activity.action,
+          ipAddress: activity.ipAddress || null,
+          userAgent: activity.userAgent || null,
+          entityType: activity.entityType || null,
+          entityId: activity.entityId || null,
+          details: activity.details || null,
+          createdAt: new Date()
+        };
+        return defaultActivity as EmployeeActivity;
       }
 
       const [newActivity] = await db.insert(employeeActivities)
@@ -4541,28 +4931,39 @@ export class DatabaseStorage implements IStorage {
       return newActivity;
     } catch (error) {
       console.error('Error logging employee activity:', error);
-      return null;
+      // Return a default activity instead of null
+      const defaultActivity = {
+        id: 'error-' + Date.now(),
+        platformId: activity.platformId,
+        employeeId: activity.employeeId,
+        action: activity.action,
+        ipAddress: activity.ipAddress || null,
+        userAgent: activity.userAgent || null,
+        entityType: activity.entityType || null,
+        entityId: activity.entityId || null,
+        details: activity.details || null,
+        createdAt: new Date()
+      };
+      return defaultActivity as EmployeeActivity;
     }
   }
 
   async getEmployeeActivities(platformId: string, employeeId?: string, limit: number = 50): Promise<EmployeeActivity[]> {
-    let query = db.select()
+    let baseQuery = db.select()
       .from(employeeActivities)
-      .innerJoin(employees, eq(employeeActivities.employeeId, employees.id))
-      .where(eq(employeeActivities.platformId, platformId))
+      .innerJoin(employees, eq(employeeActivities.employeeId, employees.id));
+    
+    let conditions = [eq(employeeActivities.platformId, platformId)];
+    
+    if (employeeId) {
+      conditions.push(eq(employeeActivities.employeeId, employeeId));
+    }
+    
+    const results = await baseQuery
+      .where(and(...conditions))
       .orderBy(desc(employeeActivities.createdAt))
       .limit(limit);
     
-    if (employeeId) {
-      query = query.where(
-        and(
-          eq(employeeActivities.platformId, platformId),
-          eq(employeeActivities.employeeId, employeeId)
-        )
-      );
-    }
-    
-    const results = await query;
     return results.map(r => r.employee_activities);
   }
 
@@ -5013,11 +5414,15 @@ export class DatabaseStorage implements IStorage {
           quantity: landingPageOrders.quantity,
           totalAmount: landingPageOrders.totalAmount,
           deliveryFee: landingPageOrders.deliveryFee,
-          discount: landingPageOrders.discount,
+          // discount: landingPageOrders.discount, // Field doesn't exist in schema
           offer: landingPageOrders.offer,
           status: landingPageOrders.status,
           createdAt: landingPageOrders.createdAt,
-          updatedAt: landingPageOrders.updatedAt
+          updatedAt: landingPageOrders.updatedAt,
+          // إضافة حقول المتغيرات
+          selectedColorIds: landingPageOrders.selectedColorIds,
+          selectedShapeIds: landingPageOrders.selectedShapeIds,
+          selectedSizeIds: landingPageOrders.selectedSizeIds
         })
         .from(landingPageOrders)
         .where(and(...whereConditions))
@@ -5041,7 +5446,7 @@ export class DatabaseStorage implements IStorage {
               product: product,
               quantity: order.quantity || 1,
               unitPrice: product.price || 0,
-              totalPrice: (product.price || 0) * (order.quantity || 1)
+              totalPrice: parseFloat(product.price || '0') * (order.quantity || 1)
             }] : []
           };
         })

@@ -16,6 +16,7 @@ export default function SalesChart() {
   
   const { data: salesData, isLoading } = useQuery({
     queryKey: ['/api/dashboard/sales-chart', period],
+    enabled: false, // Disable automatic loading
   });
 
   const chartData = Array.isArray(salesData) ? salesData : [];
@@ -65,154 +66,166 @@ export default function SalesChart() {
       backdropFilter: 'blur(8px)',
     };
 
+    const renderChartComponent = () => {
+      if (chartType === 'area') {
+        return (
+          <AreaChart {...commonProps}>
+            <defs>
+              <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+              </linearGradient>
+              <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#06d6a0" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#06d6a0" stopOpacity={0.1}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+            <XAxis 
+              dataKey="name" 
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: '#6b7280' }}
+            />
+            <YAxis 
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: '#6b7280' }}
+              tickFormatter={(value) => `${Math.round(value / 1000)}ك`}
+            />
+            <Tooltip 
+              contentStyle={tooltipStyle}
+              formatter={(value: any, name: string) => [
+                name === 'sales' ? formatCurrency(value) : `${value} طلب`,
+                name === 'sales' ? 'المبيعات' : 'الطلبات'
+              ]}
+              labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+            />
+            <Area 
+              type="monotone" 
+              dataKey="sales" 
+              stroke="#8b5cf6" 
+              strokeWidth={3}
+              fill="url(#salesGradient)"
+              dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 5 }}
+              activeDot={{ r: 7, stroke: '#8b5cf6', strokeWidth: 3, fill: 'white' }}
+            />
+            <Area 
+              type="monotone" 
+              dataKey="orders" 
+              stroke="#06d6a0" 
+              strokeWidth={2}
+              fill="url(#ordersGradient)"
+              dot={{ fill: '#06d6a0', strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 6, stroke: '#06d6a0', strokeWidth: 2, fill: 'white' }}
+            />
+          </AreaChart>
+        );
+      }
+      
+      if (chartType === 'line') {
+        return (
+          <LineChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+            <XAxis 
+              dataKey="name" 
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: '#6b7280' }}
+            />
+            <YAxis 
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: '#6b7280' }}
+              tickFormatter={(value) => `${Math.round(value / 1000)}ك`}
+            />
+            <Tooltip 
+              contentStyle={tooltipStyle}
+              formatter={(value: any, name: string) => [
+                name === 'sales' ? formatCurrency(value) : `${value} طلب`,
+                name === 'sales' ? 'المبيعات' : 'الطلبات'
+              ]}
+              labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+            />
+            <Line 
+              type="monotone" 
+              dataKey="sales" 
+              stroke="#8b5cf6" 
+              strokeWidth={4}
+              dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 5 }}
+              activeDot={{ r: 8, stroke: '#8b5cf6', strokeWidth: 3, fill: 'white' }}
+            />
+            <Line 
+              type="monotone" 
+              dataKey="orders" 
+              stroke="#06d6a0" 
+              strokeWidth={3}
+              dot={{ fill: '#06d6a0', strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 7, stroke: '#06d6a0', strokeWidth: 2, fill: 'white' }}
+            />
+          </LineChart>
+        );
+      }
+      
+      if (chartType === 'bar') {
+        return (
+          <BarChart {...commonProps}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+            <XAxis 
+              dataKey="name" 
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: '#6b7280' }}
+            />
+            <YAxis 
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: '#6b7280' }}
+              tickFormatter={(value) => `${Math.round(value / 1000)}ك`}
+            />
+            <Tooltip 
+              contentStyle={tooltipStyle}
+              formatter={(value: any, name: string) => [
+                name === 'sales' ? formatCurrency(value) : `${value} طلب`,
+                name === 'sales' ? 'المبيعات' : 'الطلبات'
+              ]}
+              labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+            />
+            <Bar 
+              dataKey="sales" 
+              fill="#8b5cf6"
+              radius={[4, 4, 0, 0]}
+              opacity={0.8}
+            />
+            <Bar 
+              dataKey="orders" 
+              fill="#06d6a0"
+              radius={[4, 4, 0, 0]}
+              opacity={0.8}
+            />
+          </BarChart>
+        );
+      }
+      
+      return <div />;
+    };
+
     return (
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          {chartType === 'area' && (
-            <AreaChart {...commonProps}>
-              <defs>
-                <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
-                </linearGradient>
-                <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06d6a0" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#06d6a0" stopOpacity={0.1}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
-              <XAxis 
-                dataKey="name" 
-                stroke="#6b7280"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#6b7280' }}
-              />
-              <YAxis 
-                stroke="#6b7280"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#6b7280' }}
-                tickFormatter={(value) => `${Math.round(value / 1000)}ك`}
-              />
-              <Tooltip 
-                contentStyle={tooltipStyle}
-                formatter={(value: any, name: string) => [
-                  name === 'sales' ? formatCurrency(value) : `${value} طلب`,
-                  name === 'sales' ? 'المبيعات' : 'الطلبات'
-                ]}
-                labelStyle={{ color: '#374151', fontWeight: 'bold' }}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="sales" 
-                stroke="#8b5cf6" 
-                strokeWidth={3}
-                fill="url(#salesGradient)"
-                dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 5 }}
-                activeDot={{ r: 7, stroke: '#8b5cf6', strokeWidth: 3, fill: 'white' }}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="orders" 
-                stroke="#06d6a0" 
-                strokeWidth={2}
-                fill="url(#ordersGradient)"
-                dot={{ fill: '#06d6a0', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, stroke: '#06d6a0', strokeWidth: 2, fill: 'white' }}
-              />
-            </AreaChart>
-          )}
-          
-          {chartType === 'line' && (
-            <LineChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
-              <XAxis 
-                dataKey="name" 
-                stroke="#6b7280"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#6b7280' }}
-              />
-              <YAxis 
-                stroke="#6b7280"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#6b7280' }}
-                tickFormatter={(value) => `${Math.round(value / 1000)}ك`}
-              />
-              <Tooltip 
-                contentStyle={tooltipStyle}
-                formatter={(value: any, name: string) => [
-                  name === 'sales' ? formatCurrency(value) : `${value} طلب`,
-                  name === 'sales' ? 'المبيعات' : 'الطلبات'
-                ]}
-                labelStyle={{ color: '#374151', fontWeight: 'bold' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="sales" 
-                stroke="#8b5cf6" 
-                strokeWidth={4}
-                dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 5 }}
-                activeDot={{ r: 8, stroke: '#8b5cf6', strokeWidth: 3, fill: 'white' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="orders" 
-                stroke="#06d6a0" 
-                strokeWidth={3}
-                dot={{ fill: '#06d6a0', strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 7, stroke: '#06d6a0', strokeWidth: 2, fill: 'white' }}
-              />
-            </LineChart>
-          )}
-          
-          {chartType === 'bar' && (
-            <BarChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
-              <XAxis 
-                dataKey="name" 
-                stroke="#6b7280"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#6b7280' }}
-              />
-              <YAxis 
-                stroke="#6b7280"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: '#6b7280' }}
-                tickFormatter={(value) => `${Math.round(value / 1000)}ك`}
-              />
-              <Tooltip 
-                contentStyle={tooltipStyle}
-                formatter={(value: any, name: string) => [
-                  name === 'sales' ? formatCurrency(value) : `${value} طلب`,
-                  name === 'sales' ? 'المبيعات' : 'الطلبات'
-                ]}
-                labelStyle={{ color: '#374151', fontWeight: 'bold' }}
-              />
-              <Bar 
-                dataKey="sales" 
-                fill="#8b5cf6"
-                radius={[4, 4, 0, 0]}
-                opacity={0.8}
-              />
-              <Bar 
-                dataKey="orders" 
-                fill="#06d6a0"
-                radius={[4, 4, 0, 0]}
-                opacity={0.8}
-              />
-            </BarChart>
-          )}
+          {renderChartComponent()}
         </ResponsiveContainer>
       </div>
     );

@@ -27,7 +27,7 @@ interface ProductSize {
 const sizeSchema = z.object({
   sizeName: z.string().min(1, "اسم الحجم مطلوب"),
   sizeValue: z.string().min(1, "قيمة الحجم مطلوبة"),
-  description: z.string().optional(),
+  sizeDescription: z.string().optional(),
   sortOrder: z.number().min(0).default(0),
   isActive: z.boolean().default(true),
 });
@@ -50,34 +50,42 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
     defaultValues: {
       sizeName: "",
       sizeValue: "",
-      description: "",
+      sizeDescription: "",
       sortOrder: 0,
       isActive: true,
     },
   });
 
   // Helper function for API requests with JSON response
-  const fetchJson = async (url: string, options?: RequestInit) => {
-    const response = await apiRequest(url, {
-      method: options?.method || "GET",
-      body: options?.body ? JSON.parse(options.body as string) : undefined
-    });
-    return response.json();
+  const fetchJson = async (url: string, method: string = "GET", body?: unknown) => {
+    const response = await apiRequest(url, method, body);
+    return response; // apiRequest already returns parsed JSON
   };
 
   // Fetch product sizes
   const { data: sizes = [], isLoading } = useQuery({
     queryKey: ["products", productId, "sizes"],
-    queryFn: () => fetchJson(`/api/products/${productId}/sizes`),
+    queryFn: async () => {
+      const result = await fetchJson(`/api/products/${productId}/sizes`, "GET");
+      return Array.isArray(result) ? result : [];
+    },
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   // Create size mutation
   const createSizeMutation = useMutation({
-    mutationFn: (sizeData: SizeFormData) =>
-      fetchJson(`/api/products/${productId}/sizes`, {
-        method: "POST",
-        body: JSON.stringify({ ...sizeData, platformId }),
-      }),
+    mutationFn: async (sizeData: SizeFormData) => {
+      const result = await apiRequest(`/api/products/${productId}/sizes`, "POST", {
+        sizeName: sizeData.sizeName,
+        sizeValue: sizeData.sizeValue,
+        sizeDescription: sizeData.sizeDescription || null,
+        sortOrder: sizeData.sortOrder || 0
+      });
+      return result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "sizes"] });
       setIsAddDialogOpen(false);
@@ -87,10 +95,11 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
         description: "تم إضافة الحجم بنجاح",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error("Size creation error:", error);
       toast({
         title: "خطأ",
-        description: "فشل في إضافة الحجم",
+        description: error?.message || "فشل في إضافة الحجم",
         variant: "destructive",
       });
     },
@@ -99,10 +108,7 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
   // Update size mutation
   const updateSizeMutation = useMutation({
     mutationFn: ({ sizeId, sizeData }: { sizeId: string; sizeData: Partial<SizeFormData> }) =>
-      fetchJson(`/api/product-sizes/${sizeId}`, {
-        method: "PUT",
-        body: JSON.stringify(sizeData),
-      }),
+      fetchJson(`/api/product-sizes/${sizeId}`, "PUT", sizeData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "sizes"] });
       setEditingSize(null);
@@ -124,9 +130,7 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
   // Delete size mutation
   const deleteSizeMutation = useMutation({
     mutationFn: (sizeId: string) =>
-      fetchJson(`/api/product-sizes/${sizeId}`, {
-        method: "DELETE",
-      }),
+      fetchJson(`/api/product-sizes/${sizeId}`, "DELETE"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "sizes"] });
       toast({
@@ -156,7 +160,7 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
     form.reset({
       sizeName: size.sizeName,
       sizeValue: size.sizeValue || "",
-      description: size.description || "",
+      sizeDescription: size.description || "",
       sortOrder: size.sortOrder,
       isActive: size.isActive,
     });
@@ -179,7 +183,13 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
             <Button
               onClick={() => {
                 setEditingSize(null);
-                form.reset();
+                form.reset({
+                  sizeName: "",
+                  sizeValue: "",
+                  sizeDescription: "",
+                  sortOrder: 0,
+                  isActive: true,
+                });
               }}
               className="flex items-center gap-2"
             >
@@ -187,11 +197,14 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
               إضافة حجم
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" aria-describedby="size-dialog-description">
             <DialogHeader>
               <DialogTitle>
                 {editingSize ? "تعديل الحجم" : "إضافة حجم جديد"}
               </DialogTitle>
+              <div id="size-dialog-description" className="sr-only">
+                نافذة لإضافة أو تعديل حجم المنتج
+              </div>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -225,7 +238,7 @@ export function ProductSizesManager({ productId, platformId }: ProductSizesManag
 
                 <FormField
                   control={form.control}
-                  name="description"
+                  name="sizeDescription"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>وصف الحجم</FormLabel>

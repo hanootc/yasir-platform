@@ -1,11 +1,22 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai: OpenAI | null = null;
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OpenAI API key is not configured. Please set OPENAI_API_KEY.");
+  }
+  if (!openai) {
+    openai = new OpenAI({ apiKey });
+  }
+  return openai;
+}
 
 export async function generateProductDescription(productName: string): Promise<string> {
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+    const client = getOpenAI();
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",

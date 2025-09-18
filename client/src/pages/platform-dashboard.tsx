@@ -199,39 +199,58 @@ export default function PlatformDashboard() {
         !sidebarCollapsed ? (isMobile ? 'ml-0' : 'mr-64') : (isMobile ? 'mr-0' : 'mr-16')
       }`}>
         {/* Page Title Section */}
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
-          <div className="text-right flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* معلومات الاشتراك */}
-              <SubscriptionInfo />
-              
-              {/* عناصر التحكم بالثيم */}
-              <div className="flex items-center gap-2">
-                <ColorThemeSelector />
-                <ThemeToggle />
-                {/* Mobile Menu Toggle */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="md:hidden bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
-                >
-                  <i className="fas fa-bars h-4 w-4"></i>
-                </Button>
+        <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 md:px-8 py-4">
+          <div className="text-right">
+            {/* Mobile Layout */}
+            <div className="md:hidden">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-center">
+                  <h1 className="text-base font-bold text-gray-900 dark:text-white">لوحة التحكم</h1>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{session.platformName}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    className="bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
+                  >
+                    <i className="fas fa-bars h-4 w-4"></i>
+                  </Button>
+                  <ColorThemeSelector />
+                  <ThemeToggle />
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <SubscriptionInfo />
               </div>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white">لوحة التحكم</h1>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{session.platformName}</p>
+            
+            {/* Desktop Layout */}
+            <div className="hidden md:flex items-center justify-between">
+              <div>
+                <h1 className="text-lg font-bold text-gray-900 dark:text-white">لوحة التحكم</h1>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{session.platformName}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                {/* معلومات الاشتراك */}
+                <SubscriptionInfo />
+                
+                {/* عناصر التحكم بالثيم */}
+                <div className="flex items-center gap-2">
+                  <ColorThemeSelector />
+                  <ThemeToggle />
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto space-y-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
             {/* إجمالي المنتجات */}
             <div className="group relative overflow-hidden rounded-2xl">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-90"></div>
@@ -334,7 +353,7 @@ export default function PlatformDashboard() {
           </div>
 
           {/* Charts Section - استخدام المكون المحسن */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
             <PlatformSalesChart 
               platformId={session.platformId}
               period={chartPeriod}
@@ -396,11 +415,17 @@ export default function PlatformDashboard() {
               </CardContent>
             </Card>
 
-            {/* مخطط توزيع الطلبات - التصميم الأصلي */}
-            <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700">
+          </div>
+
+          {/* خريطة العراق وتوزيع الحالات */}
+          <div className="flex flex-col lg:flex-row gap-6 mb-6">
+            <IraqMap />
+            
+            {/* بطاقة توزيع حالات الطلبات */}
+            <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 w-full lg:w-1/3">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500"></div>
               <CardContent className="p-4">
-                <div className="min-h-[600px] flex items-start justify-center pt-4">
+                <div className="min-h-[400px] flex items-start justify-center pt-4">
                   <div className="w-full">
                     {/* Enhanced Order Status Chart */}
                     <div className="grid grid-cols-2 gap-1.5 mb-3">
@@ -637,18 +662,13 @@ export default function PlatformDashboard() {
             </div>
           </div>
 
-          {/* خريطة العراق */}
-          <div className="mb-6">
-            <IraqMap />
-          </div>
-
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             <Button 
               className="bg-theme-gradient hover:opacity-90 h-20 flex-col gap-2 shadow-lg hover:shadow-xl transition-all" 
               asChild
             >
-              <a href="/dashboard/products">
+              <a href={`/platform/${session?.subdomain}/products`}>
                 <Package className="w-6 h-6" />
                 <span className="font-medium">إدارة المنتجات</span>
               </a>
@@ -659,7 +679,7 @@ export default function PlatformDashboard() {
               className="theme-border hover:bg-theme-primary-light h-20 flex-col gap-2 shadow-lg hover:shadow-xl transition-all"
               asChild
             >
-              <a href="/dashboard/orders">
+              <a href={`/platform/${session?.subdomain}/orders`}>
                 <ShoppingCart className="w-6 h-6 text-theme-primary" />
                 <span className="font-medium text-theme-primary">إدارة الطلبات</span>
               </a>
@@ -670,7 +690,7 @@ export default function PlatformDashboard() {
               className="theme-border hover:bg-theme-primary-light h-20 flex-col gap-2 shadow-lg hover:shadow-xl transition-all"
               asChild
             >
-              <a href="/dashboard/tiktok">
+              <a href={`/platform/${session?.subdomain}/ads-tiktok-management`}>
                 <TrendingUp className="w-6 h-6 text-theme-primary" />
                 <span className="font-medium text-theme-primary">إعلانات تيك توك</span>
               </a>
@@ -681,7 +701,7 @@ export default function PlatformDashboard() {
               className="theme-border hover:bg-theme-primary-light h-20 flex-col gap-2 shadow-lg hover:shadow-xl transition-all"
               asChild
             >
-              <a href="/dashboard/settings">
+              <a href={`/platform/${session?.subdomain}/settings`}>
                 <Settings className="w-6 h-6 text-theme-primary" />
                 <span className="font-medium text-theme-primary">إعدادات المنصة</span>
               </a>

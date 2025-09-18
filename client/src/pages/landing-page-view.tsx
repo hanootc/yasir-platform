@@ -16,8 +16,18 @@ import { iraqGovernorates } from "@/lib/iraqGovernorates";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertLandingPageOrderSchema } from "@shared/schema";
 import { ChevronLeft, ChevronRight, User, Phone, MapPin, Home, MessageSquare, Package, Shield } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 import PixelTracker from "@/components/PixelTracker";
+
+// Custom CSS for header colors
+const headerStyles = `
+  .store-name-header {
+    color: white !important;
+  }
+  .store-tagline-header {
+    color: #facc15 !important;
+  }
+`;
 import { ImageModal } from "@/components/ImageModal";
 
 // دالة لتحويل الروابط الخاصة إلى روابط عامة
@@ -148,6 +158,9 @@ function AdditionalImages({ images }: { images: string[] }) {
 // مكون سلايدر الصور المبسط
 function ImageSlider({ images, productName, template }: { images: string[], productName: string, template?: string }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [currentX, setCurrentX] = useState(0);
 
   const scrollPrev = () => {
     setSelectedIndex(prev => prev > 0 ? prev - 1 : displayImages.length - 1);
@@ -157,8 +170,64 @@ function ImageSlider({ images, productName, template }: { images: string[], prod
     setSelectedIndex(prev => prev < displayImages.length - 1 ? prev + 1 : 0);
   };
 
-  const scrollTo = (index: number) => {
+  const scrollTo = (index: number, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setSelectedIndex(index);
+  };
+
+  // Mouse drag handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setStartX(e.clientX);
+    setCurrentX(e.clientX);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setCurrentX(e.clientX);
+  };
+
+  const handleMouseUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    
+    const deltaX = currentX - startX;
+    const threshold = 50; // minimum distance to trigger slide
+    
+    if (deltaX > threshold) {
+      scrollPrev();
+    } else if (deltaX < -threshold) {
+      scrollNext();
+    }
+  };
+
+  // Touch drag handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    setStartX(e.touches[0].clientX);
+    setCurrentX(e.touches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    setCurrentX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    
+    const deltaX = currentX - startX;
+    const threshold = 50; // minimum distance to trigger slide
+    
+    if (deltaX > threshold) {
+      scrollPrev();
+    } else if (deltaX < -threshold) {
+      scrollNext();
+    }
   };
 
   // الصور الافتراضية للنماذج
@@ -232,38 +301,25 @@ function ImageSlider({ images, productName, template }: { images: string[], prod
   return (
     <div className="w-full max-w-sm mx-auto aspect-square">
       <div className="relative w-full h-full">
-        <div className="overflow-hidden rounded-2xl shadow-xl w-full h-full">
+        <div 
+          className="overflow-hidden rounded-2xl w-full h-full cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           <div className="relative w-full h-full">
             <img 
               src={displayImages[selectedIndex]}
               alt={`${productName} - صورة ${selectedIndex + 1}`}
-              className="w-full h-full object-cover block"
-
+              className="w-full h-full object-cover block select-none"
+              draggable={false}
             />
           </div>
         </div>
-        
-        {/* أزرار التنقل */}
-        {displayImages.length > 1 && (
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute top-1/2 left-2 transform -translate-y-1/2 bg-white/90 hover:bg-white z-10 rounded-full shadow-md"
-              onClick={scrollPrev}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute top-1/2 right-2 transform -translate-y-1/2 bg-white/90 hover:bg-white z-10 rounded-full shadow-md"
-              onClick={scrollNext}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </>
-        )}
 
         {/* عداد الصور */}
         {displayImages.length > 1 && (
@@ -278,12 +334,12 @@ function ImageSlider({ images, productName, template }: { images: string[], prod
             {displayImages.map((_, index) => (
               <button
                 key={index}
-                className={`w-3 h-3 rounded-full transition-all duration-200 border-2 border-white ${
+                className={`w-3 h-3 rounded-full transition-all duration-200 border-2 border-[#757575] ${
                   index === selectedIndex 
                     ? 'bg-white shadow-lg scale-110' 
                     : 'bg-white/40 hover:bg-white/60'
                 }`}
-                onClick={() => scrollTo(index)}
+                onClick={(e) => scrollTo(index, e)}
               />
             ))}
           </div>
@@ -301,7 +357,7 @@ function ImageSlider({ images, productName, template }: { images: string[], prod
                   ? 'border-blue-500 shadow-xl ring-2 ring-blue-200' 
                   : 'border-gray-200 hover:border-blue-300 shadow-md hover:shadow-lg'
               }`}
-              onClick={() => scrollTo(index)}
+              onClick={(e) => scrollTo(index, e)}
             >
               <img 
                 src={image}
@@ -335,20 +391,37 @@ export default function LandingPageView() {
 
   // Try different route patterns
   const [matchOldRoute, paramsOld] = useRoute("/view-landing/:slug");
-  const [matchPlatformRoute, paramsPlatform] = useRoute("/:platform/:slug");
+  const [matchSubdomainRoute, paramsSubdomain] = useRoute("/:subdomain/:slug");
   const [matchProductRoute, paramsProduct] = useRoute("/product/:slug");
   const [, setLocation] = useLocation();
+
+  // Extract slug and platform from different route patterns
+  const slug = paramsOld?.slug || paramsSubdomain?.slug || paramsProduct?.slug;
+  const platform = paramsSubdomain?.subdomain;
+  
+  // Debug logging
+  console.log('🔍 LandingPageView Debug:', {
+    url: window.location.href,
+    slug,
+    platform,
+    paramsOld,
+    paramsSubdomain,
+    paramsProduct,
+    matchSubdomainRoute
+  });
 
   // Error boundary للقبض على الأخطاء
   useEffect(() => {
     const handleError = (error: ErrorEvent) => {
       console.error('JavaScript Error:', error);
-      setHasError(true);
+      // Don't set hasError to true for minor errors that don't affect functionality
+      // setHasError(true);
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled Promise Rejection:', event);
-      setHasError(true);
+      // Don't set hasError to true for minor promise rejections
+      // setHasError(true);
     };
 
     window.addEventListener('error', handleError);
@@ -359,16 +432,18 @@ export default function LandingPageView() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
-  
-  // Determine which route matched and get the slug
-  const slug = matchOldRoute ? paramsOld?.slug : 
-               matchProductRoute ? paramsProduct?.slug : 
-               paramsPlatform?.slug;
-  const platform = paramsPlatform?.platform;
+
   const [showOrderForm, setShowOrderForm] = useState(false);
-  const [selectedColor, setSelectedColor] = useState<any>(null);
-  const [selectedShape, setSelectedShape] = useState<any>(null);
-  const [selectedSize, setSelectedSize] = useState<string>("");
+  const [selectedOffer, setSelectedOffer] = useState<string>("");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false); // الافتراضي نهاري، سيتم تحديثه من بيانات المنتج
+  const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
+  const [selectedShapeIds, setSelectedShapeIds] = useState<string[]>([]);
+  const [selectedSizeIds, setSelectedSizeIds] = useState<string[]>([]);
+  const [variantErrors, setVariantErrors] = useState<string[]>([]);
+
+
 
   // تسجيل عند تغير حالة النموذج
   useEffect(() => {
@@ -377,35 +452,106 @@ export default function LandingPageView() {
   const [showFixedButton, setShowFixedButton] = useState(true);
   const { toast } = useToast();
 
-  // إزالة الوضع المظلم من صفحات الهبوط نهائياً
+  // تطبيق النمط الليلي/النهاري حسب الإعداد المحفوظ
   useEffect(() => {
-    document.documentElement.classList.remove('dark');
-    document.body.style.backgroundColor = 'white';
-    document.body.style.color = 'black';
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      document.body.style.backgroundColor = '#1f2937';
+      document.body.style.color = 'white';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.style.backgroundColor = 'white';
+      document.body.style.color = 'black';
+    }
     
-    // تجاوز متغيرات CSS للحقول في صفحات الهبوط
+    // تجاوز متغيرات CSS للحقول في صفحات الهبوط حسب النمط
+    const existingStyle = document.getElementById('landing-page-override');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+    
     const landingPageStyle = document.createElement('style');
     landingPageStyle.setAttribute('id', 'landing-page-override');
+    
+    const lightModeStyles = `
+      /* تجاوز ألوان الحقول في النمط النهاري */
+      .landing-page-form input,
+      .landing-page-form textarea,
+      .landing-page-form [role="combobox"],
+      input,
+      textarea {
+        border-width: 0.5px !important;
+        border-color: #757575 !important;
+        background-color: #f9fafb !important;
+        background: #f9fafb !important;
+        color: #374151 !important;
+      }
+      
+      /* ألوان النصوص والعناصر في النمط النهاري */
+      .landing-page-form label,
+      .landing-page-form .text-sm,
+      h1, h2, h3, h4, h5, h6,
+      p, span, div {
+        color: #374151 !important;
+      }
+      
+      /* خلفيات البطاقات والأقسام */
+      .bg-white, .bg-gray-50, .bg-blue-50, .bg-green-50 {
+        background-color: white !important;
+        color: #374151 !important;
+      }`;
+    
+    const darkModeStyles = `
+      /* تجاوز ألوان الحقول في النمط الليلي */
+      .landing-page-form input,
+      .landing-page-form textarea,
+      .landing-page-form [role="combobox"],
+      input,
+      textarea {
+        border-width: 0.5px !important;
+        border-color: #757575 !important;
+        background-color: #374151 !important;
+        background: #374151 !important;
+        color: #f9fafb !important;
+      }
+      
+      /* ألوان النصوص والعناصر في النمط الليلي */
+      .landing-page-form label,
+      .landing-page-form .text-sm,
+      h1, h2, h3, h4, h5, h6,
+      p, span, div {
+        color: #f9fafb !important;
+      }
+      
+      /* خلفيات البطاقات والأقسام في النمط الليلي */
+      .bg-white, .bg-gray-50, .bg-blue-50, .bg-green-50 {
+        background-color: #374151 !important;
+        color: #f9fafb !important;
+      }
+      
+      /* خلفيات خاصة للأسعار والعروض */
+      .bg-gradient-to-r, .bg-green-600, .bg-blue-600, .bg-red-600 {
+        background-color: #1f2937 !important;
+        color: #f9fafb !important;
+        border: 1px solid #4b5563 !important;
+      }
+      
+      /* بطاقات المنتجات والمحتوى */
+      .shadow, .shadow-sm, .shadow-md, .shadow-lg {
+        background-color: #374151 !important;
+        border: 1px solid #4b5563 !important;
+      }`;
+    
     landingPageStyle.innerHTML = `
       /* تجاوز جذري - أعلى أولوية */
       html,
       html *,
       body,
       body * {
-        --select-content-background: white !important;
-        --select-item-background: white !important;
+        --select-content-background: ${isDarkMode ? '#374151' : 'white'} !important;
+        --select-item-background: ${isDarkMode ? '#374151' : 'white'} !important;
       }
-      /* تجاوز ألوان الحقول في صفحات الهبوط */
-      .landing-page-form input,
-      .landing-page-form textarea,
-      .landing-page-form [role="combobox"],
-      input,
-      textarea {
-        border-color: #d1d5db !important;
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
-        color: #374151 !important;
-      }
+      ${isDarkMode ? darkModeStyles : lightModeStyles}
       
       /* تجاوز أقوى للحقول */
       * input,
@@ -414,10 +560,11 @@ export default function LandingPageView() {
       html textarea,
       body input,
       body textarea {
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
-        border-color: #d1d5db !important;
-        color: #374151 !important;
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        background: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        border-color: #757575 !important;
+        border-width: 0.5px !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
       
       .landing-page-form input:focus,
@@ -430,68 +577,98 @@ export default function LandingPageView() {
         outline: 2px solid transparent !important;
         outline-offset: 2px !important;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        background: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
       
+      /* تحسين ألوان العناصر التفاعلية */
       .landing-page-form [data-state="open"] {
         border-color: #3b82f6 !important;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
       }
       
-      /* تجاوز ألوان العناصر الأخرى */
-      .landing-page-form label,
-      .landing-page-form .text-sm {
-        color: #374151 !important;
+      /* ألوان القوائم المنسدلة */
+      [data-radix-select-content],
+      [data-radix-popper-content-wrapper] {
+        background-color: ${isDarkMode ? '#374151' : 'white'} !important;
+        border: 0.5px solid #757575 !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
       
-      .landing-page-form button[type="submit"] {
-        background-color: #3b82f6 !important;
-        border-color: #3b82f6 !important;
+      [data-radix-select-item] {
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
+      }
+      
+      [data-radix-select-item]:hover,
+      [data-radix-select-item][data-highlighted] {
+        background-color: ${isDarkMode ? '#4b5563' : '#f3f4f6'} !important;
+      }
+      
+      /* تجاوز شامل لجميع العناصر النصية */
+      *:not(.fa-star) {
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
+      }
+      
+      /* استثناء النجوم من التجاوز الشامل */
+      .fa-star {
+        color: #fbbf24 !important;
+      }
+      
+      /* تجاوز ألوان الأزرار */
+      button {
         color: white !important;
       }
       
-      .landing-page-form button[type="submit"]:hover {
-        background-color: #2563eb !important;
-        border-color: #2563eb !important;
+      /* تجاوز ألوان البطاقات والخلفيات */
+      .bg-white, .bg-gray-50, .bg-gray-100, .bg-blue-50, .bg-green-50, .bg-red-50 {
+        background-color: ${isDarkMode ? '#374151' : 'white'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
       
-      /* تجاوز dropdown menu */
-      .landing-page-form [data-radix-popper-content-wrapper],
-      .landing-page-form [data-side="bottom"],
-      .landing-page-form [data-radix-select-content],
-      .landing-page-form [role="listbox"] {
-        background-color: white !important;
-        border: 1px solid #d1d5db !important;
-        color: #374151 !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
-        border-radius: 0.375rem !important;
+      /* تجاوز ألوان الحدود */
+      .border, .border-gray-200, .border-gray-300 {
+        border-color: #757575 !important;
       }
       
+      /* تجاوز خاص للعناصر المهمة */
+      .text-2xl, .text-xl, .text-lg, .font-bold, .font-semibold {
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
+      }
+      
+      /* تجاوز ألوان الأسعار والعروض */
+      .bg-gradient-to-r {
+        background: ${isDarkMode ? 'linear-gradient(to right, #374151, #4b5563)' : 'linear-gradient(to right, #dbeafe, #bfdbfe)'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
+      }
+      
+      /* تجاوز عناصر القوائم المنسدلة */
       .landing-page-form [role="option"],
       .landing-page-form [data-radix-select-item] {
-        color: #374151 !important;
-        background-color: white !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
+        background-color: ${isDarkMode ? '#374151' : 'white'} !important;
         padding: 0.5rem 0.75rem !important;
       }
       
       .landing-page-form [role="option"]:hover,
       .landing-page-form [data-radix-select-item]:hover,
       .landing-page-form [data-highlighted] {
-        background-color: #f3f4f6 !important;
-        color: #374151 !important;
+        background-color: ${isDarkMode ? '#4b5563' : '#f3f4f6'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
       
       .landing-page-form [data-radix-select-item][data-state="checked"] {
-        background-color: #dbeafe !important;
-        color: #1d4ed8 !important;
+        background-color: ${isDarkMode ? '#1f2937' : '#dbeafe'} !important;
+        color: ${isDarkMode ? '#60a5fa' : '#1d4ed8'} !important;
       }
       
       /* إزالة أي شفافية من جميع عناصر القوائم */
       .landing-page-form [data-radix-select-content],
       .landing-page-form [data-radix-select-viewport],
       .landing-page-form [data-radix-collection-item] {
-        background-color: white !important;
+        background-color: ${isDarkMode ? '#374151' : 'white'} !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
       }
@@ -499,7 +676,7 @@ export default function LandingPageView() {
       /* تجاوز أي CSS من النظام المظلم */
       body:not(.dark) .landing-page-form [data-radix-select-content] {
         background-color: white !important;
-        border-color: #d1d5db !important;
+        border-color: #757575 !important;
       }
       
       /* ضمان ظهور القوائم فوق العناصر الأخرى */
@@ -514,7 +691,7 @@ export default function LandingPageView() {
         background-color: white !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
-        border: 1px solid #d1d5db !important;
+        border: 0.5px solid #757575 !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
       }
       
@@ -522,7 +699,7 @@ export default function LandingPageView() {
       body [data-radix-portal] .landing-page-form [data-radix-select-content],
       body [data-radix-portal] [data-side] {
         background-color: white !important;
-        border: 1px solid #d1d5db !important;
+        border: 0.5px solid #757575 !important;
         backdrop-filter: none !important;
         opacity: 1 !important;
       }
@@ -530,7 +707,7 @@ export default function LandingPageView() {
       /* CSS عالمي للقوائم في صفحات الهبوط */
       body:not(.dark) [data-radix-select-content] {
         background-color: #f9fafb !important;
-        border: 1px solid #d1d5db !important;
+        border: 0.5px solid #757575 !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
         color: #374151 !important;
@@ -559,7 +736,7 @@ export default function LandingPageView() {
       html [data-radix-select-content],
       html body [data-radix-select-content] {
         background-color: #f9fafb !important;
-        border: 1px solid #d1d5db !important;
+        border: 0.5px solid #757575 !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
         color: #374151 !important;
@@ -589,7 +766,7 @@ export default function LandingPageView() {
         background: #f9fafb !important;
         backdrop-filter: none !important;
         opacity: 1 !important;
-        border: 1px solid #d1d5db !important;
+        border: 0.5px solid #757575 !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
       }
       
@@ -613,8 +790,8 @@ export default function LandingPageView() {
       
       /* تجاوز نهائي وشامل لكل شيء */
       * {
-        --radix-select-content-background-color: white !important;
-        --radix-select-item-background-color: white !important;
+        --radix-select-content-background-color: ${isDarkMode ? '#374151' : 'white'} !important;
+        --radix-select-item-background-color: ${isDarkMode ? '#374151' : 'white'} !important;
       }
       
       *[data-radix-select-content],
@@ -622,20 +799,21 @@ export default function LandingPageView() {
       *[data-radix-popper-content-wrapper] > *,
       *[role="listbox"],
       *[data-radix-portal] *[data-radix-select-content] {
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        background: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
         backdrop-filter: none !important;
         opacity: 1 !important;
-        border: 1px solid #d1d5db !important;
+        border: 0.5px solid #757575 !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
         z-index: 99999 !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
       
       *[data-radix-select-item],
       *[role="option"] {
-        background-color: #f9fafb !important;
-        background: #f9fafb !important;
-        color: #374151 !important;
+        background-color: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        background: ${isDarkMode ? '#374151' : '#f9fafb'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
         opacity: 1 !important;
         padding: 8px 12px !important;
         margin: 4px 3px !important;
@@ -649,9 +827,9 @@ export default function LandingPageView() {
       *[role="option"]:hover,
       *[role="option"][data-highlighted],
       *[role="option"][aria-selected="true"] {
-        background-color: #f3f4f6 !important;
-        background: #f3f4f6 !important;
-        color: #374151 !important;
+        background-color: ${isDarkMode ? '#4b5563' : '#f3f4f6'} !important;
+        background: ${isDarkMode ? '#4b5563' : '#f3f4f6'} !important;
+        color: ${isDarkMode ? '#f9fafb' : '#374151'} !important;
       }
     `;
     document.head.appendChild(landingPageStyle);
@@ -660,10 +838,15 @@ export default function LandingPageView() {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          if (document.documentElement.classList.contains('dark')) {
+          // منع تغيير النمط المظلم إلا إذا كان مطلوباً
+          if (!isDarkMode && document.documentElement.classList.contains('dark')) {
             document.documentElement.classList.remove('dark');
             document.body.style.backgroundColor = 'white';
             document.body.style.color = 'black';
+          } else if (isDarkMode && !document.documentElement.classList.contains('dark')) {
+            document.documentElement.classList.add('dark');
+            document.body.style.backgroundColor = '#1f2937';
+            document.body.style.color = 'white';
           }
         }
         
@@ -672,14 +855,14 @@ export default function LandingPageView() {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType === Node.ELEMENT_NODE) {
               const element = node as Element;
-              
-              // استهداف عناصر Select المضافة ديناميكياً
+              // تطبيق أنماط على العناصر المضافة ديناميكياً
               const selectContent = element.querySelector('[data-radix-select-content]') || 
                                    (element.matches('[data-radix-select-content]') ? element : null);
               
               if (selectContent) {
-                (selectContent as HTMLElement).style.backgroundColor = '#f9fafb';
-                (selectContent as HTMLElement).style.border = '1px solid #d1d5db';
+                (selectContent as HTMLElement).style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
+                (selectContent as HTMLElement).style.border = `0.5px solid #757575`;
+                (selectContent as HTMLElement).style.color = isDarkMode ? '#f9fafb' : '#374151';
                 (selectContent as HTMLElement).style.opacity = '1';
                 (selectContent as HTMLElement).style.backdropFilter = 'none';
                 (selectContent as HTMLElement).style.zIndex = '99999';
@@ -688,8 +871,8 @@ export default function LandingPageView() {
               // استهداف عناصر SelectItem
               const selectItems = element.querySelectorAll('[data-radix-select-item]');
               selectItems.forEach((item) => {
-                (item as HTMLElement).style.backgroundColor = '#f9fafb';
-                (item as HTMLElement).style.color = '#374151';
+                (item as HTMLElement).style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
+                (item as HTMLElement).style.color = isDarkMode ? '#f9fafb' : '#374151';
                 (item as HTMLElement).style.opacity = '1';
                 (item as HTMLElement).style.padding = '8px 12px';
                 (item as HTMLElement).style.margin = '4px 3px';
@@ -699,23 +882,24 @@ export default function LandingPageView() {
                 if (item.hasAttribute('data-highlighted') || 
                     item.hasAttribute('data-state') && item.getAttribute('data-state') === 'checked' ||
                     item.hasAttribute('aria-selected') && item.getAttribute('aria-selected') === 'true') {
-                  (item as HTMLElement).style.backgroundColor = '#f3f4f6';
+                  (item as HTMLElement).style.backgroundColor = isDarkMode ? '#4b5563' : '#f3f4f6';
+                  (item as HTMLElement).style.color = isDarkMode ? '#f9fafb' : '#374151';
                 }
               });
               
               // استهداف الحقول الأساسية المضافة ديناميكياً
               const inputs = element.querySelectorAll('input');
               inputs.forEach((input) => {
-                (input as HTMLElement).style.backgroundColor = '#f9fafb';
-                (input as HTMLElement).style.borderColor = '#d1d5db';
-                (input as HTMLElement).style.color = '#374151';
+                (input as HTMLElement).style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
+                (input as HTMLElement).style.borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
+                (input as HTMLElement).style.color = isDarkMode ? '#f9fafb' : '#374151';
               });
               
               const textareas = element.querySelectorAll('textarea');
               textareas.forEach((textarea) => {
-                (textarea as HTMLElement).style.backgroundColor = '#f9fafb';
-                (textarea as HTMLElement).style.borderColor = '#d1d5db';
-                (textarea as HTMLElement).style.color = '#374151';
+                (textarea as HTMLElement).style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
+                (textarea as HTMLElement).style.borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
+                (textarea as HTMLElement).style.color = isDarkMode ? '#f9fafb' : '#374151';
               });
             }
           });
@@ -738,23 +922,53 @@ export default function LandingPageView() {
     
     return () => {
       observer.disconnect();
-      document.head.removeChild(landingPageStyle);
+      if (document.head.contains(landingPageStyle)) {
+        document.head.removeChild(landingPageStyle);
+      }
     };
-  }, []);
+  }, [isDarkMode]);
 
-  // جلب بيانات صفحة الهبوط
+  // جلب بيانات صفحة الهبوط بالـ customUrl (الطريقة الأصلية الصحيحة)
   const { data: landingPage, isLoading, error } = useQuery({
     queryKey: ['/api/landing', slug],
     queryFn: async () => {
-      console.log('🔍 Fetching landing page with slug:', slug);
-      const response = await fetch(`/api/landing/${slug}`);
-      console.log('🔍 Landing page response status:', response.status);
-      if (!response.ok) {
+      console.log('🔍 Fetching landing page with customUrl:', slug);
+      console.log('🔍 Platform:', platform);
+      
+      // جلب صفحة الهبوط بالـ customUrl (الطريقة الأصلية)
+      const landingResponse = await fetch(`/api/landing/${slug}`);
+      if (!landingResponse.ok) {
+        // إذا لم توجد صفحة هبوط، حاول جلب المنتج بالـ slug (للمنتجات المباشرة)
+        if (platform) {
+          try {
+            const productResponse = await fetch(`/api/public/platform/${platform}/products/by-slug/${slug}`);
+            if (productResponse.ok) {
+              const productData = await productResponse.json();
+              console.log('✅ Product data loaded by slug (fallback):', productData);
+              
+              // إنشاء صفحة هبوط افتراضية للمنتج
+              return {
+                id: `product-${productData.id}`,
+                title: productData.name,
+                customUrl: slug,
+                template: productData.defaultLandingTemplate || 'modern_minimal',
+                productId: productData.id,
+                platformId: productData.platformId,
+                isActive: true,
+                isProductDirect: true,
+                product: productData
+              };
+            }
+          } catch (error) {
+            console.log('⚠️ Product not found by slug');
+          }
+        }
         throw new Error('Landing page not found');
       }
-      const data = await response.json();
-      console.log('✅ Landing page data loaded:', data);
-      return data;
+      
+      const landingData = await landingResponse.json();
+      console.log('✅ Landing page data loaded:', landingData);
+      return landingData;
     },
     enabled: !!slug,
   });
@@ -764,6 +978,13 @@ export default function LandingPageView() {
     queryKey: ['/api/public/products', landingPage?.productId],
     queryFn: async () => {
       if (!landingPage?.productId) return null;
+      
+      // إذا كان المنتج مضمناً مباشرة (منتج مباشر بالـ slug)، استخدمه
+      if (landingPage?.isProductDirect && landingPage?.product) {
+        return landingPage.product;
+      }
+      
+      // وإلا، اجلب المنتج من الـ API
       const response = await fetch(`/api/public/products/${landingPage.productId}`);
       if (!response.ok) return null;
       return response.json();
@@ -771,17 +992,81 @@ export default function LandingPageView() {
     enabled: !!landingPage?.productId,
   });
 
-  // جلب بيانات المنصة لعرض الشعار واسم المتجر
-  const { data: platformData } = useQuery({
-    queryKey: ['/api/public/platforms', landingPage?.platformId],
+  // جلب بيانات مالك المنتج للحصول على السب دومين
+  const { data: productOwner } = useQuery({
+    queryKey: ['/api/public/users', product?.userId],
     queryFn: async () => {
-      if (!landingPage?.platformId) return null;
-      const response = await fetch(`/api/public/platforms/${landingPage.platformId}`);
+      if (!product?.userId) return null;
+      const response = await fetch(`/api/public/users/${product.userId}`);
       if (!response.ok) return null;
       return response.json();
     },
-    enabled: !!landingPage?.platformId,
+    enabled: !!product?.userId,
   });
+
+  // جلب بيانات المنصة لعرض الشعار واسم المتجر
+  const { data: platformData } = useQuery({
+    queryKey: ['/api/public/platform', platform],
+    queryFn: async () => {
+      if (!platform) return null;
+      const response = await fetch(`/api/public/platform/${platform}`);
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: !!platform,
+  });
+
+  // تحديد الثيم بناءً على إعدادات المنتج/صفحة الهبوط (وليس تفضيلات المستخدم)
+  useEffect(() => {
+    if (landingPage || product) {
+      // أولوية لإعدادات صفحة الهبوط
+      const landingPageTheme = (landingPage as any)?.defaultTheme;
+      // ثم إعدادات المنتج
+      const productTheme = (product as any)?.defaultTheme;
+      
+      // استخدام الثيم المحدد في صفحة الهبوط أو المنتج
+      const selectedTheme = landingPageTheme || productTheme || 'light';
+      
+      console.log('🎨 Theme selection:', {
+        landingPageTheme,
+        productTheme,
+        selectedTheme,
+      });
+      
+      setIsDarkMode(selectedTheme === 'dark');
+    }
+  }, [landingPage, product]);
+
+  // دالة لتغيير الثيم وحفظه في قاعدة البيانات
+  const toggleTheme = async () => {
+    const newTheme = isDarkMode ? 'light' : 'dark';
+    setIsDarkMode(!isDarkMode);
+    
+    try {
+      // حفظ الثيم في صفحة الهبوط إذا كانت موجودة
+      if (landingPage && !landingPage.isProductDirect && platformData) {
+        const response = await fetch(`/api/platforms/${platformData.id}/landing-pages/${landingPage.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaultTheme: newTheme })
+        });
+        console.log('📝 Landing page theme update response:', response.status);
+      }
+      // أو حفظه في المنتج إذا كان منتجاً مباشراً
+      else if (product && platformData) {
+        const response = await fetch(`/api/platforms/${platformData.id}/products/${product.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaultTheme: newTheme })
+        });
+        console.log('📝 Product theme update response:', response.status);
+      }
+      
+      console.log('✅ Theme saved:', newTheme);
+    } catch (error) {
+      console.error('❌ Failed to save theme:', error);
+    }
+  };
 
   // جلب ألوان المنتج
   const { data: productColors = [] } = useQuery({
@@ -853,7 +1138,89 @@ export default function LandingPageView() {
     },
   });
 
-  // لا حاجة لتحديث معرف الصفحة ومعرف المنتج لأنها ستتم إضافتها في الخادم
+  // Get selected offer quantity
+  const getSelectedOfferQuantity = () => {
+    const selectedOfferData = form.watch('offer');
+    if (!selectedOfferData) return 1;
+    
+    // Parse quantity from offer string (e.g., "3 قطع بـ 150 جنيه")
+    const quantityMatch = selectedOfferData.match(/(\d+)\s*قطع/);
+    if (quantityMatch) {
+      return parseInt(quantityMatch[1], 10);
+    }
+    
+    // Default to 1 if no quantity found
+    return 1;
+  };
+
+  // Validate variant selections
+  const validateVariantSelections = () => {
+    const errors: string[] = [];
+    const maxSelections = getSelectedOfferQuantity();
+    
+    if (selectedColorIds.length > maxSelections) {
+      errors.push(`لقد اخترت العرض ${maxSelections} قطعة، يجب أن تحدد ${maxSelections} لون فقط (حددت ${selectedColorIds.length})`);
+    }
+    
+    if (selectedShapeIds.length > maxSelections) {
+      errors.push(`لقد اخترت العرض ${maxSelections} قطعة، يجب أن تحدد ${maxSelections} شكل فقط (حددت ${selectedShapeIds.length})`);
+    }
+    
+    if (selectedSizeIds.length > maxSelections) {
+      errors.push(`لقد اخترت العرض ${maxSelections} قطعة، يجب أن تحدد ${maxSelections} حجم فقط (حددت ${selectedSizeIds.length})`);
+    }
+    
+    return errors;
+  };
+
+  // Variant selection handlers
+  const handleColorSelection = (colorId: string) => {
+    const maxSelections = getSelectedOfferQuantity();
+    const currentSelections = selectedColorIds;
+    
+    if (currentSelections.includes(colorId)) {
+      // Remove selection
+      setSelectedColorIds(currentSelections.filter(id => id !== colorId));
+    } else {
+      // Add selection if under limit
+      if (currentSelections.length < maxSelections) {
+        setSelectedColorIds([...currentSelections, colorId]);
+      }
+    }
+    setVariantErrors([]);
+  };
+
+  const handleShapeSelection = (shapeId: string) => {
+    const maxSelections = getSelectedOfferQuantity();
+    const currentSelections = selectedShapeIds;
+    
+    if (currentSelections.includes(shapeId)) {
+      // Remove selection
+      setSelectedShapeIds(currentSelections.filter(id => id !== shapeId));
+    } else {
+      // Add selection if under limit
+      if (currentSelections.length < maxSelections) {
+        setSelectedShapeIds([...currentSelections, shapeId]);
+      }
+    }
+    setVariantErrors([]);
+  };
+
+  const handleSizeSelection = (sizeId: string) => {
+    const maxSelections = getSelectedOfferQuantity();
+    const currentSelections = selectedSizeIds;
+    
+    if (currentSelections.includes(sizeId)) {
+      // Remove selection
+      setSelectedSizeIds(currentSelections.filter(id => id !== sizeId));
+    } else {
+      // Add selection if under limit
+      if (currentSelections.length < maxSelections) {
+        setSelectedSizeIds([...currentSelections, sizeId]);
+      }
+    }
+    setVariantErrors([]);
+  };
 
   // حساب العروض المتاحة
   const availableOffers = getAvailableOffers(product);
@@ -868,7 +1235,7 @@ export default function LandingPageView() {
   // تعيين العرض الافتراضي عند تحميل المنتج
   useEffect(() => {
     if (availableOffers.length > 0 && !form.getValues('offer')) {
-      const defaultOffer = availableOffers.find(offer => offer.isDefault) || availableOffers[0];
+      const defaultOffer = availableOffers.find((offer: any) => offer.isDefault) || availableOffers[0];
       form.setValue('offer', `${defaultOffer.label} - ${formatCurrency(defaultOffer.price)}`);
     }
   }, [availableOffers, form]);
@@ -881,13 +1248,17 @@ export default function LandingPageView() {
         console.log("📝 بيانات النموذج:", data);
         
         // حساب الكمية من العرض المختار
-        const selectedOffer = availableOffers.find(offer => 
+        const selectedOffer = availableOffers.find((offer: any) => 
           data.offer.includes(offer.label)
         );
         const quantity = selectedOffer?.quantity || 1;
         
-        // العثور على كائن الحجم المحدد بناءً على القيمة
-        const selectedSizeObject = productSizes?.find(size => size.sizeValue === selectedSize) || null;
+        // Validate variant selections before submitting
+        const validationErrors = validateVariantSelections();
+        if (validationErrors.length > 0) {
+          setVariantErrors(validationErrors);
+          throw new Error(validationErrors[0]);
+        }
         
         const orderData = {
           ...data,
@@ -895,45 +1266,38 @@ export default function LandingPageView() {
           productId: landingPage?.productId,
           quantity: quantity, // إضافة الكمية المحسوبة
           // إضافة معلومات المتغيرات المختارة
-          selectedColorId: selectedColor?.id || null,
-          selectedShapeId: selectedShape?.id || null,
-          selectedSizeId: selectedSizeObject?.id || null,
+          selectedColorIds: selectedColorIds,
+          selectedShapeIds: selectedShapeIds,
+          selectedSizeIds: selectedSizeIds,
         };
         
         // Debug: طباعة بيانات المتغيرات المرسلة
         console.log("🛒 Order Data with Variants:", {
-          selectedColorId: orderData.selectedColorId,
-          selectedShapeId: orderData.selectedShapeId,
-          selectedSizeId: orderData.selectedSizeId,
-          selectedColor: selectedColor,
-          selectedShape: selectedShape,
-          selectedSizeValue: selectedSize
+          selectedColorIds: orderData.selectedColorIds,
+          selectedShapeIds: orderData.selectedShapeIds,
+          selectedSizeIds: orderData.selectedSizeIds,
+          colorCount: selectedColorIds.length,
+          shapeCount: selectedShapeIds.length,
+          sizeCount: selectedSizeIds.length
         });
         
         console.log("📤 إرسال الطلب إلى الخادم...");
-        const response = await apiRequest("/api/landing-page-orders", {
-          method: "POST",
-          body: orderData
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.text();
-          console.error("Server response error:", response.status, errorData);
-          throw new Error(`خطأ في الخادم: ${response.status}`);
-        }
-        
-        const result = await response.json();
+        const result = await apiRequest("/api/landing-page-orders", "POST", orderData);
         return result;
       } catch (error) {
         throw error;
       }
     },
-    onSuccess: (newOrder) => {
+    onSuccess: (newOrder: any) => {
       toast({
         title: "تم إرسال الطلب!",
         description: "تم إرسال طلبك بنجاح. سنتواصل معك قريباً.",
       });
       form.reset();
+      setSelectedColorIds([]);
+      setSelectedShapeIds([]);
+      setSelectedSizeIds([]);
+      setVariantErrors([]);
       setShowOrderForm(false);
       
       if (newOrder?.id) {
@@ -951,14 +1315,14 @@ export default function LandingPageView() {
 
   // دالة لتصميم نموذج الطلب حسب نوع التصميم
   const getFormStyles = () => {
-    const baseFieldClasses = "w-full p-3 border rounded-lg focus:ring-2 focus:outline-none";
+    const baseFieldClasses = "w-full p-3 rounded-lg focus:ring-2 focus:outline-none";
     const baseButtonClasses = "w-full py-3 text-white font-bold rounded-lg transition-all duration-300";
 
     switch(landingPage?.template) {
       case "modern_minimal":
         return {
-          container: "bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto",
-          field: `${baseFieldClasses} border-gray-300 focus:ring-blue-500 focus:border-blue-500`,
+          container: "bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-[#757575]/20 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto",
+          field: `${baseFieldClasses} bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border`,
           button: `${baseButtonClasses} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg transform hover:scale-105`
         };
       
@@ -1037,19 +1401,21 @@ export default function LandingPageView() {
   // إظهار صفحة خطأ إذا حدث خطأ JavaScript
   if (hasError) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-600 text-2xl">⚠️</span>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-red-600 text-2xl">⚠️</span>
+            </div>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">خطأ في التحميل</h1>
+            <p className="text-gray-600 mb-6">حدث خطأ أثناء تحميل الصفحة. يرجى المحاولة مرة أخرى.</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 text-white dark:bg-blue-600 dark:text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              إعادة المحاولة
+            </button>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">خطأ في التحميل</h1>
-          <p className="text-gray-600 mb-6">حدث خطأ أثناء تحميل الصفحة. يرجى المحاولة مرة أخرى.</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            إعادة المحاولة
-          </button>
         </div>
       </div>
     );
@@ -1058,10 +1424,12 @@ export default function LandingPageView() {
   // إظهار شاشة تحميل بسيطة للهاتف المحمول
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">جاري التحميل...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-300">جاري التحميل...</p>
+          </div>
         </div>
       </div>
     );
@@ -1069,19 +1437,24 @@ export default function LandingPageView() {
 
   if (error || !landingPage) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-600 text-2xl">❌</span>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-red-600 text-2xl">❌</span>
+            </div>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">خطأ في تحميل المنتج</h1>
+            <p className="text-gray-600 mb-6">لم يتم العثور على المنتج أو حدث خطأ في التحميل</p>
+            <div className="text-xs text-gray-500 mb-4">
+              Debug: slug={slug}, platform={platform}, error={error?.message}
+            </div>
+            <button 
+              onClick={() => window.history.back()}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+            >
+              العودة للخلف
+            </button>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">صفحة غير موجودة</h1>
-          <p className="text-gray-600 mb-6">عذراً، لا يمكن العثور على صفحة الهبوط المطلوبة</p>
-          <button 
-            onClick={() => window.history.back()}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-          >
-            العودة للخلف
-          </button>
         </div>
       </div>
     );
@@ -1089,6 +1462,18 @@ export default function LandingPageView() {
 
   // رندر صفحة الهبوط حسب النموذج المحدد
   const renderLandingPage = () => {
+    // التأكد من وجود البيانات قبل الرندر
+    if (!landingPage || !product) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">جاري التحميل...</p>
+          </div>
+        </div>
+      );
+    }
+    
     const template = getTemplateById(landingPage.template);
     
     if (!template) {
@@ -1114,83 +1499,115 @@ export default function LandingPageView() {
         return (
           <div className="min-h-screen bg-gray-50">
             <div className="max-w-sm mx-auto lg:max-w-2xl xl:max-w-4xl">
-            {/* Header */}
-            <div className="bg-blue-600 text-white rounded-b-2xl sticky top-0 z-40 mt-2 mx-4">
-              <div className="max-w-lg mx-auto px-4 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <div className="flex text-yellow-300">
-                      {[...Array(5)].map((_, i) => (
-                        <i key={i} className="fas fa-star text-xs"></i>
-                      ))}
-                    </div>
-                    <span className="text-xs text-yellow-100 mr-1">4.9</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {platformData?.logoUrl ? (
-                      <img
-                        src={platformData.logoUrl}
-                        alt={`${platformData.platformName} شعار`}
-                        className="w-10 h-10 rounded-lg object-cover border-2 border-white/30"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          const parent = e.currentTarget.parentElement;
-                          if (parent) {
-                            const defaultIcon = document.createElement('div');
-                            defaultIcon.className = 'w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center';
-                            defaultIcon.innerHTML = '<i class="fas fa-store text-white"></i>';
-                            parent.appendChild(defaultIcon);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-store text-white"></i>
+              {/* Spacing */}
+              <div className="h-2"></div>
+              {/* Header */}
+              <div className="bg-blue-600 text-white dark:bg-blue-600 dark:text-white rounded-b-2xl sticky top-0 z-40 mx-4">
+                <div className="max-w-lg mx-auto px-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <div className="flex text-yellow-400">
+                        {[...Array(5)].map((_, i) => (
+                          <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
+                        ))}
                       </div>
-                    )}
-                    <div className="text-right">
-                      <h1 className="text-lg font-bold">{platformData?.platformName || "متجرنا"}</h1>
-                      <p className="text-xs text-blue-100">جودة مضمونة وخدمة ممتازة</p>
+                      <span className="text-xs text-yellow-400 mr-1">4.9</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {platformData?.logoUrl ? (
+                        <img
+                          src={platformData.logoUrl}
+                          alt={`${platformData.platformName} شعار`}
+                          className="w-10 h-10 rounded-lg object-cover border-2 border-[#757575]/30"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                              const defaultIcon = document.createElement('div');
+                              defaultIcon.className = 'w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center';
+                              defaultIcon.innerHTML = '<i class="fas fa-store text-white"></i>';
+                              parent.appendChild(defaultIcon);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                          <i className="fas fa-store text-white"></i>
+                        </div>
+                      )}
+                      <div className="text-right">
+                        <h1 className="force-white-text">
+                          {platformData?.platformName || "متجرنا"}
+                        </h1>
+                        <p className="force-yellow-text">
+                          جودة مضمونة وخدمة ممتازة
+                        </p>
+                        <style dangerouslySetInnerHTML={{
+                          __html: `
+                            .force-white-text {
+                              color: #ffffff !important;
+                              font-size: 18px !important;
+                              font-weight: bold !important;
+                              line-height: 1.5 !important;
+                            }
+                            .force-yellow-text {
+                              color: #facc15 !important;
+                              font-size: 12px !important;
+                              font-weight: bold !important;
+                              line-height: 1.5 !important;
+                            }
+                          `
+                        }} />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Product Image */}
-            <div className="bg-white px-4 pt-2 pb-4">
-              <div className="max-w-lg mx-auto">
-                <ImageSlider 
-                  images={convertToPublicUrls((product as any)?.imageUrls || [])} 
-                  productName={productName}
-                  template={landingPage.template}
-                />
+              {/* Product Image */}
+              <div className="px-4 pt-2 pb-2">
+                <div className="max-w-lg mx-auto">
+                  <ImageSlider 
+                    images={convertToPublicUrls((product as any)?.imageUrls || [])} 
+                    productName={productName}
+                    template={landingPage.template}
+                  />
+                </div>
               </div>
-            </div>
 
             {/* Price - أسفل السلايدر مباشرة */}
             {productPrice && parseFloat(productPrice) > 0 && (
-              <div className="bg-white px-4 pb-6">
+              <div className="px-4 pb-2">
                 <div className="max-w-lg mx-auto">
-                  <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 text-center border border-green-200">
-                    {/* اسم المنتج */}
-                    <h1 className="text-lg font-semibold text-gray-800 mb-3">{productName}</h1>
+                  <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 text-center border border-gray-700">
+                    {/* اسم المنتج مع السعر */}
+                    <h1 className="text-base font-semibold text-white mb-3">
+                      {productName} <span className="text-base font-normal text-green-600">بـ {formatNumber(parseFloat(productPrice))} <span className="text-xs">د.ع</span></span>
+                    </h1>
                     
-                    {/* السعر الحالي - الرئيسي */}
+                    {/* عرض الوفر والسعر المشطوب */}
                     <div className="flex items-center justify-center gap-2 mb-2">
-                      <span className="text-xl font-bold text-green-600">{formatCurrency(parseFloat(productPrice))}</span>
-                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 animate-[buttonPulse_2s_ease-in-out_infinite] shadow-lg shadow-red-500/50">
-                        🔥 وفر {formatCurrency(5000)}
+                      <span className="text-sm font-medium">
+                        <span className="line-through force-red-text">بدلاً من</span> 
+                        <span className="force-white-discount line-through ml-1">{formatCurrency(parseFloat(productPrice) + 5000)}</span>
                       </span>
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 animate-[buttonPulse_2s_ease-in-out_infinite] shadow-lg shadow-red-500/50">
+                        <span className="force-white-savings">🔥 وفر {formatCurrency(5000)}</span>
+                      </span>
+                      <style dangerouslySetInnerHTML={{
+                        __html: `
+                          .force-red-text {
+                            color: #ef4444 !important;
+                          }
+                          .force-white-discount {
+                            color: #ffffff !important;
+                          }
+                          .force-white-savings {
+                            color: #ffffff !important;
+                          }
+                        `
+                      }} />
                     </div>
-                    
-                    {/* السعر المشطوب أسفل السعر الأصلي */}
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <span className="text-sm text-gray-500 line-through">بدلاً من {formatCurrency(parseFloat(productPrice) + 5000)}</span>
-                    </div>
-                    
-                    {/* نص العرض المحدود */}
-                    <p className="text-xs text-gray-500">✨ عرض محدود</p>
                   </div>
                 </div>
               </div>
@@ -1203,7 +1620,12 @@ export default function LandingPageView() {
 
               {/* Order Form - Fixed in Page */}
               <div className="mb-6">
-                <h3 className="text-xl font-bold mb-4">إرسال طلب</h3>
+                <div className="text-center mb-4">
+                  <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                    <i className="fas fa-pen text-xs"></i>
+                    املأ بياناتك للطلب
+                  </h3>
+                </div>
                 
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit((data) => {
@@ -1211,18 +1633,27 @@ export default function LandingPageView() {
                     console.log("📝 بيانات النموذج:", data);
                     console.log("🔍 أخطاء النموذج:", form.formState.errors);
                     submitOrderMutation.mutate(data);
-                  })} className="space-y-2 landing-page-form">
+                  })} className="space-y-4 landing-page-form">
                     {/* الاسم */}
                     <FormField
                       control={form.control}
                       name="customerName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>الاسم *</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                              <Input placeholder="الاسم الكامل *" className="pr-10 bg-white force-light-placeholder dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
+                              <style dangerouslySetInnerHTML={{
+                                __html: `
+                                  .force-light-placeholder::placeholder {
+                                    color: #d1d5db !important;
+                                  }
+                                  .dark .force-light-placeholder::placeholder {
+                                    color: #9ca3af !important;
+                                  }
+                                `
+                              }} />
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -1236,11 +1667,10 @@ export default function LandingPageView() {
                       name="customerPhone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>رقم الهاتف *</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                              <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white force-light-placeholder dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -1254,28 +1684,27 @@ export default function LandingPageView() {
                       name="offer"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>العرض *</FormLabel>
                           <FormControl>
                             <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger className="h-9">
+                              <SelectTrigger className="h-9 bg-white pr-10 pr-10 dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px] relative">
                                 <div className="flex items-center">
-                                  <Package className="ml-2 h-4 w-4 text-gray-400" />
-                                  <SelectValue placeholder="اختر العرض" className="placeholder:text-gray-400" />
+                                  <Package className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                  <SelectValue placeholder="اختر العرض" className="placeholder:text-gray-200 text-sm" />
                                 </div>
                               </SelectTrigger>
                               <SelectContent className="max-h-[300px] overflow-auto z-50 p-0" position="popper" sideOffset={4}>
                                 <div className="flex">
                                   {/* قائمة العروض - في اليسار */}
-                                  <div className="flex-1">
+                                  <div className="flex-1 space-y-1">
                                     {availableOffers.length > 0 ? (
-                                      availableOffers.map((offer, index) => {
+                                      availableOffers.map((offer: any, index: number) => {
                                         return (
-                                          <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
-                                            <div className="flex items-center justify-between w-full gap-3">
-                                              <div className="flex flex-col">
-                                                <span className="font-medium text-sm">{offer.label}</span>
+                                          <SelectItem key={offer.id} value={offer.label + " - " + formatCurrency(offer.price)} className="h-12 flex items-center data-[highlighted]:bg-gray-800 data-[highlighted]:text-white data-[state=checked]:bg-gray-900 data-[state=checked]:text-white hover:bg-gray-100 dark:hover:bg-gray-700">
+                                            <div className="flex items-center justify-between w-full gap-3 h-full py-2">
+                                              <div className="flex flex-col justify-center h-full">
+                                                <span className="font-medium text-sm leading-tight">{offer.label}</span>
                                                 {offer.savings > 0 && (
-                                                  <span className="text-xs text-red-500">توفير {formatCurrency(offer.savings)}</span>
+                                                  <span className="text-xs text-red-500 leading-tight">توفير {formatCurrency(offer.savings)}</span>
                                                 )}
                                               </div>
                                               <span className="text-green-600 font-bold text-sm">{formatCurrency(offer.price)}</span>
@@ -1284,8 +1713,8 @@ export default function LandingPageView() {
                                         );
                                       })
                                     ) : (
-                                      <SelectItem value={`قطعة واحدة - ${formatCurrency(parseFloat(product?.price || 0))}`}>
-                                        <div className="flex items-center justify-between w-full gap-3">
+                                      <SelectItem value={"قطعة واحدة - " + formatCurrency(parseFloat(product?.price || 0))} className="h-12 flex items-center data-[highlighted]:bg-gray-800 data-[highlighted]:text-white data-[state=checked]:bg-gray-900 data-[state=checked]:text-white hover:bg-gray-100 dark:hover:bg-gray-700">
+                                        <div className="flex items-center justify-between w-full gap-3 h-full py-2">
                                           <span className="font-medium text-sm">قطعة واحدة</span>
                                           <span className="text-green-600 font-bold text-sm">{formatCurrency(parseFloat(product?.price || 0))}</span>
                                         </div>
@@ -1293,26 +1722,35 @@ export default function LandingPageView() {
                                     )}
                                   </div>
                                   
-                                  {/* قائمة الملصقات - في اليمين */}
-                                  <div className="flex flex-col bg-gray-50 border-r w-16 px-1 py-2 gap-2 mt-1">
+                                  {/* قائمة الملصقات الجديدة - تصميم جذاب */}
+                                  <div className="flex flex-col w-20 px-2 py-1 space-y-1 border-l border-gray-200 dark:border-gray-600">
                                     {availableOffers.length > 0 ? (
-                                      availableOffers.map((offer, index) => {
-                                        const badgeText = index === 0 ? 'الأولى' : index === 1 ? 'المخفض' : 'أكثر طلباً';
-                                        const badgeStyle = index === 0 
-                                          ? 'bg-blue-100 text-blue-800 border-blue-200' 
+                                      availableOffers.map((offer: any, index: number) => {
+                                        const badgeText = index === 0 ? '🔥 الأولى' : index === 1 ? '💰 مخفض' : '⭐ مطلوب';
+                                        const selectedGradient = index === 0 
+                                          ? 'bg-gradient-to-r from-blue-600 to-purple-700' 
                                           : index === 1 
-                                          ? 'bg-red-100 text-red-800 border-red-200'
-                                          : 'bg-green-100 text-green-800 border-green-200';
+                                          ? 'bg-gradient-to-r from-red-600 to-pink-700'
+                                          : 'bg-gradient-to-r from-green-600 to-emerald-700';
+                                        const unselectedGradient = index === 0 
+                                          ? 'bg-gradient-to-r from-blue-200 to-purple-300' 
+                                          : index === 1 
+                                          ? 'bg-gradient-to-r from-red-200 to-pink-300'
+                                          : 'bg-gradient-to-r from-green-200 to-emerald-300';
                                         
                                         return (
-                                          <div key={offer.id} className={`flex items-center py-1.5 px-1 text-xs font-medium ${badgeStyle} text-center justify-center border ${index === 0 ? '-mt-1' : index === 1 ? 'mt-0.5' : index === 2 ? 'mt-2' : ''}`}>
-                                            {badgeText}
+                                          <div key={offer.id} className={"relative overflow-hidden rounded-lg " + unselectedGradient + " text-gray-700 shadow-md transform hover:scale-105 transition-all duration-200 h-12 flex items-center justify-center peer-data-[highlighted]:" + selectedGradient + " peer-data-[highlighted]:text-white peer-data-[state=checked]:" + selectedGradient + " peer-data-[state=checked]:text-white"}>
+                                            <div className="px-2 py-1.5 text-center">
+                                              <div className="text-xs font-bold leading-tight">{badgeText}</div>
+                                            </div>
+                                            {/* تأثير لامع */}
+                                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full animate-pulse opacity-50"></div>
                                           </div>
                                         );
                                       })
                                     ) : (
-                                      <div className="flex items-center py-1.5 px-1 text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200 text-center justify-center">
-                                        الأساسي
+                                      <div className="bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-lg px-2 py-1.5 text-center shadow-md h-12 flex items-center justify-center">
+                                        <div className="text-xs font-bold">📦 أساسي</div>
                                       </div>
                                     )}
                                   </div>
@@ -1321,13 +1759,6 @@ export default function LandingPageView() {
                             </Select>
                           </FormControl>
                           <FormMessage />
-                          {field.value && (
-                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-                              <p className="text-sm text-green-700">
-                                الكمية: {field.value.split(' - ')[0]} - السعر: {field.value.split(' - ')[1]}
-                              </p>
-                            </div>
-                          )}
                         </FormItem>
                       )}
                     />
@@ -1339,19 +1770,17 @@ export default function LandingPageView() {
                         {/* الألوان المتاحة */}
                         {productColors.length > 0 && (
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">الألوان المتاحة</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                              الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                             <div className="flex flex-wrap gap-2">
                               {productColors.map((color: any) => (
                                 <button 
                                   key={color.id} 
                                   type="button"
-                                  className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                    selectedColor?.id === color.id 
-                                      ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                                      : 'border-gray-300 bg-gray-50'
-                                  }`}
+                                  className={"inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer relative " + (selectedColorIds.includes(color.id) ? "border-blue-500 bg-blue-50 shadow-sm" : "border-gray-300 bg-gray-50")}
                                   title={color.colorName}
-                                  onClick={() => setSelectedColor(color)}
+                                  onClick={() => handleColorSelection(color.id)}
                                 >
                                   {color.colorImageUrl ? (
                                     <div className="flex items-center gap-2">
@@ -1360,7 +1789,7 @@ export default function LandingPageView() {
                                           color.colorImageUrl.replace('/objects/', '/public-objects/') : 
                                           color.colorImageUrl
                                         }
-                                        alt={`${color.colorName} - اللون`}
+                                        alt={color.colorName + " - اللون"}
                                       >
                                         <img 
                                           src={color.colorImageUrl.startsWith('/objects/') ? 
@@ -1383,6 +1812,11 @@ export default function LandingPageView() {
                                       <span className="text-sm font-medium text-gray-700">{color.colorName}</span>
                                     </div>
                                   )}
+                                  {selectedColorIds.includes(color.id) && (
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                      <span className="text-xs text-white">✓</span>
+                                    </div>
+                                  )}
                                 </button>
                               ))}
                             </div>
@@ -1392,19 +1826,21 @@ export default function LandingPageView() {
                         {/* الأشكال المتاحة */}
                         {productShapes.length > 0 && (
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">الأشكال المتاحة</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                             <div className="flex flex-wrap gap-2">
                               {productShapes.map((shape: any) => (
                                 <button 
                                   key={shape.id} 
                                   type="button"
                                   className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                    selectedShape?.id === shape.id 
+                                    selectedShapeIds.includes(shape.id) 
                                       ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                       : 'border-gray-300 bg-gray-50'
                                   }`}
                                   title={shape.shapeName}
-                                  onClick={() => setSelectedShape(shape)}
+                                  onClick={() => handleShapeSelection(shape.id)}
                                 >
                                   {shape.shapeImageUrl ? (
                                     <div className="flex items-center gap-2">
@@ -1438,36 +1874,63 @@ export default function LandingPageView() {
                         {/* الأحجام المتاحة */}
                         {productSizes.length > 0 && (
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                            <Select onValueChange={setSelectedSize} value={selectedSize}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="اختر الحجم" className="placeholder:text-gray-400" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                {productSizes.map((size: any) => (
-                                  <SelectItem key={size.id} value={size.sizeName} className="min-h-12">
-                                    <div className="flex items-center gap-2 w-full min-w-0">
-                                      {size.sizeImageUrl && (
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {productSizes.map((size: any) => (
+                                <button 
+                                  key={size.id} 
+                                  type="button"
+                                  className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer relative ${
+                                    selectedSizeIds.includes(size.id) 
+                                      ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                                      : 'border-gray-300 bg-gray-50'
+                                  }`}
+                                  title={size.sizeName}
+                                  onClick={() => handleSizeSelection(size.id)}
+                                >
+                                  {size.sizeImageUrl ? (
+                                    <div className="flex items-center gap-2">
+                                      <ImageModal
+                                        src={size.sizeImageUrl.startsWith('/objects/') ? 
+                                          size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
+                                          size.sizeImageUrl
+                                        }
+                                        alt={`${size.sizeName} - الحجم`}
+                                      >
                                         <img 
                                           src={size.sizeImageUrl.startsWith('/objects/') ? 
                                             size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
                                             size.sizeImageUrl
                                           }
                                           alt={size.sizeName}
-                                          className="w-8 h-8 object-cover rounded border-2 border-gray-400 flex-shrink-0"
+                                          className="w-12 h-12 object-cover rounded border-2 border-gray-400 hover:scale-105 transition-transform"
                                         />
-                                      )}
-                                      <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-sm font-normal break-words">{size.sizeName}</span>
+                                      </ImageModal>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
                                         {size.sizeValue && (
-                                          <span className="text-xs text-gray-500 break-words">{size.sizeValue}</span>
+                                          <span className="text-xs text-gray-500">{size.sizeValue}</span>
                                         )}
                                       </div>
                                     </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                  ) : (
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
+                                      {size.sizeValue && (
+                                        <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {selectedSizeIds.includes(size.id) && (
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                      <span className="text-xs text-white">✓</span>
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1479,16 +1942,15 @@ export default function LandingPageView() {
                       name="customerGovernorate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>المحافظة *</FormLabel>
                           <FormControl>
                             <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger>
+                              <SelectTrigger className="bg-white pr-10 dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px] relative">
                                 <div className="flex items-center">
-                                  <MapPin className="ml-2 h-4 w-4 text-gray-400" />
-                                  <SelectValue placeholder="اختر المحافظة" />
+                                  <MapPin className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                  <SelectValue placeholder="اختر المحافظة" className="text-sm placeholder:text-gray-200" />
                                 </div>
                               </SelectTrigger>
-                              <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                              <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                 {iraqGovernorates.map((gov) => (
                                   <SelectItem key={gov} value={gov}>
                                     {gov}
@@ -1508,13 +1970,12 @@ export default function LandingPageView() {
                       name="customerAddress"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>العنوان *</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                               <Textarea 
                                 placeholder="العنوان التفصيلي"
-                                className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                className="resize-none pr-10 force-light-placeholder min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                 rows={1}
                                 {...field}
                               />
@@ -1531,13 +1992,12 @@ export default function LandingPageView() {
                       name="notes"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>ملاحظات إضافية</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                               <Textarea 
                                 placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                className="resize-none pr-10 force-light-placeholder min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                 rows={1}
                                 {...field}
                                 value={field.value || ""}
@@ -1553,17 +2013,27 @@ export default function LandingPageView() {
                       <Button
                         type="submit"
                         disabled={submitOrderMutation.isPending}
-                        className="flex-1 bg-green-600 hover:bg-green-700 h-14 text-lg font-bold animate-[buttonPulse_2s_ease-in-out_infinite] hover:animate-none"
+                        className="flex-1 bg-green-600 hover:bg-green-700 h-14 text-lg font-bold force-white-submit-button animate-[buttonPulse_2s_ease-in-out_infinite] hover:animate-none" style={{color: "white", backgroundColor: "#16a34a", fontWeight: "bold", border: "none"}}
                       >
                         {submitOrderMutation.isPending ? (
                           <>
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                            جارٍ الإرسال...
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#757575] mr-2"></div>
+                            <span className="force-white-submit-text">جارٍ الإرسال...</span>
                           </>
                         ) : (
-                          "إرسال الطلب"
+                          <span className="force-white-submit-text">إرسال الطلب</span>
                         )}
                       </Button>
+                        <style dangerouslySetInnerHTML={{
+                          __html: `
+                            .force-white-submit-button {
+                              color: #ffffff !important;
+                            }
+                            .force-white-submit-text {
+                              color: #ffffff !important;
+                            }
+                          `
+                        }} />
                     </div>
                   </form>
                 </Form>
@@ -1588,8 +2058,6 @@ export default function LandingPageView() {
                   <p className="text-xs text-gray-700">دعم 24/7</p>
                 </div>
               </div>
-
-
             </div>
 
             {/* Product Description */}
@@ -1614,14 +2082,15 @@ export default function LandingPageView() {
               
               <div className="bg-gray-50 rounded-lg p-3 mb-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg font-bold text-gray-900">4.9</span>
+                  <div></div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-2 mb-1 justify-end">
                       <div className="flex text-yellow-400">
                         {[...Array(5)].map((_, i) => (
-                          <i key={i} className="fas fa-star text-xs"></i>
+                          <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                         ))}
                       </div>
+                      <span className="text-lg font-bold text-gray-900">4.9</span>
                     </div>
                     <p className="text-xs text-gray-600">127 تقييم</p>
                   </div>
@@ -1639,7 +2108,7 @@ export default function LandingPageView() {
                         <span className="font-medium text-gray-900 text-sm">أحمد محمد</span>
                         <div className="flex text-yellow-400">
                           {[...Array(5)].map((_, i) => (
-                            <i key={i} className="fas fa-star text-xs"></i>
+                            <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                           ))}
                         </div>
                       </div>
@@ -1658,7 +2127,7 @@ export default function LandingPageView() {
                         <span className="font-medium text-gray-900 text-sm">فاطمة علي</span>
                         <div className="flex text-yellow-400">
                           {[...Array(5)].map((_, i) => (
-                            <i key={i} className="fas fa-star text-xs"></i>
+                            <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                           ))}
                         </div>
                       </div>
@@ -1670,13 +2139,13 @@ export default function LandingPageView() {
             </div>
 
             {/* Mobile App Style Bottom Bar */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-2 z-50">
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-2 z-50 rounded-t-2xl">
               <div className="max-w-sm mx-auto lg:max-w-2xl xl:max-w-4xl px-4">
                 <div className="flex items-center justify-around">
                 {/* طلب الآن */}
                 <button 
                   onClick={() => setShowOrderForm(true)}
-                  className="flex flex-col items-center gap-1 px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  className="flex flex-col items-center gap-1 px-3 py-2 text-gray-700 transition-colors"
                 >
                   <Package className="h-5 w-5" />
                   <span className="text-xs font-medium">طلب الآن</span>
@@ -1686,9 +2155,8 @@ export default function LandingPageView() {
                 <button 
                   onClick={() => {
                     const reviewsElement = document.querySelector('.reviews-section');
-                    reviewsElement?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="flex flex-col items-center gap-1 px-3 py-2 text-yellow-500 hover:bg-yellow-50 rounded-lg transition-colors"
+                  className="flex flex-col items-center gap-1 px-3 py-2 text-gray-700 transition-colors"
                 >
                   <MessageSquare className="h-5 w-5" />
                   <span className="text-xs font-medium">آراء</span>
@@ -1697,7 +2165,7 @@ export default function LandingPageView() {
                 {/* اتصل بنا */}
                 <button 
                   onClick={() => window.open('tel:+964', '_blank')}
-                  className="flex flex-col items-center gap-1 px-3 py-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  className="flex flex-col items-center gap-1 px-3 py-2 text-gray-700 transition-colors"
                 >
                   <Phone className="h-5 w-5" />
                   <span className="text-xs font-medium">اتصل</span>
@@ -1705,11 +2173,19 @@ export default function LandingPageView() {
 
                 {/* المنتجات */}
                 <button 
-                  onClick={() => {
-                    const productElement = document.querySelector('.product-section');
-                    productElement?.scrollIntoView({ behavior: 'smooth' });
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const subdomain = productOwner?.subdomain || platformData?.subdomain;
+                    if (subdomain) {
+                      const url = `https://sanadi.pro/${subdomain}`;
+                      // استخدام location.href بدلاً من window.open لتجنب التأخير
+                      window.location.href = url;
+                    } else {
+                      window.location.href = 'https://sanadi.pro';
+                    }
                   }}
-                  className="flex flex-col items-center gap-1 px-3 py-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                  className="flex flex-col items-center gap-1 px-3 py-2 text-gray-700 transition-colors hover:bg-gray-100 active:bg-gray-200"
                 >
                   <Home className="h-5 w-5" />
                   <span className="text-xs font-medium">المنتجات</span>
@@ -1718,8 +2194,20 @@ export default function LandingPageView() {
               </div>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-8"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
             </div>
           </div>
         );
@@ -1752,7 +2240,7 @@ export default function LandingPageView() {
                       </div>
                     )}
                     <div className="text-right">
-                      <h1 className="text-xl font-bold text-gray-900">{platformData?.platformName || "متجرنا المتميز"}</h1>
+                      <h1 className="text-xl font-bold text-gray-900 dark:text-white">{platformData?.platformName || "متجرنا المتميز"}</h1>
                       <p className="text-sm text-orange-600">جودة عالية • خدمة ممتازة</p>
                     </div>
                   </div>
@@ -1766,23 +2254,19 @@ export default function LandingPageView() {
               <div className="relative container mx-auto px-3 py-8">
                 <div className="grid lg:grid-cols-2 gap-6 items-center">
                   <div className="text-center lg:text-right">
-                    <div className="inline-block bg-yellow-400 text-black px-3 py-1 rounded-full text-xs font-bold mb-3">
-                      🔥 عرض محدود - خصم خاص
-                    </div>
-                    <h1 className="text-xl lg:text-3xl font-black mb-3 leading-tight">
-                      {productName}
+                    <h1 className="text-lg lg:text-2xl font-black mb-3 leading-tight">
+                      {productName} <span className="text-base font-normal text-orange-400">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
                       <br />
-                      <span className="text-yellow-300">العرض الأفضل في السوق</span>
+                      <span className="text-orange-400">العرض الأفضل في السوق</span>
                     </h1>
                     <p className="text-sm mb-4 opacity-90 leading-relaxed">{productDescription || "منتج عالي الجودة بأفضل الأسعار"}</p>
                     
                     <div className="flex items-center justify-center lg:justify-start gap-2 mb-4">
                       <div className="text-center">
-                        <div className="text-lg font-bold text-yellow-300">{formatCurrency(parseFloat(productPrice || '0'))}</div>
-                        <div className="text-xs line-through opacity-70">{formatCurrency(parseFloat(productPrice || '0') + 10000)}</div>
+                        <div className="text-xs line-through font-medium" style={{color: '#ef4444'}}>بدلاً من {formatCurrency(parseFloat(productPrice || '0') + 10000)}</div>
                       </div>
-                      <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold animate-pulse">
-                        وفر {formatCurrency(10000)}
+                      <div className="bg-red-500 px-2 py-1 rounded text-xs font-bold animate-pulse">
+                        <span className="text-white">وفر {formatCurrency(10000)}</span>
                       </div>
                     </div>
 
@@ -1934,7 +2418,7 @@ export default function LandingPageView() {
                     
                     <div className="space-y-2">
                       <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white p-2 rounded text-center">
-                        <div className="text-lg font-bold">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                        <div className="text-lg font-bold !text-white dark:!text-white">{formatCurrency(parseFloat(productPrice || '0'))}</div>
                         <div className="text-xs">السعر الحالي</div>
                       </div>
                       
@@ -1987,19 +2471,19 @@ export default function LandingPageView() {
               <div className="container mx-auto px-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                   <div>
-                    <div className="text-lg font-bold text-yellow-400 mb-1">+5000</div>
+                    <div className="text-lg font-bold text-orange-400 mb-1">+5000</div>
                     <div className="text-gray-300 text-xs">عميل راضي</div>
                   </div>
                   <div>
-                    <div className="text-lg font-bold text-yellow-400 mb-1">24/7</div>
+                    <div className="text-lg font-bold text-orange-400 mb-1">24/7</div>
                     <div className="text-gray-300 text-xs">دعم فني</div>
                   </div>
                   <div>
-                    <div className="text-lg font-bold text-yellow-400 mb-1">99%</div>
+                    <div className="text-lg font-bold text-orange-400 mb-1">99%</div>
                     <div className="text-gray-300 text-xs">رضا العملاء</div>
                   </div>
                   <div>
-                    <div className="text-lg font-bold text-yellow-400 mb-1">سريع</div>
+                    <div className="text-lg font-bold text-orange-400 mb-1">سريع</div>
                     <div className="text-gray-300 text-xs">التوصيل</div>
                   </div>
                 </div>
@@ -2010,7 +2494,12 @@ export default function LandingPageView() {
             <div className="bg-white mx-4 rounded-lg shadow-sm border p-6" id="order-form">
               {/* Order Form - Fixed in Page */}
               <div className="mb-6">
-                <h3 className="text-xl font-bold mb-4">إرسال طلب</h3>
+                <div className="text-center mb-4">
+                  <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                    <i className="fas fa-pen text-xs"></i>
+                    املأ بياناتك للطلب
+                  </h3>
+                </div>
                 
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2 landing-page-form">
@@ -2020,11 +2509,10 @@ export default function LandingPageView() {
                       name="customerName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>الاسم *</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                              <Input placeholder="الاسم الكامل *" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -2042,7 +2530,7 @@ export default function LandingPageView() {
                           <FormControl>
                             <div className="relative">
                               <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                              <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -2059,15 +2547,15 @@ export default function LandingPageView() {
                           <FormLabel>العرض *</FormLabel>
                           <FormControl>
                             <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger>
+                              <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                 <div className="flex items-center">
                                   <Package className="ml-2 h-4 w-4 text-gray-400" />
-                                  <SelectValue placeholder="اختر العرض" className="placeholder:text-gray-400" />
+                                  <SelectValue placeholder="اختر العرض" className="placeholder:text-gray-200" />
                                 </div>
                               </SelectTrigger>
                               <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                 {availableOffers.length > 0 ? (
-                                  availableOffers.map((offer) => (
+                                  availableOffers.map((offer: any) => (
                                     <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                       <div className="flex justify-between items-start w-full gap-4">
                                         <div className="flex flex-col flex-1">
@@ -2089,13 +2577,6 @@ export default function LandingPageView() {
                             </Select>
                           </FormControl>
                           <FormMessage />
-                          {field.value && (
-                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-                              <p className="text-sm text-green-700">
-                                الكمية: {field.value.split(' - ')[0]} - السعر: {field.value.split(' - ')[1]}
-                              </p>
-                            </div>
-                          )}
                         </FormItem>
                       )}
                     />
@@ -2107,19 +2588,21 @@ export default function LandingPageView() {
                         {/* الألوان المتاحة */}
                         {productColors.length > 0 && (
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">الألوان المتاحة</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                              الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                             <div className="flex flex-wrap gap-2">
                               {productColors.map((color: any) => (
                                 <button 
                                   key={color.id} 
                                   type="button"
-                                  className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                    selectedColor?.id === color.id 
+                                  className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer relative ${
+                                    selectedColorIds.includes(color.id) 
                                       ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                       : 'border-gray-300 bg-gray-50'
                                   }`}
                                   title={color.colorName}
-                                  onClick={() => setSelectedColor(color)}
+                                  onClick={() => handleColorSelection(color.id)}
                                 >
                                   {color.colorImageUrl ? (
                                     <div className="flex items-center gap-2">
@@ -2151,6 +2634,11 @@ export default function LandingPageView() {
                                       <span className="text-sm font-medium text-gray-700">{color.colorName}</span>
                                     </div>
                                   )}
+                                  {selectedColorIds.includes(color.id) && (
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                      <span className="text-xs text-white">✓</span>
+                                    </div>
+                                  )}
                                 </button>
                               ))}
                             </div>
@@ -2160,19 +2648,21 @@ export default function LandingPageView() {
                         {/* الأشكال المتاحة */}
                         {productShapes.length > 0 && (
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">الأشكال المتاحة</div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                             <div className="flex flex-wrap gap-2">
                               {productShapes.map((shape: any) => (
                                 <button 
                                   key={shape.id} 
                                   type="button"
                                   className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                    selectedShape?.id === shape.id 
+                                    selectedShapeIds.includes(shape.id) 
                                       ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                       : 'border-gray-300 bg-gray-50'
                                   }`}
                                   title={shape.shapeName}
-                                  onClick={() => setSelectedShape(shape)}
+                                  onClick={() => handleShapeSelection(shape.id)}
                                 >
                                   {shape.shapeImageUrl ? (
                                     <div className="flex items-center gap-2">
@@ -2206,36 +2696,63 @@ export default function LandingPageView() {
                         {/* الأحجام المتاحة */}
                         {productSizes.length > 0 && (
                           <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                            <Select onValueChange={setSelectedSize} value={selectedSize}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="اختر الحجم" className="placeholder:text-gray-400" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                {productSizes.map((size: any) => (
-                                  <SelectItem key={size.id} value={size.sizeName} className="min-h-12">
-                                    <div className="flex items-center gap-2 w-full min-w-0">
-                                      {size.sizeImageUrl && (
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {productSizes.map((size: any) => (
+                                <button 
+                                  key={size.id} 
+                                  type="button"
+                                  className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer relative ${
+                                    selectedSizeIds.includes(size.id) 
+                                      ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                                      : 'border-gray-300 bg-gray-50'
+                                  }`}
+                                  title={size.sizeName}
+                                  onClick={() => handleSizeSelection(size.id)}
+                                >
+                                  {size.sizeImageUrl ? (
+                                    <div className="flex items-center gap-2">
+                                      <ImageModal
+                                        src={size.sizeImageUrl.startsWith('/objects/') ? 
+                                          size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
+                                          size.sizeImageUrl
+                                        }
+                                        alt={`${size.sizeName} - الحجم`}
+                                      >
                                         <img 
                                           src={size.sizeImageUrl.startsWith('/objects/') ? 
                                             size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
                                             size.sizeImageUrl
                                           }
                                           alt={size.sizeName}
-                                          className="w-8 h-8 object-cover rounded border-2 border-gray-400 flex-shrink-0"
+                                          className="w-12 h-12 object-cover rounded border-2 border-gray-400 hover:scale-105 transition-transform"
                                         />
-                                      )}
-                                      <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-sm font-normal break-words">{size.sizeName}</span>
+                                      </ImageModal>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
                                         {size.sizeValue && (
-                                          <span className="text-xs text-gray-500 break-words">{size.sizeValue}</span>
+                                          <span className="text-xs text-gray-500">{size.sizeValue}</span>
                                         )}
                                       </div>
                                     </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                  ) : (
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
+                                      {size.sizeValue && (
+                                        <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {selectedSizeIds.includes(size.id) && (
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                      <span className="text-xs text-white">✓</span>
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2250,13 +2767,13 @@ export default function LandingPageView() {
                           <FormLabel>المحافظة *</FormLabel>
                           <FormControl>
                             <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger>
+                              <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                 <div className="flex items-center">
                                   <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                   <SelectValue placeholder="اختر المحافظة" />
                                 </div>
                               </SelectTrigger>
-                              <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                              <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                 {iraqGovernorates.map((gov) => (
                                   <SelectItem key={gov} value={gov}>
                                     {gov}
@@ -2282,7 +2799,7 @@ export default function LandingPageView() {
                               <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                               <Textarea 
                                 placeholder="العنوان التفصيلي"
-                                className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                 rows={1}
                                 {...field}
                               />
@@ -2305,7 +2822,7 @@ export default function LandingPageView() {
                               <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                               <Textarea 
                                 placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                 rows={1}
                                 {...field}
                                 value={field.value || ""}
@@ -2321,11 +2838,11 @@ export default function LandingPageView() {
                       <Button
                         type="submit"
                         disabled={submitOrderMutation.isPending}
-                        className="flex-1 bg-green-600 hover:bg-green-700 h-14 text-lg font-bold animate-[buttonPulse_2s_ease-in-out_infinite] hover:animate-none"
+                        className="flex-1 bg-green-600 hover:bg-green-700 h-14 text-lg font-bold !text-white dark:!text-white animate-[buttonPulse_2s_ease-in-out_infinite] hover:animate-none" style={{color: "white", backgroundColor: "#16a34a", fontWeight: "bold", border: "none"}}
                       >
                         {submitOrderMutation.isPending ? (
                           <>
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#757575] mr-2"></div>
                             جارٍ الإرسال...
                           </>
                         ) : (
@@ -2452,7 +2969,6 @@ export default function LandingPageView() {
                 <Button 
                   onClick={() => {
                     const orderForm = document.getElementById('order-form');
-                    orderForm?.scrollIntoView({ behavior: 'smooth' });
                   }}
                   className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white py-3 text-lg font-bold rounded-lg"
                 >
@@ -2461,8 +2977,20 @@ export default function LandingPageView() {
               </div>
             </div>
 
-            {/* Add bottom padding for mobile */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding for mobile and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -2504,8 +3032,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-green-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-green-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -2546,10 +3075,15 @@ export default function LandingPageView() {
               {/* Order Form Section */}
               <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
                 <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3">إرسال طلب</h3>
+                  <div className="text-center mb-3">
+                    <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                      <i className="fas fa-pen text-xs"></i>
+                      املأ بياناتك للطلب
+                    </h3>
+                  </div>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* الاسم */}
                       <FormField
                         control={form.control}
@@ -2560,7 +3094,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -2578,7 +3112,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -2595,7 +3129,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -2603,7 +3137,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -2635,18 +3169,20 @@ export default function LandingPageView() {
                           {/* الألوان المتاحة */}
                           {productColors.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الألوان المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productColors.map((color: any) => (
                                   <button 
                                     key={color.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-green-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedColor?.id === color.id 
+                                      selectedColorIds.includes(color.id) 
                                         ? 'border-green-500 bg-green-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedColor(color)}
+                                    onClick={() => handleColorSelection(color.id)}
                                   >
                                     {color.colorImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -2679,18 +3215,20 @@ export default function LandingPageView() {
                           {/* الأشكال المتاحة */}
                           {productShapes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأشكال المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productShapes.map((shape: any) => (
                                   <button 
                                     key={shape.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-green-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedShape?.id === shape.id 
+                                      selectedShapeIds.includes(shape.id) 
                                         ? 'border-green-500 bg-green-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedShape(shape)}
+                                    onClick={() => handleShapeSelection(shape.id)}
                                   >
                                     {shape.shapeImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -2717,8 +3255,8 @@ export default function LandingPageView() {
                           {productSizes.length > 0 && (
                             <div>
                               <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={setSelectedSize} value={selectedSize}>
-                                <SelectTrigger>
+                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <SelectValue placeholder="اختر الحجم" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
@@ -2755,13 +3293,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -2787,7 +3325,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -2810,7 +3348,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -2830,7 +3368,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -2863,14 +3401,15 @@ export default function LandingPageView() {
                 
                 <div className="bg-gray-50 rounded-lg p-3 mb-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg font-bold text-gray-900">4.9</span>
+                    <div></div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-2 mb-1 justify-end">
                         <div className="flex text-yellow-400">
                           {[...Array(5)].map((_, i) => (
-                            <i key={i} className="fas fa-star text-xs"></i>
+                            <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                           ))}
                         </div>
+                        <span className="text-lg font-bold text-gray-900">4.9</span>
                       </div>
                       <p className="text-xs text-gray-600">127 تقييم</p>
                     </div>
@@ -2888,7 +3427,7 @@ export default function LandingPageView() {
                           <h4 className="font-semibold text-sm">أحمد محمد</h4>
                           <div className="flex text-yellow-400">
                             {[...Array(5)].map((_, i) => (
-                              <i key={i} className="fas fa-star text-xs"></i>
+                              <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                             ))}
                           </div>
                         </div>
@@ -2907,7 +3446,7 @@ export default function LandingPageView() {
                           <h4 className="font-semibold text-sm">فاطمة علي</h4>
                           <div className="flex text-yellow-400">
                             {[...Array(5)].map((_, i) => (
-                              <i key={i} className="fas fa-star text-xs"></i>
+                              <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                             ))}
                           </div>
                         </div>
@@ -2926,9 +3465,9 @@ export default function LandingPageView() {
                           <h4 className="font-semibold text-sm">محمد صالح</h4>
                           <div className="flex text-yellow-400">
                             {[...Array(4)].map((_, i) => (
-                              <i key={i} className="fas fa-star text-xs"></i>
+                              <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                             ))}
-                            <i className="far fa-star text-xs"></i>
+                            <i className="far fa-star text-xs text-yellow-400"></i>
                           </div>
                         </div>
                         <p className="text-gray-600 text-xs">سعر مناسب ومنتج جيد</p>
@@ -2970,7 +3509,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-bold rounded-lg"
               >
@@ -2978,8 +3516,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -3021,8 +3571,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-blue-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-blue-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -3045,14 +3596,15 @@ export default function LandingPageView() {
                 
                 <div className="bg-blue-50 rounded-lg p-3 mb-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg font-bold text-gray-900">4.9</span>
+                    <div></div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-2 mb-1 justify-end">
                         <div className="flex text-yellow-400">
                           {[...Array(5)].map((_, i) => (
-                            <i key={i} className="fas fa-star text-xs"></i>
+                            <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                           ))}
                         </div>
+                        <span className="text-lg font-bold text-gray-900">4.9</span>
                       </div>
                       <p className="text-xs text-gray-600">+200 تقييم إيجابي</p>
                     </div>
@@ -3070,7 +3622,7 @@ export default function LandingPageView() {
                           <h4 className="font-semibold text-sm">أحمد محمد</h4>
                           <div className="flex text-yellow-400">
                             {[...Array(5)].map((_, i) => (
-                              <i key={i} className="fas fa-star text-xs"></i>
+                              <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                             ))}
                           </div>
                         </div>
@@ -3089,7 +3641,7 @@ export default function LandingPageView() {
                           <h4 className="font-semibold text-sm">سارة أحمد</h4>
                           <div className="flex text-yellow-400">
                             {[...Array(5)].map((_, i) => (
-                              <i key={i} className="fas fa-star text-xs"></i>
+                              <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                             ))}
                           </div>
                         </div>
@@ -3108,7 +3660,7 @@ export default function LandingPageView() {
                           <h4 className="font-semibold text-sm">محمد علي</h4>
                           <div className="flex text-yellow-400">
                             {[...Array(5)].map((_, i) => (
-                              <i key={i} className="fas fa-star text-xs"></i>
+                              <i key={i} className="fas fa-star text-xs text-yellow-400"></i>
                             ))}
                           </div>
                         </div>
@@ -3122,10 +3674,15 @@ export default function LandingPageView() {
               {/* Order Form Section */}
               <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
                 <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3">إرسال طلب</h3>
+                  <div className="text-center mb-3">
+                    <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                      <i className="fas fa-pen text-xs"></i>
+                      املأ بياناتك للطلب
+                    </h3>
+                  </div>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* الاسم */}
                       <FormField
                         control={form.control}
@@ -3136,7 +3693,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -3154,7 +3711,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -3171,7 +3728,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -3179,7 +3736,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -3212,18 +3769,20 @@ export default function LandingPageView() {
                           {/* الألوان المتاحة */}
                           {productColors.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الألوان المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productColors.map((color: any) => (
                                   <button 
                                     key={color.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedColor?.id === color.id 
+                                      selectedColorIds.includes(color.id) 
                                         ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedColor(color)}
+                                    onClick={() => handleColorSelection(color.id)}
                                   >
                                     {color.colorImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -3256,18 +3815,20 @@ export default function LandingPageView() {
                           {/* الأشكال المتاحة */}
                           {productShapes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأشكال المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productShapes.map((shape: any) => (
                                   <button 
                                     key={shape.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedShape?.id === shape.id 
+                                      selectedShapeIds.includes(shape.id) 
                                         ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedShape(shape)}
+                                    onClick={() => handleShapeSelection(shape.id)}
                                   >
                                     {shape.shapeImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -3294,8 +3855,8 @@ export default function LandingPageView() {
                           {productSizes.length > 0 && (
                             <div>
                               <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={setSelectedSize} value={selectedSize}>
-                                <SelectTrigger>
+                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <SelectValue placeholder="اختر الحجم" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
@@ -3332,13 +3893,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -3364,7 +3925,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -3387,7 +3948,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -3407,7 +3968,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -3428,7 +3989,7 @@ export default function LandingPageView() {
                   <p className="text-xs text-gray-500">لجميع الطلبات</p>
                 </div>
                 <div className="bg-white rounded-lg p-3 text-center shadow-sm border">
-                  <i className="fas fa-star text-yellow-500 text-lg mb-2"></i>
+                  <i className="fas fa-star text-yellow-400 text-lg mb-2"></i>
                   <p className="text-xs font-semibold text-gray-700">تقييم 4.9</p>
                   <p className="text-xs text-gray-500">من العملاء</p>
                 </div>
@@ -3466,7 +4027,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-bold rounded-lg"
               >
@@ -3474,8 +4034,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -3517,8 +4089,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-green-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-green-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -3559,10 +4132,15 @@ export default function LandingPageView() {
               {/* Order Form Section */}
               <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
                 <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3">إرسال طلب</h3>
+                  <div className="text-center mb-3">
+                    <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                      <i className="fas fa-pen text-xs"></i>
+                      املأ بياناتك للطلب
+                    </h3>
+                  </div>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* Same unified form content as other templates */}
                       {/* Copy the complete form from product_showcase */}
                       {/* الاسم */}
@@ -3575,7 +4153,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -3593,7 +4171,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -3610,7 +4188,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -3618,7 +4196,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -3651,18 +4229,20 @@ export default function LandingPageView() {
                           {/* الألوان المتاحة */}
                           {productColors.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الألوان المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productColors.map((color: any) => (
                                   <button 
                                     key={color.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-green-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedColor?.id === color.id 
+                                      selectedColorIds.includes(color.id) 
                                         ? 'border-green-500 bg-green-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedColor(color)}
+                                    onClick={() => handleColorSelection(color.id)}
                                   >
                                     {color.colorImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -3695,18 +4275,20 @@ export default function LandingPageView() {
                           {/* الأشكال المتاحة */}
                           {productShapes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأشكال المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productShapes.map((shape: any) => (
                                   <button 
                                     key={shape.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-green-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedShape?.id === shape.id 
+                                      selectedShapeIds.includes(shape.id) 
                                         ? 'border-green-500 bg-green-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedShape(shape)}
+                                    onClick={() => handleShapeSelection(shape.id)}
                                   >
                                     {shape.shapeImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -3733,8 +4315,8 @@ export default function LandingPageView() {
                           {productSizes.length > 0 && (
                             <div>
                               <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={setSelectedSize} value={selectedSize}>
-                                <SelectTrigger>
+                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <SelectValue placeholder="اختر الحجم" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
@@ -3771,13 +4353,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -3803,7 +4385,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -3826,7 +4408,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -3846,7 +4428,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -3914,7 +4496,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-bold rounded-lg"
               >
@@ -3922,8 +4503,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -3970,8 +4563,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-red-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-purple-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -4023,7 +4617,7 @@ export default function LandingPageView() {
                   <h3 className="text-lg font-bold mb-3 text-red-600">🚀 احجز مكانك الآن</h3>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* Same unified form as other templates */}
                       {/* الاسم */}
                       <FormField
@@ -4035,7 +4629,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -4053,7 +4647,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -4070,7 +4664,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -4078,7 +4672,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -4111,18 +4705,20 @@ export default function LandingPageView() {
                           {/* الألوان المتاحة */}
                           {productColors.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الألوان المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productColors.map((color: any) => (
                                   <button 
                                     key={color.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-red-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedColor?.id === color.id 
+                                      selectedColorIds.includes(color.id) 
                                         ? 'border-red-500 bg-red-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedColor(color)}
+                                    onClick={() => handleColorSelection(color.id)}
                                   >
                                     {color.colorImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -4155,18 +4751,20 @@ export default function LandingPageView() {
                           {/* الأشكال المتاحة */}
                           {productShapes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأشكال المتاحة</div>
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                              الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()})
+                            </div>
                               <div className="flex flex-wrap gap-2">
                                 {productShapes.map((shape: any) => (
                                   <button 
                                     key={shape.id} 
                                     type="button"
                                     className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-red-500 hover:shadow-sm transition-all cursor-pointer ${
-                                      selectedShape?.id === shape.id 
+                                      selectedShapeIds.includes(shape.id) 
                                         ? 'border-red-500 bg-red-50 shadow-sm' 
                                         : 'border-gray-300 bg-gray-50'
                                     }`}
-                                    onClick={() => setSelectedShape(shape)}
+                                    onClick={() => handleShapeSelection(shape.id)}
                                   >
                                     {shape.shapeImageUrl ? (
                                       <div className="flex items-center gap-2">
@@ -4193,8 +4791,8 @@ export default function LandingPageView() {
                           {productSizes.length > 0 && (
                             <div>
                               <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={setSelectedSize} value={selectedSize}>
-                                <SelectTrigger>
+                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <SelectValue placeholder="اختر الحجم" />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
@@ -4231,13 +4829,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -4263,7 +4861,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -4286,7 +4884,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -4306,7 +4904,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -4362,7 +4960,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-yellow-400 hover:bg-yellow-300 text-black py-3 text-base font-bold rounded-lg"
               >
@@ -4370,8 +4967,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -4413,8 +5022,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-purple-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-red-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -4450,7 +5060,7 @@ export default function LandingPageView() {
                   <p className="text-xs text-gray-500">تأثير إيجابي</p>
                 </div>
                 <div className="bg-white rounded-lg p-3 text-center shadow-sm border">
-                  <i className="fas fa-star text-yellow-600 text-lg mb-2"></i>
+                  <i className="fas fa-star text-yellow-400 text-lg mb-2"></i>
                   <p className="text-xs font-semibold text-gray-700">جودة عالية</p>
                   <p className="text-xs text-gray-500">أفضل المواد</p>
                 </div>
@@ -4459,10 +5069,15 @@ export default function LandingPageView() {
               {/* Order Form Section - Same unified form */}
               <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
                 <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3">إرسال طلب</h3>
+                  <div className="text-center mb-3">
+                    <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                      <i className="fas fa-pen text-xs"></i>
+                      املأ بياناتك للطلب
+                    </h3>
+                  </div>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* Standard form fields like other templates */}
                       <FormField
                         control={form.control}
@@ -4473,7 +5088,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -4490,7 +5105,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -4506,7 +5121,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -4514,7 +5129,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -4548,13 +5163,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -4579,7 +5194,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -4601,7 +5216,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -4621,7 +5236,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -4666,7 +5281,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 text-base font-bold rounded-lg"
               >
@@ -4674,8 +5288,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -4717,8 +5343,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-blue-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-blue-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -4765,7 +5392,7 @@ export default function LandingPageView() {
                   <h3 className="text-lg font-bold mb-3 text-blue-600">🏆 اختر الأفضل</h3>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* Standard unified form fields */}
                       <FormField
                         control={form.control}
@@ -4776,7 +5403,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -4793,7 +5420,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -4809,7 +5436,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -4817,7 +5444,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -4851,13 +5478,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -4882,7 +5509,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -4904,7 +5531,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -4924,7 +5551,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -4994,7 +5621,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-bold rounded-lg"
               >
@@ -5002,8 +5628,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -5045,8 +5683,9 @@ export default function LandingPageView() {
             <div className="px-3 py-4">
               <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">{productName}</h2>
-                  <div className="text-lg font-bold text-orange-600 mb-3">{formatCurrency(parseFloat(productPrice || '0'))}</div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
+                    {productName} <span className="text-base font-normal text-orange-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
+                  </h2>
                 </div>
                 
                 <div className="mb-4">
@@ -5105,7 +5744,7 @@ export default function LandingPageView() {
                   <h3 className="text-lg font-bold mb-3 text-orange-600">💎 استفد من المزايا</h3>
                   
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-2">
+                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
                       {/* Standard unified form fields */}
                       <FormField
                         control={form.control}
@@ -5116,7 +5755,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -5133,7 +5772,7 @@ export default function LandingPageView() {
                             <FormControl>
                               <div className="relative">
                                 <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 placeholder:text-gray-400" {...field} />
+                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -5149,7 +5788,7 @@ export default function LandingPageView() {
                             <FormLabel>العرض *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <Package className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر العرض" />
@@ -5157,7 +5796,7 @@ export default function LandingPageView() {
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
                                   {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer) => (
+                                    availableOffers.map((offer: any) => (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex justify-between items-start w-full gap-4">
                                           <div className="flex flex-col flex-1">
@@ -5191,13 +5830,13 @@ export default function LandingPageView() {
                             <FormLabel>المحافظة *</FormLabel>
                             <FormControl>
                               <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
+                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
                                   <div className="flex items-center">
                                     <MapPin className="ml-2 h-4 w-4 text-gray-400" />
                                     <SelectValue placeholder="اختر المحافظة" />
                                   </div>
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[200px] overflow-auto" position="popper" sideOffset={4}>
+                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
                                   {iraqGovernorates.map((gov) => (
                                     <SelectItem key={gov} value={gov}>
                                       {gov}
@@ -5222,7 +5861,7 @@ export default function LandingPageView() {
                                 <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                 />
@@ -5244,7 +5883,7 @@ export default function LandingPageView() {
                                 <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
                                 <Textarea 
                                   placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 placeholder:text-gray-400"
+                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
                                   rows={1}
                                   {...field}
                                   value={field.value || ""}
@@ -5264,7 +5903,7 @@ export default function LandingPageView() {
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -5332,7 +5971,6 @@ export default function LandingPageView() {
               <Button 
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
-                  orderForm?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 text-base font-bold rounded-lg"
               >
@@ -5340,8 +5978,20 @@ export default function LandingPageView() {
               </Button>
             </div>
 
-            {/* Add bottom padding to prevent content overlap */}
-            <div className="h-16 md:hidden"></div>
+            {/* Add bottom padding to prevent content overlap and privacy policy button */}
+            <div className="pb-20 md:pb-8">
+              {/* Privacy Policy Button */}
+              <div className="flex justify-center mt-8 mb-4">
+                <a 
+                  href="/privacy-policy" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
+                >
+                  سياسة الخصوصية
+                </a>
+              </div>
+            </div>
           </div>
         );
 
@@ -5761,7 +6411,10 @@ export default function LandingPageView() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className={getFormStyles()?.container || "bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"}>
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold">إرسال طلب</h3>
+              <h3 className="text-sm font-medium flex items-center justify-center gap-2">
+                <i className="fas fa-pen text-xs"></i>
+                املأ بياناتك للطلب
+              </h3>
               <Button 
                 variant="ghost" 
                 onClick={() => setShowOrderForm(false)}
@@ -5829,7 +6482,7 @@ export default function LandingPageView() {
                               {/* قائمة العروض - في اليسار */}
                               <div className="flex-1">
                                 {availableOffers.length > 0 ? (
-                                  availableOffers.map((offer, index) => {
+                                  availableOffers.map((offer: any, index: number) => {
                                     return (
                                       <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
                                         <div className="flex items-center justify-between w-full gap-3">
@@ -5860,7 +6513,7 @@ export default function LandingPageView() {
                               {/* قائمة الملصقات - في اليمين */}
                               <div className="flex flex-col bg-gray-50 border-r w-16 px-1 py-2 gap-2 mt-1">
                                 {availableOffers.length > 0 ? (
-                                  availableOffers.map((offer, index) => {
+                                  availableOffers.map((offer: any, index: number) => {
                                     const badgeText = index === 0 ? 'الأولى' : index === 1 ? 'المخفض' : 'أكثر طلباً';
                                     const badgeStyle = index === 0 
                                       ? 'bg-blue-100 text-blue-800 border-blue-200' 
@@ -5914,12 +6567,12 @@ export default function LandingPageView() {
                               key={color.id} 
                               type="button"
                               className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                selectedColor?.id === color.id 
+                                selectedColorIds.includes(color.id) 
                                   ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                   : 'border-gray-300 bg-white'
                               }`}
                               title={color.colorName}
-                              onClick={() => setSelectedColor(color)}
+                              onClick={() => handleColorSelection(color.id)}
                             >
                               {color.colorImageUrl ? (
                                 <div className="flex items-center gap-2">
@@ -5946,9 +6599,9 @@ export default function LandingPageView() {
                             </button>
                           ))}
                         </div>
-                        {selectedColor && (
+                        {selectedColorIds.length > 0 && (
                           <div className="mt-2 text-sm text-blue-600">
-                            ✓ تم اختيار اللون: {selectedColor.colorName}
+                            ✓ تم اختيار {selectedColorIds.length} لون
                           </div>
                         )}
                       </div>
@@ -5964,12 +6617,12 @@ export default function LandingPageView() {
                               key={shape.id} 
                               type="button"
                               className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                selectedShape?.id === shape.id 
+                                selectedShapeIds.includes(shape.id) 
                                   ? 'border-blue-500 bg-blue-50 shadow-sm' 
                                   : 'border-gray-300 bg-white'
                               }`}
                               title={shape.shapeName}
-                              onClick={() => setSelectedShape(shape)}
+                              onClick={() => handleShapeSelection(shape.id)}
                             >
                               {shape.shapeImageUrl ? (
                                 <div className="flex items-center gap-2">
@@ -5989,9 +6642,9 @@ export default function LandingPageView() {
                             </button>
                           ))}
                         </div>
-                        {selectedShape && (
+                        {selectedShapeIds.length > 0 && (
                           <div className="mt-2 text-sm text-blue-600">
-                            ✓ تم اختيار الشكل: {selectedShape.shapeName}
+                            ✓ تم اختيار {selectedShapeIds.length} شكل
                           </div>
                         )}
                       </div>
@@ -6000,30 +6653,55 @@ export default function LandingPageView() {
                     {/* الأحجام */}
                     {productSizes.length > 0 && (
                       <div className="mb-4">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">الأحجام المتاحة</label>
-                        <Select 
-                          onValueChange={(value) => {
-                            const size = productSizes.find((s: any) => s.id === value);
-                            setSelectedSize(size);
-                          }}
-                          value={(selectedSize as any)?.id || ""}
-                        >
-                          <SelectTrigger className={`${getFormStyles()?.field || "min-h-[38px] w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"}`}>
-                            <SelectValue placeholder="اختر الحجم" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[200px] overflow-auto z-50" position="popper" sideOffset={4}>
-                            {productSizes.map((size: any) => (
-                              <SelectItem key={size.id} value={size.id}>
-                                {size.sizeName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {selectedSize && (
-                          <div className="mt-2 text-sm text-blue-600">
-                            ✓ تم اختيار الحجم: {(selectedSize as any).sizeName}
-                          </div>
-                        )}
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()})
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {productSizes.map((size: any) => (
+                            <button 
+                              key={size.id} 
+                              type="button"
+                              className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer relative ${
+                                selectedSizeIds.includes(size.id) 
+                                  ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                                  : 'border-gray-300 bg-white'
+                              }`}
+                              title={size.sizeName}
+                              onClick={() => handleSizeSelection(size.id)}
+                            >
+                              {size.sizeImageUrl ? (
+                                <div className="flex items-center gap-2">
+                                  <img 
+                                    src={size.sizeImageUrl.startsWith('/objects/') ? 
+                                      size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
+                                      size.sizeImageUrl
+                                    }
+                                    alt={size.sizeName}
+                                    className="w-6 h-6 object-cover rounded border"
+                                  />
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
+                                    {size.sizeValue && (
+                                      <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
+                                  {size.sizeValue && (
+                                    <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                  )}
+                                </div>
+                              )}
+                              {selectedSizeIds.includes(size.id) && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                  <span className="text-xs text-white">✓</span>
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -6121,7 +6799,7 @@ export default function LandingPageView() {
                   >
                     {submitOrderMutation.isPending ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
                         جارٍ الإرسال...
                       </>
                     ) : (
@@ -6149,7 +6827,7 @@ export default function LandingPageView() {
             value: (() => {
               const availableOffers = getAvailableOffers(product);
               if (availableOffers.length > 0) {
-                const defaultOffer = availableOffers.find(offer => offer.isDefault) || availableOffers[0];
+                const defaultOffer = availableOffers.find((offer: any) => offer.isDefault) || availableOffers[0];
                 return defaultOffer.price.toString();
               }
               return product.price?.toString() || '0';

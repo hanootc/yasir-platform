@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ interface CompactOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: any;
+  onStatusChange?: (orderId: string, newStatus: string) => void;
+  isMobile?: boolean;
 }
 
 export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrderModalProps) {
@@ -66,36 +68,81 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
     customerGovernorate: "",
     status: "",
     notes: "",
-    quantity: 1,
+    selectedOffer: "",
     customPrice: 0,
     discountAmount: 0,
+    selectedColor: "",
+    selectedShape: "",
+    selectedSize: "",
   });
+
+  // جلب بيانات المنتج (الألوان، الأشكال، الأحجام)
+  const productId = order?.productId || order?.product_id;
+  
+  const { data: productColors } = useQuery({
+    queryKey: [`/api/products/${productId}/colors`],
+    queryFn: () => apiRequest(`/api/products/${productId}/colors`),
+    enabled: !!productId && isOpen,
+  });
+  
+  const { data: productShapes } = useQuery({
+    queryKey: [`/api/products/${productId}/shapes`],
+    queryFn: () => apiRequest(`/api/products/${productId}/shapes`),
+    enabled: !!productId && isOpen,
+  });
+  
+  const { data: productSizes } = useQuery({
+    queryKey: [`/api/products/${productId}/sizes`],
+    queryFn: () => apiRequest(`/api/products/${productId}/sizes`),
+    enabled: !!productId && isOpen,
+  });
+
+  // العروض المتاحة
+  const availableOffers = [
+    { id: "1", label: "قطعة واحدة", quantity: 1, price: 15000, savings: 0 },
+    { id: "2", label: "قطعتين", quantity: 2, price: 25000, savings: 5000 },
+    { id: "3", label: "3 قطع", quantity: 3, price: 30000, savings: 15000 },
+  ];
 
   useEffect(() => {
     if (order && isOpen) {
+      console.log('Order data in modal:', order);
       const currentQuantity = extractQuantity(order.offer || "");
-      const totalOfferPrice = extractPrice(order.offer || "");
+      const totalOfferPrice = extractPrice(order.offer || "") || Number(order.totalAmount || order.total_amount || 0);
       
-      // السعر يكون هو سعر العرض الكامل، وليس سعر القطعة الواحدة
-      // مثلاً: قطعتين - 25,000 د.ع = السعر 25,000 (وليس 12,500)
+      // تحديد العرض المحدد بناءً على الكمية
+      const currentOffer = availableOffers.find(offer => offer.quantity === currentQuantity);
       
       setFormData({
-        customerName: order.customerName || order.customer_name || "",
-        customerPhone: order.customerPhone || order.customer_phone || "",
-        customerAddress: order.customerAddress || order.customer_address || "",
-        customerGovernorate: order.customerGovernorate || order.customer_governorate || "",
+        customerName: order.customerName || order.customer_name || order.name || "",
+        customerPhone: order.customerPhone || order.customer_phone || order.phone || "",
+        customerAddress: order.customerAddress || order.customer_address || order.address || "",
+        customerGovernorate: order.customerGovernorate || order.customer_governorate || order.governorate || "",
         status: order.status || "",
-        notes: order.notes || "",
-        quantity: currentQuantity,
+        notes: order.notes || order.note || "",
+        selectedOffer: currentOffer?.id || "",
         customPrice: totalOfferPrice,
         discountAmount: Number(order.discountAmount || order.discount_amount || 0),
+        selectedColor: order.selectedColor || order.color || "",
+        selectedShape: order.selectedShape || order.shape || "",
+        selectedSize: order.selectedSize || order.size || "",
       });
     }
   }, [order, isOpen]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest(`/api/orders/${order.id}`, 'PATCH', data);
+      console.log('Updating order with data:', data);
+      const orderId = order.id || order._id;
+      const platformId = order.platformId || order.platform_id;
+      
+      if (platformId) {
+        // إذا كان الطلب من منصة، استخدم endpoint المنصة
+        return apiRequest(`/api/platforms/${platformId}/orders/${orderId}`, 'PATCH', data);
+      } else {
+        // إذا كان طلب عادي
+        return apiRequest(`/api/orders/${orderId}`, 'PATCH', data);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -103,23 +150,63 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
       if (platformId) {
         queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/orders`] });
       }
+      // إجبار تحديث فوري للبيانات
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: [`/api/platforms/${platformId}/orders`] });
+      }, 100);
       toast({ title: "تم التحديث", description: "تم حفظ التغييرات بنجاح" });
       onClose();
+    },
+    onError: (error: any) => {
+      console.error('Error updating order:', error);
+      toast({ 
+        title: "خطأ في التحديث", 
+        description: error.message || "حدث خطأ أثناء حفظ التغييرات",
+        variant: "destructive"
+      });
     },
   });
 
   const handleSave = () => {
+    const selectedOfferData = availableOffers.find(offer => offer.id === formData.selectedOffer);
+    const quantity = selectedOfferData?.quantity || 1;
+    const offerLabel = selectedOfferData?.label || 'قطعة واحدة';
+    
     // إنشاء نص العرض الجديد
-    const newOffer = `${formData.quantity === 1 ? 'قطعة واحدة' : `${formData.quantity} قطع`} - ${formData.customPrice.toLocaleString()} د.ع`;
-    // السعر هو بالفعل المجموع الكامل للعرض، لا نحتاج لضرب في الكمية
+    const newOffer = `${offerLabel} - ${formData.customPrice.toLocaleString()} د.ع`;
     const finalTotal = formData.customPrice - formData.discountAmount;
+    
+    // العثور على IDs المتغيرات المحددة
+    const selectedColorId = productColors?.find((c: any) => (c.colorName || c.name) === formData.selectedColor)?.id;
+    const selectedShapeId = productShapes?.find((s: any) => (s.shapeName || s.name) === formData.selectedShape)?.id;
+    const selectedSizeId = productSizes?.find((s: any) => (s.sizeName || s.name) === formData.selectedSize)?.id;
     
     const updateData = {
       ...formData,
       offer: newOffer,
+      quantity: quantity,
       totalAmount: finalTotal,
+      // حفظ IDs المتغيرات للعرض الصحيح في الجدول
+      selectedColorId: selectedColorId,
+      selectedShapeId: selectedShapeId,
+      selectedSizeId: selectedSizeId,
+      // إضافة خصائص المنتج بأسماء مختلفة للتوافق
+      color: formData.selectedColor,
+      shape: formData.selectedShape,
+      size: formData.selectedSize,
+      selectedColor: formData.selectedColor,
+      selectedShape: formData.selectedShape,
+      selectedSize: formData.selectedSize,
     };
     
+    console.log('Product Colors:', productColors);
+    console.log('Product Shapes:', productShapes);
+    console.log('Product Sizes:', productSizes);
+    console.log('Form Data:', formData);
+    console.log('Selected Color ID:', selectedColorId);
+    console.log('Selected Shape ID:', selectedShapeId);
+    console.log('Selected Size ID:', selectedSizeId);
+    console.log('Saving order with variants:', updateData);
     updateMutation.mutate(updateData);
   };
 
@@ -146,27 +233,105 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
           <div className="bg-theme-primary-lighter dark:bg-gray-700 p-3 rounded text-sm border border-theme-primary dark:border-gray-600">
             <div className="font-medium text-theme-primary dark:text-white">{productName}</div>
             <div className="text-theme-primary dark:text-gray-300 mt-1">{offer}</div>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <div className="text-center">
-                <label className="text-xs text-gray-600 dark:text-gray-400">الكمية</label>
-                <Input
-                  type="number"
-                  value={formData.quantity}
-                  onChange={(e) => {
-                    const newQuantity = parseInt(e.target.value) || 1;
-                    const newPrice = calculatePriceForQuantity(newQuantity);
+            
+            {/* خصائص المنتج (اللون، الشكل، الحجم) */}
+            {(productColors?.length > 0 || productShapes?.length > 0 || productSizes?.length > 0) && (
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {productColors?.length > 0 && (
+                  <div className="text-center">
+                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">اللون</label>
+                    <Select value={formData.selectedColor} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedColor: value }))}>
+                      <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
+                        <SelectValue placeholder="اختر اللون" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600">
+                        {productColors.map((color: any) => (
+                          <SelectItem key={color.id} value={color.colorName || color.name}>
+                            {color.colorName || color.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {productShapes?.length > 0 && (
+                  <div className="text-center">
+                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">الشكل</label>
+                    <Select value={formData.selectedShape} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedShape: value }))}>
+                      <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
+                        <SelectValue placeholder="اختر الشكل" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600">
+                        {productShapes.map((shape: any) => (
+                          <SelectItem key={shape.id} value={shape.shapeName || shape.name}>
+                            {shape.shapeName || shape.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {productSizes?.length > 0 && (
+                  <div className="text-center">
+                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">الحجم</label>
+                    <Select value={formData.selectedSize} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedSize: value }))}>
+                      <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
+                        <SelectValue placeholder="اختر الحجم" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600">
+                        {productSizes.map((size: any) => (
+                          <SelectItem key={size.id} value={size.sizeName || size.name}>
+                            {size.sizeName || size.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* العروض المتاحة */}
+            <div className="mt-3">
+              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-2">العرض المحدد:</label>
+              <Select 
+                value={formData.selectedOffer} 
+                onValueChange={(value) => {
+                  const selectedOffer = availableOffers.find(offer => offer.id === value);
+                  if (selectedOffer) {
                     setFormData(prev => ({ 
                       ...prev, 
-                      quantity: newQuantity,
-                      customPrice: newPrice
+                      selectedOffer: value,
+                      customPrice: selectedOffer.price
                     }));
-                  }}
-                  className="text-center h-7 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500"
-                  min="1"
-                />
-              </div>
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
+                  <SelectValue placeholder="اختر العرض" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600">
+                  {availableOffers.map((offer) => (
+                    <SelectItem key={offer.id} value={offer.id}>
+                      <div className="flex justify-between items-center w-full">
+                        <span>{offer.label}</span>
+                        <div className="text-left">
+                          <span className="font-bold">{offer.price.toLocaleString()} د.ع</span>
+                          {offer.savings > 0 && (
+                            <div className="text-xs text-green-600">وفر {offer.savings.toLocaleString()} د.ع</div>
+                          )}
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* تعديل السعر والخصم */}
+            <div className="grid grid-cols-2 gap-2 mt-3">
               <div className="text-center">
-                <label className="text-xs text-gray-600 dark:text-gray-400">سعر العرض</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400">سعر مخصص</label>
                 <Input
                   type="number"
                   value={formData.customPrice}
@@ -184,6 +349,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
                 />
               </div>
             </div>
+            
             <div className="text-center mt-2 text-sm font-medium text-theme-primary dark:text-white bg-theme-primary-light dark:bg-gray-600 py-2 rounded">
               المجموع النهائي: {(formData.customPrice - formData.discountAmount).toLocaleString()} د.ع
             </div>

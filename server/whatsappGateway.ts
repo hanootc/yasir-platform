@@ -1,11 +1,12 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
+type WhatsAppClient = InstanceType<typeof Client>;
 import qr from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 
 // Map لحفظ جلسات WhatsApp لكل منصة
-const whatsappClients = new Map<string, Client>();
+const whatsappClients = new Map<string, WhatsAppClient>();
 const sessionStates = new Map<string, {
   platformId: string;
   phoneNumber: string;
@@ -23,7 +24,7 @@ const SESSION_FILE = path.join(process.cwd(), 'whatsapp_sessions.json');
 function saveSessions() {
   try {
     const sessions: any = {};
-    for (const [platformId, state] of sessionStates) {
+    for (const [platformId, state] of sessionStates.entries()) {
       sessions[platformId] = {
         phoneNumber: state.phoneNumber,
         businessName: state.businessName,
@@ -43,7 +44,14 @@ function loadSessions() {
   try {
     if (fs.existsSync(SESSION_FILE)) {
       const sessions = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
-      for (const [platformId, state] of Object.entries(sessions as any)) {
+      for (const [platformId, stateData] of Object.entries(sessions as any)) {
+        const state = stateData as {
+          phoneNumber: string;
+          businessName: string;
+          status: 'disconnected' | 'connecting' | 'connected';
+          isReady?: boolean;
+          isConnected?: boolean;
+        };
         sessionStates.set(platformId, {
           platformId,
           phoneNumber: state.phoneNumber,
@@ -72,7 +80,7 @@ export class WhatsAppGateway {
   async restoreActiveSessions() {
     console.log(`🔄 Starting session restoration process...`);
     
-    for (const [platformId, state] of sessionStates) {
+    for (const [platformId, state] of sessionStates.entries()) {
       // تأخير بسيط لتجنب محاولات الاستعادة المتزامنة
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -105,7 +113,9 @@ export class WhatsAppGateway {
             } else {
               console.log(`⚠️ Could not restore session for ${platformId}, will need re-authentication`);
               sessionStates.set(platformId, {
-                ...currentState,
+                platformId: currentState?.platformId || platformId,
+                phoneNumber: currentState?.phoneNumber || '',
+                businessName: currentState?.businessName || '',
                 status: 'disconnected',
                 isReady: false,
                 isConnected: false
@@ -117,7 +127,9 @@ export class WhatsAppGateway {
             const currentState = sessionStates.get(platformId);
             if (currentState) {
               sessionStates.set(platformId, {
-                ...currentState,
+                platformId: currentState.platformId,
+                phoneNumber: currentState.phoneNumber,
+                businessName: currentState.businessName,
                 status: 'disconnected',
                 isReady: false,
                 isConnected: false
@@ -165,7 +177,7 @@ export class WhatsAppGateway {
       try {
         await existingClient.destroy();
       } catch (error) {
-        console.log('Error destroying existing client during reconnect:', error.message);
+        console.log('Error destroying existing client during reconnect:', (error as Error).message);
       }
       whatsappClients.delete(platformId);
     }
@@ -180,7 +192,7 @@ export class WhatsAppGateway {
         return false;
       }
     } catch (error) {
-      console.log(`❌ Cannot read session directory for platform ${platformId}:`, error.message);
+      console.log(`❌ Cannot read session directory for platform ${platformId}:`, (error as Error).message);
       return false;
     }
 
@@ -191,7 +203,7 @@ export class WhatsAppGateway {
       }),
       puppeteer: {
         headless: true,
-        executablePath: '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium',
+        executablePath: '/usr/bin/google-chrome',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -202,8 +214,15 @@ export class WhatsAppGateway {
           '--disable-gpu',
           '--disable-background-timer-throttling',
           '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding'
-        ]
+          '--disable-renderer-backgrounding',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-images',
+          '--disable-web-security',
+          '--memory-pressure-off'
+        ],
+        timeout: 60000
       }
     });
 
@@ -350,7 +369,7 @@ export class WhatsAppGateway {
       }),
       puppeteer: {
         headless: true,
-        executablePath: '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium',
+        executablePath: '/usr/bin/google-chrome',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -358,11 +377,15 @@ export class WhatsAppGateway {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--single-process',
           '--disable-gpu',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-images',
           '--disable-web-security',
-          '--disable-features=VizDisplayCompositor'
-        ]
+          '--memory-pressure-off'
+        ],
+        timeout: 60000
       }
     });
 
@@ -456,6 +479,7 @@ export class WhatsAppGateway {
             }
           } catch (error) {
             console.error(`Error confirming WhatsApp connection for platform ${platformId}:`, error);
+            console.log(`Error message: ${(error as Error).message || 'Unknown error'}`);
           }
         }, 1000);
         
@@ -611,42 +635,52 @@ export class WhatsAppGateway {
     const client = whatsappClients.get(platformId);
     const state = sessionStates.get(platformId);
     
+    console.log(`📤 Attempting to send message to chat ${chatId} for platform ${platformId}`);
+    console.log(`📤 Client exists: ${!!client}, State ready: ${state?.isReady}, State: ${state?.status}`);
+    
     if (!client || !state?.isReady) {
+      console.error(`❌ WhatsApp client not ready - Client: ${!!client}, State ready: ${state?.isReady}`);
       throw new Error('WhatsApp client not ready');
     }
 
     try {
-      await client.sendMessage(chatId, message);
-      console.log(`Message sent to chat ${chatId}: ${message}`);
+      console.log(`📤 Sending message: "${message}" to chat: ${chatId}`);
+      const result = await client.sendMessage(chatId, message);
+      console.log(`✅ Message sent successfully to chat ${chatId}:`, result);
       return true;
     } catch (error) {
-      console.error('Error sending message to chat:', error);
+      console.error(`❌ Error sending message to chat ${chatId}:`, error);
       return false;
     }
   }
 
-  // إنهاء الجلسة
+  // إنهاء جلسة WhatsApp
   async destroySession(platformId: string): Promise<void> {
     const client = whatsappClients.get(platformId);
-    
     if (client) {
       try {
-        await client.destroy();
+        // التحقق من وجود pupPage قبل الإغلاق
+        if (client.pupPage && !client.pupPage.isClosed()) {
+          await client.destroy();
+        }
       } catch (error) {
-        console.error('Error destroying client:', error);
+        console.log('Error destroying client:', error);
       }
       whatsappClients.delete(platformId);
     }
     
+    // حذف حالة الجلسة
     sessionStates.delete(platformId);
-    
-    // حفظ التغييرات
     saveSessions();
     
     // حذف ملفات الجلسة
     const sessionPath = path.join(process.cwd(), '.wwebjs_auth', `session_${platformId}`);
     if (fs.existsSync(sessionPath)) {
-      fs.rmSync(sessionPath, { recursive: true, force: true });
+      try {
+        fs.rmSync(sessionPath, { recursive: true, force: true });
+      } catch (error) {
+        console.log('Error removing session files:', error);
+      }
     }
   }
 
@@ -669,7 +703,7 @@ export class WhatsAppGateway {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // التحقق من حالة العميل مرة أخرى
-      if (!client || client.pupPage.isClosed()) {
+      if (!client || client.pupPage?.isClosed()) {
         console.log('❌ Client connection lost during chat fetch');
         return [];
       }
@@ -700,11 +734,11 @@ export class WhatsAppGateway {
           
           if (contact) {
             // استخدام اسم جهة الاتصال إذا كان متوفراً
-            displayName = contact.name || contact.pushname || contact.number || displayName;
+            displayName = (contact as any).name || (contact as any).pushname || (contact as any).number || displayName;
             
             // محاولة جلب صورة البروفايل مع timeout مقلل
             try {
-              const picPromise = contact.getProfilePicUrl();
+              const picPromise = (contact as any).getProfilePicUrl();
               const picTimeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Profile pic timeout')), 1500)
               );
@@ -718,8 +752,8 @@ export class WhatsAppGateway {
           }
         } catch (contactError) {
           // فقط للأخطاء الحقيقية، ليس timeout
-          if (!contactError.message.includes('timeout')) {
-            console.log(`⚠️ Error fetching contact info for ${chat.id._serialized}:`, contactError.message);
+          if (!(contactError as Error).message.includes('timeout')) {
+            console.log(`⚠️ Error fetching contact info for ${chat.id._serialized}:`, (contactError as Error).message);
           }
         }
 
@@ -912,17 +946,33 @@ export class WhatsAppGateway {
   private async getActualPlatformId(whatsappPlatformId: string): Promise<string | null> {
     try {
       const { storage } = await import('./storage.js');
-      // البحث عن المنصة باستخدام رقم WhatsApp أو أي مطابقة أخرى
+      
+      // البحث عن المنصة باستخدام whatsappPlatformId مباشرة
+      const platform = await storage.getPlatformById(whatsappPlatformId);
+      
+      if (platform) {
+        console.log(`✅ العثور على المنصة: ${platform.id} - ${platform.platformName}`);
+        return platform.id;
+      }
+      
+      // إذا لم نجد المنصة، نبحث في جميع المنصات
       const platforms = await storage.getAllPlatforms();
       
       for (const platform of platforms) {
-        // يمكن أن نربط المنصة برقم WhatsApp أو بطريقة أخرى
-        console.log(`🔍 فحص المنصة: ${platform.id} - ${platform.name || platform.platformName}`);
+        // البحث عن المنصة التي لها نفس رقم WhatsApp
+        if (platform.whatsappNumber) {
+          const sessionState = sessionStates.get(whatsappPlatformId);
+          if (sessionState && sessionState.phoneNumber && 
+              platform.whatsappNumber.includes(sessionState.phoneNumber.replace('+', ''))) {
+            console.log(`✅ العثور على المنصة بالرقم: ${platform.id} - ${platform.platformName}`);
+            return platform.id;
+          }
+        }
       }
       
-      // في الوقت الحالي، سنعيد أول منصة متاحة كحل مؤقت
+      // كحل أخير، نعيد أول منصة متاحة
       if (platforms.length > 0) {
-        console.log(`✅ العثور على المنصة: ${platforms[0].id}`);
+        console.log(`⚠️ استخدام أول منصة متاحة: ${platforms[0].id}`);
         return platforms[0].id;
       }
       

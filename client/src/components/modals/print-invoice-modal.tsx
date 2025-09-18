@@ -266,7 +266,63 @@ export default function PrintInvoiceModal({ isOpen, onClose, order }: PrintInvoi
             <tbody>
               {orderDetails?.orderItems?.map((item: any, index: number) => (
                 <tr key={index}>
-                  <td>{item.product?.name || 'منتج غير معروف'}</td>
+                  <td>
+                    <div>
+                      <div className="font-medium">{item.product?.name || 'منتج غير معروف'}</div>
+                      {item.offer && <div className="text-sm text-gray-600">العرض: {item.offer}</div>}
+                      
+                      {/* عرض الألوان المختارة */}
+                      {item.selectedColorIds && item.selectedColorIds.length > 0 && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          الألوان: {item.selectedColorIds.map((colorId: string) => {
+                            const color = item.colors?.find((c: any) => c.id === colorId);
+                            return color?.colorName || colorId;
+                          }).join(', ')}
+                        </div>
+                      )}
+                      
+                      {/* عرض الأشكال المختارة */}
+                      {item.selectedShapeIds && item.selectedShapeIds.length > 0 && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          الأشكال: {item.selectedShapeIds.map((shapeId: string) => {
+                            const shape = item.shapes?.find((s: any) => s.id === shapeId);
+                            return shape?.shapeName || shapeId;
+                          }).join(', ')}
+                        </div>
+                      )}
+                      
+                      {/* عرض الأحجام المختارة */}
+                      {item.selectedSizeIds && item.selectedSizeIds.length > 0 && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          الأحجام: {item.selectedSizeIds.map((sizeId: string) => {
+                            const size = item.sizes?.find((s: any) => s.id === sizeId);
+                            return size?.sizeName || sizeId;
+                          }).join(', ')}
+                        </div>
+                      )}
+                      
+                      {/* عرض الألوان الفردية (للتوافق مع النظام القديم) */}
+                      {item.selectedColorId && !item.selectedColorIds?.length && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          اللون: {item.colorName || item.selectedColorId}
+                        </div>
+                      )}
+                      
+                      {/* عرض الأشكال الفردية */}
+                      {item.selectedShapeId && !item.selectedShapeIds?.length && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          الشكل: {item.shapeName || item.selectedShapeId}
+                        </div>
+                      )}
+                      
+                      {/* عرض الأحجام الفردية */}
+                      {item.selectedSizeId && !item.selectedSizeIds?.length && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          الحجم: {item.sizeName || item.selectedSizeId}
+                        </div>
+                      )}
+                    </div>
+                  </td>
                   <td>{formatCurrency(item.price)}</td>
                   <td>{item.quantity}</td>
                   <td>{formatCurrency(item.total)}</td>

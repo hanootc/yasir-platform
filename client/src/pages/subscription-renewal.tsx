@@ -15,7 +15,7 @@ const SubscriptionRenewal = () => {
     {
       id: 'basic',
       name: 'البداية',
-      price: '49,000',
+      price: '1,000',
       currency: 'IQD',
       duration: 'دينار/شهر',
       icon: Shield,

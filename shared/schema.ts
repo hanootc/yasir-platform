@@ -109,6 +109,8 @@ export const platforms = pgTable("platforms", {
   totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0"),
   // Store template setting
   storeTemplate: varchar("store_template").default("grid"), // grid, list, catalog
+  // Store banner image
+  storeBannerUrl: varchar("store_banner_url"),
   // إعدادات TikTok Ads
   tiktokAccessToken: varchar("tiktok_access_token"),
   tiktokAdvertiserId: varchar("tiktok_advertiser_id"),
@@ -156,7 +158,7 @@ export const subscriptionFeatures = pgTable("subscription_features", {
 // Admin actions log
 export const adminActionsLog = pgTable("admin_actions_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  adminId: varchar("admin_id").notNull().references(() => users.id),
+  adminId: varchar("admin_id").notNull().references(() => adminUsers.id),
   action: varchar("action").notNull(), // extend_subscription, suspend_platform, etc
   targetType: varchar("target_type").notNull(), // platform, user, subscription
   targetId: varchar("target_id").notNull(),
@@ -189,6 +191,10 @@ export const adminUsers = pgTable("admin_users", {
   lastName: varchar("last_name").notNull(),
   role: userRoleEnum("role").default("super_admin"),
   isActive: boolean("is_active").default(true),
+  phone: varchar("phone"),
+  address: text("address"),
+  bio: text("bio"),
+  avatarUrl: varchar("avatar_url"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -274,6 +280,8 @@ export const products = pgTable("products", {
   stock: integer("stock").default(0),
   lowStockThreshold: integer("low_stock_threshold").default(5),
   sku: varchar("sku").unique(),
+  slug: varchar("slug").unique(),
+  defaultTheme: varchar("default_theme").default("light"),
   categoryId: varchar("category_id").references(() => categories.id),
   platformId: varchar("platform_id").references(() => platforms.id).notNull(),
   imageUrls: text("image_urls").array(),
@@ -302,6 +310,7 @@ export const landingPages = pgTable("landing_pages", {
   content: text("content"),
   customUrl: varchar("custom_url").unique(),
   template: landingPageTemplateEnum("template").default("modern_minimal"),
+  defaultTheme: varchar("default_theme").default("light"),
   isActive: boolean("is_active").default(true),
   views: integer("views").default(0),
   conversions: integer("conversions").default(0),
@@ -376,6 +385,9 @@ export const orderItems = pgTable("order_items", {
   selectedColorId: varchar("selected_color_id").references(() => productColors.id),
   selectedShapeId: varchar("selected_shape_id").references(() => productShapes.id),
   selectedSizeId: varchar("selected_size_id").references(() => productSizes.id),
+  selectedColorIds: jsonb("selected_color_ids"),
+  selectedShapeIds: jsonb("selected_shape_ids"),
+  selectedSizeIds: jsonb("selected_size_ids"),
 });
 
 // System activities log
@@ -659,10 +671,10 @@ export const landingPageOrders = pgTable("landing_page_orders", {
   quantity: integer("quantity").notNull().default(1), // الكمية المطلوبة
   notes: text("notes"),
   
-  // خيارات المنتج المحددة
-  selectedColorId: varchar("selected_color_id").references(() => productColors.id),
-  selectedShapeId: varchar("selected_shape_id").references(() => productShapes.id),
-  selectedSizeId: varchar("selected_size_id").references(() => productSizes.id),
+  // خيارات المنتج المحددة (متعددة)
+  selectedColorIds: jsonb("selected_color_ids").default([]),
+  selectedShapeIds: jsonb("selected_shape_ids").default([]),
+  selectedSizeIds: jsonb("selected_size_ids").default([]),
   
   // معلومات الطلب
   status: varchar("status").default("pending"), // pending, confirmed, shipped, delivered, cancelled
@@ -703,18 +715,7 @@ export const landingPageOrdersRelations = relations(landingPageOrders, ({ one })
     fields: [landingPageOrders.productId],
     references: [products.id],
   }),
-  selectedColor: one(productColors, {
-    fields: [landingPageOrders.selectedColorId],
-    references: [productColors.id],
-  }),
-  selectedShape: one(productShapes, {
-    fields: [landingPageOrders.selectedShapeId],
-    references: [productShapes.id],
-  }),
-  selectedSize: one(productSizes, {
-    fields: [landingPageOrders.selectedSizeId],
-    references: [productSizes.id],
-  }),
+  // Relations removed for JSONB arrays - variants will be resolved separately
 }));
 
 // إعدادات النظام الرئيسي

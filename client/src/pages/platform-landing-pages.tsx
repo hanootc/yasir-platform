@@ -51,7 +51,7 @@ export default function PlatformLandingPages() {
   const queryClient = useQueryClient();
 
   // Get platform session data
-  const { data: platformSession } = useQuery({
+  const { data: platformSession } = useQuery<PlatformSession>({
     queryKey: ["/api/platform-session"],
     retry: false,
     enabled: !isEmployee, // Only fetch if not employee
@@ -60,16 +60,16 @@ export default function PlatformLandingPages() {
   // Extract platform ID from current session
   const platformId = isEmployee && employeeSession?.success
     ? employeeSession.employee.platformId 
-    : platformSession?.platformId;
+    : (platformSession as PlatformSession)?.platformId;
 
   // Fetch landing pages for this platform
-  const { data: landingPages = [], isLoading: landingPagesLoading, error: landingPagesError } = useQuery({
+  const { data: landingPages = [], isLoading: landingPagesLoading, error: landingPagesError } = useQuery<any[]>({
     queryKey: [`/api/platforms/${platformId}/landing-pages`],
     enabled: !!platformId,
   });
 
   // Fetch products for this platform for filtering  
-  const { data: products = [] } = useQuery({
+  const { data: products = [] } = useQuery<any[]>({
     queryKey: ["/api/platform-products"],
     enabled: !!platformId,
   });
@@ -101,7 +101,7 @@ export default function PlatformLandingPages() {
     // Build the correct URL for the landing page
     const subdomain = isEmployee && employeeSession?.success
       ? 'souqnaiq' // Default subdomain for employee access
-      : platformSession?.subdomain;
+      : (platformSession as PlatformSession)?.subdomain;
     const landingUrl = `/${subdomain}/${page.customUrl}`;
     window.open(landingUrl, '_blank');
   };
@@ -124,7 +124,7 @@ export default function PlatformLandingPages() {
       console.error('Delete error:', error);
       toast({
         title: "خطأ في الحذف",
-        description: "فشل في حذف صفحة الهبوط",
+        description: `فشل في حذف صفحة الهبوط: ${error}`,
         variant: "destructive",
       });
     }
@@ -142,7 +142,7 @@ export default function PlatformLandingPages() {
   };
 
   // Create unified session object for sidebar
-  const sessionForSidebar = isEmployee && employeeSession?.success 
+  const sessionForSidebar: PlatformSession = isEmployee && employeeSession?.success 
     ? {
         type: 'employee' as const,
         employee: employeeSession.employee,
@@ -150,8 +150,8 @@ export default function PlatformLandingPages() {
         platformName: 'سوكنا',
         subdomain: 'souqnaiq',
         userType: 'employee'
-      }
-    : platformSession;
+      } as PlatformSession
+    : (platformSession as PlatformSession) || {} as PlatformSession;
 
   if (sessionLoading || (!isEmployee && !platformSession) || (isEmployee && !employeeSession?.success)) {
     return <div className="flex items-center justify-center min-h-screen">
@@ -207,7 +207,7 @@ export default function PlatformLandingPages() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-theme-primary">
-                  {landingPages?.length || 0}
+                  {(landingPages as any[])?.length || 0}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">جميع صفحات الهبوط</p>
               </CardContent>
@@ -233,7 +233,7 @@ export default function PlatformLandingPages() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-theme-primary">
-                  {new Set(landingPages?.map((p: any) => p.template) || []).size}
+                  {new Set((landingPages as any[])?.map((p: any) => p.template) || []).size}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">أنواع القوالب</p>
               </CardContent>
@@ -282,9 +282,9 @@ export default function PlatformLandingPages() {
                       <SelectValue placeholder="اختر المنتج - سيملأ العنوان تلقائياً" />
                     </SelectTrigger>
                     <SelectContent className="mt-2 theme-dropdown-content">
-                      <SelectItem value="all">جميع المنتجات ({landingPages.length})</SelectItem>
+                      <SelectItem value="all">جميع المنتجات ({(landingPages as any[]).length})</SelectItem>
                       {products && Array.isArray(products) && products.map((product: any) => {
-                        const productPagesCount = landingPages.filter((page: any) => 
+                        const productPagesCount = (landingPages as any[]).filter((page: any) => 
                           page.productId === product.id || page.product_id === product.id
                         ).length;
                         return (
@@ -396,7 +396,7 @@ export default function PlatformLandingPages() {
                               <h3 className="text-lg font-bold text-theme-primary truncate mb-2">{page.title}</h3>
                               <div className="flex items-center gap-2 text-xs text-gray-500">
                                 <a
-                                  href={`/${isEmployee && employeeSession?.success ? 'souqnaiq' : platformSession?.subdomain}/${page.customUrl}`}
+                                  href={`/${isEmployee && employeeSession?.success ? 'souqnaiq' : (platformSession as PlatformSession)?.subdomain}/${page.customUrl}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="landing-page-link hover:underline transition-all duration-300"

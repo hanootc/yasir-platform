@@ -99,15 +99,20 @@ function ProductImageSlider({ images, productName }: { images: string[], product
 }
 
 export default function PublicProductView() {
-  const [match, params] = useRoute("/public-product/:id");
-  const productId = params?.id;
+  const [match, params] = useRoute("/:subdomain/:slug");
+  const { subdomain, slug } = params || {};
 
   const { data: product, isLoading, error } = useQuery<Product>({
-    queryKey: ["/api/public/products", productId],
-    enabled: !!productId,
+    queryKey: ["/api/public/products/by-slug", subdomain, slug],
+    queryFn: async () => {
+      const response = await fetch(`/api/public/platform/${subdomain}/products/by-slug/${slug}`);
+      if (!response.ok) throw new Error('Product not found');
+      return response.json();
+    },
+    enabled: !!subdomain && !!slug,
   });
 
-  if (!match || !productId) {
+  if (!match || !subdomain || !slug) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" dir="rtl">
         <div className="text-center p-8">

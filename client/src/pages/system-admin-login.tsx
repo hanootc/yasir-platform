@@ -44,12 +44,12 @@ export default function SystemAdminLogin() {
         const responseData = await response.json();
         // Save admin session to localStorage with activity tracking
         localStorage.setItem('sanadi-admin-session', JSON.stringify({
-          adminId: responseData.admin.id,
-          email: responseData.admin.email,
+          adminId: responseData.user.id,
+          email: responseData.user.email,
           loginTime: Date.now(),
           lastActivity: Date.now()
         }));
-        window.location.href = '/admin-dashboard';
+        window.location.href = '/dashboard';
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'فشل في تسجيل الدخول');
@@ -62,7 +62,7 @@ export default function SystemAdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
@@ -76,13 +76,13 @@ export default function SystemAdminLogin() {
           </p>
         </div>
 
-        <Card className="w-full shadow-lg">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-xl text-center flex items-center justify-center gap-2">
-              <Lock className="w-5 h-5" />
+        <Card className="w-full shadow-xl border-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm">
+          <CardHeader className="space-y-1 pb-6">
+            <CardTitle className="text-xl text-center flex items-center justify-center gap-2 text-gray-800 dark:text-gray-100">
+              <Lock className="w-5 h-5 text-blue-600" />
               تسجيل الدخول
             </CardTitle>
-            <CardDescription className="text-center">
+            <CardDescription className="text-center text-gray-600 dark:text-gray-300">
               أدخل بيانات الدخول للوصول إلى لوحة التحكم
             </CardDescription>
           </CardHeader>
@@ -97,13 +97,13 @@ export default function SystemAdminLogin() {
 
             <form onSubmit={handleFormSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">البريد الإلكتروني</Label>
+                <Label htmlFor="email" className="text-gray-700 dark:text-gray-200 font-medium">البريد الإلكتروني</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="admin@sanadi.pro"
                   {...register("email")}
-                  className={errors.email ? "border-red-500" : ""}
+                  className={`border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${errors.email ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                   data-testid="input-email"
                 />
                 {errors.email && (
@@ -112,19 +112,19 @@ export default function SystemAdminLogin() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">كلمة المرور</Label>
+                <Label htmlFor="password" className="text-gray-700 dark:text-gray-200 font-medium">كلمة المرور</Label>
                 <div className="relative">
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="كلمة المرور"
                     {...register("password")}
-                    className={errors.password ? "border-red-500 pr-10" : "pr-10"}
+                    className={`border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10 ${errors.password ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                     data-testid="input-password"
                   />
                   <button
                     type="button"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
                     onClick={() => setShowPassword(!showPassword)}
                     data-testid="button-toggle-password"
                   >
@@ -142,7 +142,7 @@ export default function SystemAdminLogin() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md transition-colors duration-200 shadow-lg hover:shadow-xl"
                 disabled={isLoading}
                 data-testid="button-login"
               >

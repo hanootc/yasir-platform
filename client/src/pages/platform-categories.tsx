@@ -259,11 +259,14 @@ export default function PlatformCategories() {
                 </Button>
               </DialogTrigger>
               
-              <DialogContent className="sm:max-w-md bg-white dark:bg-gray-800" dir="rtl">
+              <DialogContent className="sm:max-w-md bg-white dark:bg-gray-800" dir="rtl" aria-describedby="category-dialog-description">
                 <DialogHeader>
                   <DialogTitle className="text-right">
                     {editingCategory ? "تعديل التصنيف" : "إضافة تصنيف جديد"}
                   </DialogTitle>
+                  <div id="category-dialog-description" className="sr-only">
+                    نافذة لإضافة أو تعديل تصنيف المنتجات
+                  </div>
                 </DialogHeader>
                 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -408,10 +411,10 @@ export default function PlatformCategories() {
                             حذف
                           </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent>
+                        <AlertDialogContent aria-describedby="delete-category-description">
                           <AlertDialogHeader>
                             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                            <AlertDialogDescription>
+                            <AlertDialogDescription id="delete-category-description">
                               هل أنت متأكد من حذف التصنيف "{category.name}"؟ هذا الإجراء لا يمكن التراجع عنه.
                             </AlertDialogDescription>
                           </AlertDialogHeader>

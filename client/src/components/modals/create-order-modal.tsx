@@ -3,29 +3,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 const createOrderSchema = z.object({
   customerName: z.string().min(1, "اسم العميل مطلوب"),
@@ -45,16 +33,31 @@ interface CreateOrderModalProps {
 }
 
 export default function CreateOrderModal({ isOpen, onClose, platformId }: CreateOrderModalProps) {
-  const [orderItems, setOrderItems] = useState<Array<{ productId: string; quantity: number; offer?: string }>>([
-    { productId: "", quantity: 1, offer: "" }
+  const [orderItems, setOrderItems] = useState<Array<{ productId: string; quantity: number; offer?: string; selectedColorIds?: string[]; selectedShapeIds?: string[]; selectedSizeIds?: string[]; selectedColorId?: string; selectedShapeId?: string; selectedSizeId?: string }>>([
+    { productId: "", quantity: 1, offer: "", selectedColorIds: [], selectedShapeIds: [], selectedSizeIds: [], selectedColorId: "", selectedShapeId: "", selectedSizeId: "" }
   ]);
-  const [itemDiscounts, setItemDiscounts] = useState<{ [key: number]: number }>({});
   const [sendWhatsAppMessage, setSendWhatsAppMessage] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: products = [] } = useQuery({
     queryKey: platformId ? [`/api/platforms/${platformId}/products`] : ["/api/products"],
+    enabled: !!platformId,
+  }) as { data: any[] };
+
+  // جلب الألوان والأشكال والأحجام
+  const { data: colors = [] } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/colors`],
+    enabled: !!platformId,
+  }) as { data: any[] };
+
+  const { data: shapes = [] } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/shapes`],
+    enabled: !!platformId,
+  }) as { data: any[] };
+
+  const { data: sizes = [] } = useQuery({
+    queryKey: [`/api/platforms/${platformId}/sizes`],
     enabled: !!platformId,
   }) as { data: any[] };
 
@@ -72,15 +75,27 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
 
   const createOrderMutation = useMutation({
     mutationFn: async (data: any) => {
-      let response;
-      if (platformId) {
-        response = await apiRequest(`/api/platforms/${platformId}/orders`, "POST", data);
-      } else {
-        response = await apiRequest("/api/orders", "POST", data);
+      console.log("=== ORDER CREATION DEBUG ===");
+      console.log("Sending order data:", data);
+      
+      try {
+        let result;
+        if (platformId) {
+          console.log("Using platform endpoint:", `/api/platforms/${platformId}/orders`);
+          result = await apiRequest(`/api/platforms/${platformId}/orders`, "POST", data);
+        } else {
+          console.log("Using general endpoint:", "/api/orders");
+          result = await apiRequest("/api/orders", "POST", data);
+        }
+        
+        console.log("Order creation API response:", result);
+        console.log("=== END ORDER CREATION DEBUG ===");
+        return result;
+      } catch (error) {
+        console.log("Order creation error:", error);
+        console.log("=== END ORDER CREATION DEBUG ===");
+        throw error;
       }
-      const result = await response.json();
-      console.log("Order creation API response:", result);
-      return result;
     },
     onSuccess: async (data) => {
       if (platformId) {
@@ -97,30 +112,13 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       if (sendWhatsAppMessage && data?.id) {
         console.log("Sending WhatsApp message for order:", data.id);
         try {
-          const response = await fetch("/api/whatsapp/send-manual-order-confirmation", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ orderId: data.id }),
-          });
+          const response = await apiRequest("/api/whatsapp/send-manual-order-confirmation", "POST", { orderId: data.id });
           
-          if (response.ok) {
-            console.log("WhatsApp message sent successfully");
-            toast({
-              title: "تم الإنشاء",
-              description: "تم إنشاء الطلب وإرسال رسالة تأكيد عبر WhatsApp بنجاح",
-            });
-          } else {
-            console.log("WhatsApp message failed:", response.status, response.statusText);
-            const errorData = await response.json().catch(() => ({}));
-            console.log("WhatsApp error data:", errorData);
-            toast({
-              title: "تم الإنشاء",
-              description: "تم إنشاء الطلب بنجاح ولكن فشل إرسال رسالة WhatsApp",
-              variant: "destructive",
-            });
-          }
+          console.log("WhatsApp message sent successfully:", response);
+          toast({
+            title: "تم الإنشاء",
+            description: "تم إنشاء الطلب وإرسال رسالة تأكيد عبر WhatsApp بنجاح",
+          });
         } catch (error) {
           console.log("WhatsApp message error:", error);
           toast({
@@ -139,7 +137,6 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       onClose(false);
       form.reset();
       setOrderItems([{ productId: "", quantity: 1, offer: "" }]);
-      setItemDiscounts({});
       setSendWhatsAppMessage(true);
     },
     onError: (error) => {
@@ -152,7 +149,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
   });
 
   const addOrderItem = () => {
-    setOrderItems([...orderItems, { productId: "", quantity: 1, offer: "" }]);
+    setOrderItems([...orderItems, { productId: "", quantity: 1, offer: "", selectedColorIds: [], selectedShapeIds: [], selectedSizeIds: [], selectedColorId: "", selectedShapeId: "", selectedSizeId: "" }]);
   };
 
   const removeOrderItem = (index: number) => {
@@ -168,31 +165,32 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
   };
 
   const calculateSubtotal = () => {
-    return orderItems.reduce((total, item, index) => {
-      const product = products?.find((p: any) => p.id === item.productId);
-      if (product) {
-        let itemPrice = 0;
-        // If an offer is selected, use the offer price
-        if (item.offer) {
-          const selectedOffer = product.priceOffers?.find((offer: any) => offer.label === item.offer);
-          if (selectedOffer) {
-            itemPrice = selectedOffer.price;
-          }
+    return orderItems.reduce((total, item) => {
+      if (!item.productId) return total;
+      
+      const selectedProduct = products?.find((p: any) => p.id === item.productId);
+      if (!selectedProduct) return total;
+      
+      let itemPrice = parseFloat(selectedProduct.price);
+      
+      // If an offer is selected, use the offer price
+      if (item.offer) {
+        const selectedOffer = selectedProduct.priceOffers?.find((offer: any) => offer.label === item.offer);
+        if (selectedOffer) {
+          itemPrice = parseFloat(selectedOffer.price);
         } else {
-          // Otherwise use product price
-          itemPrice = parseFloat(product.price);
+          itemPrice = parseFloat(selectedProduct.price);
         }
-        
-        // Apply individual item discount
-        const itemDiscount = itemDiscounts[index] || 0;
-        return total + Math.max(0, itemPrice - itemDiscount);
+      } else {
+        itemPrice = parseFloat(selectedProduct.price);
       }
-      return total;
+      
+      return total + itemPrice;
     }, 0);
   };
 
   const calculateTotalDiscount = () => {
-    return Object.values(itemDiscounts).reduce((sum, discount) => sum + (discount || 0), 0) + (form.watch('discount') || 0);
+    return form.watch('discount') || 0;
   };
 
   const calculateTotal = () => {
@@ -202,12 +200,30 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
   };
 
   const onSubmit = (data: CreateOrderForm) => {
-    const validItems = orderItems.filter(item => item.productId && item.quantity > 0).map((item, index) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-      offer: item.offer || null,
-      discount: itemDiscounts[index] || 0,
-    }));
+    const validItems = orderItems.filter(item => item.productId && item.quantity > 0).map((item, index) => {
+      // Create offer string in format "quantity - price"
+      const selectedProduct = products?.find((p: any) => p.id === item.productId);
+      let offerString = null;
+      
+      if (item.offer && selectedProduct) {
+        const selectedOffer = selectedProduct.priceOffers?.find((offer: any) => offer.label === item.offer);
+        if (selectedOffer) {
+          offerString = `${selectedOffer.quantity} قطعة - ${selectedOffer.price}`;
+        }
+      }
+      
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        offer: offerString,
+        selectedColorIds: item.selectedColorIds || [],
+        selectedShapeIds: item.selectedShapeIds || [],
+        selectedSizeIds: item.selectedSizeIds || [],
+        selectedColorId: item.selectedColorId || null,
+        selectedShapeId: item.selectedShapeId || null,
+        selectedSizeId: item.selectedSizeId || null,
+      };
+    });
     
     if (validItems.length === 0) {
       toast({
@@ -339,109 +355,101 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                 {orderItems.map((item, index) => {
                   console.log('Rendering item', index, 'with productId:', item.productId);
                   return (
-                  <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-gray-800 rounded-lg items-center">
-                    <div>
-                      <label className="text-sm font-medium text-white mb-1 block">المنتج</label>
-                      <Select
-                        value={item.productId || ""}
-                        onValueChange={(value) => {
-                          console.log('Product selected:', value, 'Current item:', item);
-                          // Update all fields at once to avoid multiple state updates
-                          const newItems = [...orderItems];
-                          newItems[index] = { 
-                            ...newItems[index], 
-                            productId: value,
-                            offer: '', // Reset offer when product changes
-                            quantity: 1 // Reset quantity
-                          };
-                          console.log('Setting new items:', newItems);
-                          setOrderItems(newItems);
-                        }}
-                      >
-                        <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                          <SelectValue placeholder="اختر المنتج" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-700 border-gray-600">
-                          {products?.map((product: any) => (
-                            <SelectItem key={product.id} value={product.id} className="text-white hover:bg-gray-600">
-                              {product.name} - {formatCurrency(product.price)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium text-white mb-1 block">العرض</label>
-                      {item.productId ? (
+                  <div key={index} className="p-3 bg-gray-800 rounded-lg">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                      <div>
+                        <label className="text-sm font-medium text-white mb-1 block">المنتج</label>
                         <Select
-                          value={item.offer || ""}
+                          value={item.productId || ""}
                           onValueChange={(value) => {
-                            console.log('Offer selected:', value);
-                            
-                            // Find the selected price offer and update offer + quantity at once
-                            const selectedProduct = products?.find((p: any) => p.id === item.productId);
-                            const selectedOffer = selectedProduct?.priceOffers?.find((offer: any) => offer.label === value);
-                            console.log('Selected offer details:', selectedOffer);
-                            
-                            // Update both offer and quantity at once
+                            console.log('Product selected:', value, 'Current item:', item);
+                            // Update all fields at once to avoid multiple state updates
                             const newItems = [...orderItems];
                             newItems[index] = { 
                               ...newItems[index], 
-                              offer: value,
-                              quantity: selectedOffer ? selectedOffer.quantity : 1
+                              productId: value,
+                              offer: '', // Reset offer when product changes
+                              quantity: 1, // Reset quantity
+                              // Keep existing variant selections
+                              selectedColorIds: newItems[index].selectedColorIds || [],
+                              selectedShapeIds: newItems[index].selectedShapeIds || [],
+                              selectedSizeIds: newItems[index].selectedSizeIds || []
                             };
+                            console.log('Setting new items:', newItems);
                             setOrderItems(newItems);
                           }}
                         >
-                          <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
-                            <SelectValue placeholder="اختر العرض" />
+                          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                            <SelectValue placeholder="اختر المنتج" />
                           </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-gray-600">
-                            {(() => {
-                              const selectedProduct = products?.find((p: any) => p.id === item.productId);
-                              console.log('Selected Product:', selectedProduct);
-                              console.log('Product offers:', selectedProduct?.offers);
-                              
-                              // Get price offers from the product
-                              const priceOffers = selectedProduct?.priceOffers || [];
-                              
-                              if (priceOffers.length === 0) {
-                                return (
-                                  <SelectItem value="لا توجد عروض متاحة" disabled>
-                                    لا توجد عروض متاحة
-                                  </SelectItem>
-                                );
-                              }
-                              
-                              return priceOffers.map((priceOffer: any, offerIndex: number) => (
-                                <SelectItem key={offerIndex} value={priceOffer.label} className="text-white hover:bg-gray-700">
-                                  {priceOffer.label} - {formatCurrency(priceOffer.price)}
-                                </SelectItem>
-                              ));
-                            })()}
+                          <SelectContent className="bg-gray-700 border-gray-600">
+                            {products?.map((product: any) => (
+                              <SelectItem key={product.id} value={product.id} className="text-white hover:bg-gray-600">
+                                {product.name} - {formatCurrency(product.price)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
-                      ) : (
-                        <Input placeholder="اختر المنتج أولاً" disabled className="bg-gray-800 border-gray-600 text-white" />
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <div className="w-20">
-                        <label className="text-sm font-medium text-white mb-1 block">الخصم</label>
-                        <Input
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          value={itemDiscounts[index] || 0}
-                          onChange={(e) => {
-                            const discount = Number(e.target.value) || 0;
-                            setItemDiscounts(prev => ({ ...prev, [index]: discount }));
-                          }}
-                          className="bg-gray-800 border-gray-600 text-white text-right h-9 text-sm"
-                        />
                       </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-white mb-1 block">العرض</label>
+                        {item.productId ? (
+                          <Select
+                            value={item.offer || ""}
+                            onValueChange={(value) => {
+                              console.log('Offer selected:', value);
+                              
+                              // Find the selected price offer and update offer + quantity at once
+                              const selectedProduct = products?.find((p: any) => p.id === item.productId);
+                              const selectedOffer = selectedProduct?.priceOffers?.find((offer: any) => offer.label === value);
+                              console.log('Selected offer details:', selectedOffer);
+                              
+                              // Update both offer and quantity at once
+                              const newItems = [...orderItems];
+                              newItems[index] = { 
+                                ...newItems[index], 
+                                offer: value,
+                                quantity: selectedOffer ? selectedOffer.quantity : 1,
+                                // Keep existing variant selections
+                                selectedColorIds: newItems[index].selectedColorIds || [],
+                                selectedShapeIds: newItems[index].selectedShapeIds || [],
+                                selectedSizeIds: newItems[index].selectedSizeIds || []
+                              };
+                              setOrderItems(newItems);
+                            }}
+                          >
+                            <SelectTrigger className="bg-gray-800 border-gray-600 text-white">
+                              <SelectValue placeholder="اختر العرض" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-800 border-gray-600">
+                              {(() => {
+                                const selectedProduct = products?.find((p: any) => p.id === item.productId);
+                                
+                                // Get price offers from the product
+                                const priceOffers = selectedProduct?.priceOffers || [];
+                                
+                                if (priceOffers.length === 0) {
+                                  return (
+                                    <SelectItem value="لا توجد عروض متاحة" disabled>
+                                      لا توجد عروض متاحة
+                                    </SelectItem>
+                                  );
+                                }
+                                
+                                return priceOffers.map((priceOffer: any, offerIndex: number) => (
+                                  <SelectItem key={offerIndex} value={priceOffer.label} className="text-white hover:bg-gray-700">
+                                    {priceOffer.label} - {formatCurrency(priceOffer.price)} (الكمية: {priceOffer.quantity})
+                                  </SelectItem>
+                                ));
+                              })()}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input placeholder="اختر المنتج أولاً" disabled className="bg-gray-800 border-gray-600 text-white" />
+                        )}
+                      </div>
+
                       <div className="w-20">
                         <label className="text-sm font-medium text-white mb-1 block">الكمية</label>
                         <Input
@@ -454,7 +462,183 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                         />
                       </div>
                     </div>
-                    
+
+                    {/* حقول اختيارية للون والشكل والحجم */}
+                    {item.productId && item.productId.trim() !== '' && (() => {
+                      const selectedProduct = products?.find((p: any) => p.id === item.productId);
+                      if (!selectedProduct) return null;
+                      
+                      const hasColors = selectedProduct?.colors?.length > 0;
+                      const hasShapes = selectedProduct?.shapes?.length > 0;
+                      const hasSizes = selectedProduct?.sizes?.length > 0;
+                      
+                      if (!hasColors && !hasShapes && !hasSizes) return null;
+                      
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                          {/* الألوان المتعددة */}
+                          {hasColors && (
+                            <div>
+                              <label className="text-sm font-medium text-white mb-1 block">الألوان (اختياري)</label>
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-600 rounded">
+                                  {selectedProduct.colors.map((color: any) => (
+                                <div key={color.id} className="flex items-center gap-1 mb-1">
+                                  <input
+                                    type="checkbox"
+                                    id={`color-${index}-${color.id}`}
+                                    checked={(item.selectedColorIds || []).includes(color.id)}
+                                    onChange={(e) => {
+                                      console.log('Color checkbox changed:', { colorId: color.id, checked: e.target.checked, index });
+                                      const newItems = [...orderItems];
+                                      const currentColors = newItems[index].selectedColorIds || [];
+                                      console.log('Current colors before update:', currentColors);
+                                      
+                                      if (e.target.checked) {
+                                        newItems[index] = {
+                                          ...newItems[index],
+                                          selectedColorIds: [...currentColors, color.id]
+                                        };
+                                      } else {
+                                        newItems[index] = {
+                                          ...newItems[index],
+                                          selectedColorIds: currentColors.filter(id => id !== color.id)
+                                        };
+                                      }
+                                      
+                                      console.log('New colors after update:', newItems[index].selectedColorIds);
+                                      setOrderItems(newItems);
+                                    }}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <label 
+                                    htmlFor={`color-${index}-${color.id}`}
+                                    className="flex items-center gap-1 text-white text-sm cursor-pointer"
+                                  >
+                                    <div 
+                                      className="w-4 h-4 rounded-full border border-gray-400" 
+                                      style={{ backgroundColor: color.colorCode }}
+                                    />
+                                    {color.colorName}
+                                  </label>
+                                </div>
+                                  ))}
+                                </div>
+                                {(item.selectedColorIds || []).length > 0 && (
+                                  <div className="text-xs text-gray-400">
+                                    تم اختيار {(item.selectedColorIds || []).length} لون
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* الأشكال المتعددة */}
+                          {hasShapes && (
+                            <div>
+                              <label className="text-sm font-medium text-white mb-1 block">الأشكال (اختياري)</label>
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-600 rounded">
+                                  {selectedProduct.shapes.map((shape: any) => (
+                                <div key={shape.id} className="flex items-center gap-1 mb-1">
+                                  <input
+                                    type="checkbox"
+                                    id={`shape-${index}-${shape.id}`}
+                                    checked={(item.selectedShapeIds || []).includes(shape.id)}
+                                    onChange={(e) => {
+                                      const newItems = [...orderItems];
+                                      const currentShapes = newItems[index].selectedShapeIds || [];
+                                      if (e.target.checked) {
+                                        newItems[index] = {
+                                          ...newItems[index],
+                                          selectedShapeIds: [...currentShapes, shape.id]
+                                        };
+                                      } else {
+                                        newItems[index] = {
+                                          ...newItems[index],
+                                          selectedShapeIds: currentShapes.filter(id => id !== shape.id)
+                                        };
+                                      }
+                                      setOrderItems(newItems);
+                                    }}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <label 
+                                    htmlFor={`shape-${index}-${shape.id}`}
+                                    className="flex items-center gap-1 text-white text-sm cursor-pointer"
+                                  >
+                                    {shape.shapeImageUrl && (
+                                      <img 
+                                        src={shape.shapeImageUrl}
+                                        alt={shape.shapeName}
+                                        className="w-4 h-4 object-cover rounded border border-gray-400"
+                                      />
+                                    )}
+                                    {shape.shapeName}
+                                  </label>
+                                </div>
+                                  ))}
+                                </div>
+                                {(item.selectedShapeIds || []).length > 0 && (
+                                  <div className="text-xs text-gray-400">
+                                    تم اختيار {(item.selectedShapeIds || []).length} شكل
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* الأحجام المتعددة */}
+                          {hasSizes && (
+                            <div>
+                              <label className="text-sm font-medium text-white mb-1 block">الأحجام (اختياري)</label>
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-600 rounded">
+                                  {selectedProduct.sizes.map((size: any) => (
+                                <div key={size.id} className="flex items-center gap-1 mb-1">
+                                  <input
+                                    type="checkbox"
+                                    id={`size-${index}-${size.id}`}
+                                    checked={(item.selectedSizeIds || []).includes(size.id)}
+                                    onChange={(e) => {
+                                      const newItems = [...orderItems];
+                                      const currentSizes = newItems[index].selectedSizeIds || [];
+                                      if (e.target.checked) {
+                                        newItems[index] = {
+                                          ...newItems[index],
+                                          selectedSizeIds: [...currentSizes, size.id]
+                                        };
+                                      } else {
+                                        newItems[index] = {
+                                          ...newItems[index],
+                                          selectedSizeIds: currentSizes.filter(id => id !== size.id)
+                                        };
+                                      }
+                                      setOrderItems(newItems);
+                                    }}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <label 
+                                    htmlFor={`size-${index}-${size.id}`}
+                                    className="flex items-center gap-1 text-white text-sm cursor-pointer"
+                                  >
+                                    {size.sizeName} ({size.sizeValue})
+                                  </label>
+                                </div>
+                                  ))}
+                                </div>
+                                {(item.selectedSizeIds || []).length > 0 && (
+                                  <div className="text-xs text-gray-400">
+                                    تم اختيار {(item.selectedSizeIds || []).length} حجم
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     <div className="flex items-center justify-between">
                       <div>
                         <label className="text-sm font-medium text-white mb-1 block">السعر</label>
@@ -498,6 +682,27 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
               
               <div className="mt-4 space-y-3">
 
+                {/* Global Discount */}
+                <FormField
+                  control={form.control}
+                  name="discount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>خصم إضافي على الطلب</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                          className="text-right"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 {/* Totals */}
                 <div className="p-3 bg-gray-800 border border-gray-600 rounded-lg space-y-2">
                   <div className="flex justify-between items-center">
@@ -506,45 +711,36 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                     </span>
                     <span className="font-medium text-white">إجمالي الطلب:</span>
                   </div>
-                  {(Object.keys(itemDiscounts).some(key => itemDiscounts[parseInt(key)] > 0) || form.watch('discount') > 0) && (
+                  {(form.watch('discount') || 0) > 0 && (
                     <div className="text-sm border-t border-gray-600 pt-2 space-y-1">
                       {/* Original subtotal before any discounts */}
                       <div className="flex justify-between">
                         <span className="text-gray-300">
-                          {formatCurrency(orderItems.reduce((total, item) => {
-                            const product = products?.find((p: any) => p.id === item.productId);
-                            if (product) {
-                              if (item.offer) {
-                                const selectedOffer = product.priceOffers?.find((offer: any) => offer.label === item.offer);
-                                if (selectedOffer) return total + selectedOffer.price;
-                              }
-                              return total + parseFloat(product.price);
-                            }
-                            return total;
-                          }, 0))}
+                          {formatCurrency(calculateSubtotal())}
                         </span>
-                        <span className="text-gray-300">المجموع قبل الخصم:</span>
+                        <span className="text-gray-300">المجموع الفرعي:</span>
                       </div>
                       
-                      {/* Item discounts */}
-                      {Object.keys(itemDiscounts).some(key => itemDiscounts[parseInt(key)] > 0) && (
-                        <div className="flex justify-between">
-                          <span className="text-red-400">
-                            -{formatCurrency(Object.values(itemDiscounts).reduce((sum, discount) => sum + (discount || 0), 0))}
-                          </span>
-                          <span className="text-red-400">خصم المنتجات:</span>
-                        </div>
-                      )}
-                      
                       {/* Global discount */}
-                      {form.watch('discount') > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-red-400">-{formatCurrency(form.watch('discount') || 0)}</span>
-                          <span className="text-red-400">خصم إضافي:</span>
-                        </div>
-                      )}
+                      <div className="flex justify-between">
+                        <span className="text-red-400">
+                          -{formatCurrency(form.watch('discount') || 0)}
+                        </span>
+                        <span className="text-red-400">خصم إضافي:</span>
+                      </div>
                     </div>
                   )}
+                </div>
+
+                {/* WhatsApp Message Toggle */}
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <Switch
+                    checked={sendWhatsAppMessage}
+                    onCheckedChange={setSendWhatsAppMessage}
+                  />
+                  <label className="text-sm font-medium text-white">
+                    إرسال رسالة تأكيد عبر WhatsApp
+                  </label>
                 </div>
               </div>
             </div>

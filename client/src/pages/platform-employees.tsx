@@ -825,18 +825,21 @@ export default function PlatformEmployees() {
                               <span className="text-xs font-medium text-red-500 group-hover:text-red-600">حذف</span>
                             </Button>
                           </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-black border-theme-primary max-w-md">
+                          <AlertDialogContent className="bg-black border-theme-primary max-w-md" aria-describedby="delete-employee-description">
                             <AlertDialogHeader className="text-right">
                               <AlertDialogTitle className="text-theme-primary text-xl font-bold flex items-center gap-2 justify-end">
                                 <Trash2 className="h-5 w-5 text-red-500" />
                                 تأكيد الحذف
                               </AlertDialogTitle>
-                              <AlertDialogDescription className="text-gray-300 text-right leading-relaxed mt-4">
-                                هل أنت متأكد من حذف الموظف <span className="font-bold text-theme-primary">"{employee.fullName}"</span>؟ 
-                                <br />
-                                <span className="text-red-400 font-medium">هذا الإجراء لا يمكن التراجع عنه وسيتم حذف جميع بيانات الموظف نهائياً.</span>
-                              </AlertDialogDescription>
+                              <div id="delete-employee-description" className="sr-only">
+                                تأكيد حذف الموظف من النظام نهائياً
+                              </div>
                             </AlertDialogHeader>
+                            <AlertDialogDescription className="text-gray-300 text-right leading-relaxed mt-4">
+                              هل أنت متأكد من حذف الموظف <span className="font-bold text-theme-primary">"{employee.fullName}"</span>؟ 
+                              <br />
+                              <span className="text-red-400 font-medium">هذا الإجراء لا يمكن التراجع عنه وسيتم حذف جميع بيانات الموظف نهائياً.</span>
+                            </AlertDialogDescription>
                             <AlertDialogFooter className="flex gap-3 justify-start">
                               <AlertDialogAction
                                 onClick={() => handleDeleteEmployee(employee.id)}
@@ -905,12 +908,15 @@ export default function PlatformEmployees() {
 
       {/* Add Employee Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="bg-theme-primary-lighter theme-border max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-theme-primary-lighter theme-border max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="add-employee-description">
           <DialogHeader>
             <DialogTitle className="text-theme-primary flex items-center gap-2">
               <User className="h-5 w-5" />
               إضافة موظف جديد
             </DialogTitle>
+            <div id="add-employee-description" className="sr-only">
+              نافذة لإضافة موظف جديد مع تحديد الصلاحيات والمعلومات الأساسية
+            </div>
             <DialogDescription>
               أدخل بيانات الموظف الجديد وحدد الصلاحيات المناسبة
             </DialogDescription>
@@ -1497,8 +1503,11 @@ export default function PlatformEmployees() {
 
       {/* Employee Permissions Dialog */}
       <Dialog open={showPermissionsDialog} onOpenChange={setShowPermissionsDialog}>
-        <DialogContent className="bg-black border-theme-primary max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-black border-theme-primary max-w-5xl max-h-[90vh] overflow-y-auto" aria-describedby="permissions-dialog-description">
           <DialogHeader className="text-right pb-4">
+            <div id="permissions-dialog-description" className="sr-only">
+              نافذة لإدارة صلاحيات الموظف وتحديد الوصول للأقسام المختلفة
+            </div>
             {selectedEmployee && (
               <Card className="bg-theme-primary-lighter theme-border mb-4">
                 <CardContent className="p-4">
@@ -1634,19 +1643,18 @@ export default function PlatformEmployees() {
 
       {/* Set Password Dialog */}
       <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-        <DialogContent className="bg-black border-theme-primary max-w-md">
+        <DialogContent className="bg-black border-theme-primary max-w-md" aria-describedby="password-dialog-description">
           <DialogHeader className="text-right">
             <DialogTitle className="text-theme-primary text-xl font-bold flex items-center gap-2 justify-end">
               <Key className="h-5 w-5 text-yellow-500" />
               تعيين كلمة مرور
             </DialogTitle>
-            <DialogDescription className="text-gray-300 text-right leading-relaxed mt-4">
+            <div id="password-dialog-description" className="sr-only">
+              نافذة لتعيين كلمة مرور جديدة للموظف
+            </div>
+            <DialogDescription className="text-gray-300 text-right mt-2">
               {selectedEmployee && (
-                <>
-                  سيتم تعيين كلمة مرور جديدة للموظف <span className="font-bold text-theme-primary">"{selectedEmployee.fullName}"</span>
-                  <br />
-                  <span className="text-yellow-400">يرجى حفظ هذه المعلومات وإرسالها للموظف بشكل آمن</span>
-                </>
+                <>تعيين كلمة مرور جديدة للموظف: <span className="font-bold text-theme-primary">{selectedEmployee.fullName}</span></>
               )}
             </DialogDescription>
           </DialogHeader>

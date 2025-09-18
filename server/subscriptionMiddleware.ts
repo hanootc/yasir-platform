@@ -6,21 +6,41 @@ import { eq } from 'drizzle-orm';
 // Middleware للتحقق من صلاحية الاشتراك
 export async function checkSubscriptionStatus(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.claims?.sub;
-    if (!userId) {
+    // Check for platform session first (for platform-based authentication)
+    const platformId = req.session?.platform?.platformId;
+    let userId = req.user?.claims?.sub;
+    
+    if (!userId && !platformId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     // البحث عن منصة المستخدم
-    const [userPlatform] = await db.select({
-      id: platforms.id,
-      platformName: platforms.platformName,
-      subscriptionPlan: platforms.subscriptionPlan,
-      status: platforms.status,
-      subscriptionStartDate: platforms.subscriptionStartDate,
-      subscriptionEndDate: platforms.subscriptionEndDate,
-      createdAt: platforms.createdAt
-    }).from(platforms).where(eq(platforms.userId, userId));
+    let userPlatform;
+    if (platformId) {
+      // Use platform session
+      const [platform] = await db.select({
+        id: platforms.id,
+        name: platforms.name,
+        subscriptionPlan: platforms.subscriptionPlan,
+        subscriptionStatus: platforms.subscriptionStatus,
+        subscriptionStartDate: platforms.subscriptionStartDate,
+        subscriptionEndDate: platforms.subscriptionEndDate,
+        createdAt: platforms.createdAt
+      }).from(platforms).where(eq(platforms.id, platformId));
+      userPlatform = platform;
+    } else {
+      // Use user authentication
+      const [platform] = await db.select({
+        id: platforms.id,
+        name: platforms.name,
+        subscriptionPlan: platforms.subscriptionPlan,
+        subscriptionStatus: platforms.subscriptionStatus,
+        subscriptionStartDate: platforms.subscriptionStartDate,
+        subscriptionEndDate: platforms.subscriptionEndDate,
+        createdAt: platforms.createdAt
+      }).from(platforms).where(eq(platforms.userId, userId));
+      userPlatform = platform;
+    }
 
     if (!userPlatform) {
       return res.status(404).json({ 
@@ -29,12 +49,16 @@ export async function checkSubscriptionStatus(req: Request, res: Response, next:
       });
     }
 
-    // التحقق من حالة المنصة
-    if (userPlatform.status === 'cancelled') {
+    // التحقق من حالة الاشتراك
+    if (userPlatform.subscriptionStatus === 'suspended') {
       return res.status(403).json({ 
-        message: "Platform cancelled",
-        redirectTo: "/subscription-cancelled",
-        platform: userPlatform
+        message: "Platform suspended",
+        platform: {
+          ...userPlatform,
+          platformName: userPlatform.name,
+          subscriptionStatus: userPlatform.subscriptionStatus
+        },
+        status: userPlatform.subscriptionStatus,   
       });
     }
 
@@ -43,12 +67,21 @@ export async function checkSubscriptionStatus(req: Request, res: Response, next:
     let subscriptionEndDate: Date;
 
     if (userPlatform.subscriptionEndDate) {
-      subscriptionEndDate = new Date(userPlatform.subscriptionEndDate);
+      if (userPlatform.subscriptionEndDate && userPlatform.subscriptionEndDate < new Date()) {
+        // حساب تاريخ الانتهاء بناءً على تاريخ الإنشاء (شهر واحد)
+        const startDate = userPlatform.subscriptionStartDate 
+          ? new Date(userPlatform.subscriptionStartDate)
+          : new Date(userPlatform.createdAt!);
+        subscriptionEndDate = new Date(startDate);
+        subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
+      } else {
+        subscriptionEndDate = new Date(userPlatform.subscriptionEndDate);
+      }
     } else {
       // حساب تاريخ الانتهاء بناءً على تاريخ الإنشاء (شهر واحد)
       const startDate = userPlatform.subscriptionStartDate 
         ? new Date(userPlatform.subscriptionStartDate)
-        : new Date(userPlatform.createdAt);
+        : new Date(userPlatform.createdAt!);
       subscriptionEndDate = new Date(startDate);
       subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
     }
@@ -56,12 +89,9 @@ export async function checkSubscriptionStatus(req: Request, res: Response, next:
     // إذا انتهى الاشتراك
     if (now > subscriptionEndDate) {
       // تحديث حالة المنصة إلى "pending_payment"
-      await db.update(platforms)
-        .set({ 
-          status: 'pending_payment',
-          updatedAt: new Date()
-        })
-        .where(eq(platforms.id, userPlatform.id));
+      await db.update(platforms).set({
+        subscriptionStatus: 'expired'
+      }).where(eq(platforms.id, userPlatform.id));
 
       return res.status(402).json({ 
         message: "Subscription expired",
@@ -111,7 +141,7 @@ export async function checkPlatformStatus(req: Request, res: Response, next: Nex
 
     const [userPlatform] = await db.select({
       id: platforms.id,
-      status: platforms.status,
+      subscriptionStatus: platforms.subscriptionStatus,
       subscriptionPlan: platforms.subscriptionPlan
     }).from(platforms).where(eq(platforms.userId, userId));
 
@@ -179,28 +209,28 @@ export const requireActiveSubscription = async (req: any, res: any, next: any) =
 
     // التحقق من حالة الاشتراك
     const now = new Date();
-    const subscriptionEndDate = new Date(platform.subscriptionEndDate);
+    const subscriptionEndDate = platform.subscriptionEndDate ? new Date(platform.subscriptionEndDate) : new Date(platform.createdAt!);
 
     // إذا انتهت صلاحية الاشتراك، قم بتحديث حالة المنصة إلى غير نشطة
-    if (subscriptionEndDate < now && platform.status === 'active') {
+    if (subscriptionEndDate < now && platform.subscriptionStatus === 'active') {
       await db.update(platforms)
         .set({ 
-          status: 'expired',
+          subscriptionStatus: 'expired',
           updatedAt: new Date()
         })
         .where(eq(platforms.id, platform.id));
         
-      console.log(`⏰ Platform ${platform.platformName} subscription expired, status updated to 'expired'`);
+      console.log(`⏰ Platform ${platform.name} subscription expired, status updated to 'expired'`);
     }
 
     // منع الوصول للمنصات المنتهية الصلاحية أو غير النشطة
-    if (platform.status !== 'active' || subscriptionEndDate < now) {
+    if (platform.subscriptionStatus !== 'active' || subscriptionEndDate < now) {
       return res.status(403).json({
         error: 'Subscription expired or inactive',
         message: 'انتهت صلاحية الاشتراك أو أن الحساب غير نشط. يرجى تجديد الاشتراك للمتابعة.',
         expiredAt: platform.subscriptionEndDate,
-        status: platform.status === 'active' ? 'expired' : platform.status,
-        platformName: platform.platformName,
+        status: platform.subscriptionStatus === 'active' ? 'expired' : platform.subscriptionStatus,
+        platformName: platform.name,
         renewalRequired: true
       });
     }
@@ -237,28 +267,28 @@ export const checkPlatformAccess = async (req: any, res: any, next: any) => {
 
     // التحقق من حالة الاشتراك
     const now = new Date();
-    const subscriptionEndDate = new Date(platform.subscriptionEndDate);
+    const subscriptionEndDate = platform.subscriptionEndDate ? new Date(platform.subscriptionEndDate) : new Date(platform.createdAt!);
 
     // إذا انتهت صلاحية الاشتراك، قم بتحديث حالة المنصة
-    if (subscriptionEndDate < now && platform.status === 'active') {
+    if (subscriptionEndDate < now && platform.subscriptionStatus === 'active') {
       await db.update(platforms)
         .set({ 
-          status: 'expired',
+          subscriptionStatus: 'expired',
           updatedAt: new Date()
         })
         .where(eq(platforms.id, platform.id));
         
-      console.log(`⏰ Platform ${platform.platformName} subscription expired, access denied`);
+      console.log(`⏰ Platform ${platform.name} subscription expired, access denied`);
     }
 
     // منع الوصول للمنصات المنتهية الصلاحية
-    if (platform.status !== 'active' || subscriptionEndDate < now) {
+    if (platform.subscriptionStatus !== 'active' || subscriptionEndDate < now) {
       return res.status(403).json({
         error: 'Platform access denied',
         message: 'انتهت صلاحية اشتراك هذه المنصة. يرجى التواصل مع صاحب المنصة لتجديد الاشتراك.',
         expiredAt: platform.subscriptionEndDate,
-        status: platform.status === 'active' ? 'expired' : platform.status,
-        platformName: platform.platformName
+        status: platform.subscriptionStatus === 'active' ? 'expired' : platform.subscriptionStatus,
+        platformName: platform.name
       });
     }
 

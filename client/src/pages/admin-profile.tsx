@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 import { User, Settings, Mail, Phone, MapPin, Shield, Calendar, Upload, Save, Loader2 } from "lucide-react";
 import { AdminProtectedRoute } from '../components/AdminProtectedRoute';
@@ -16,7 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
-import { LogoUploader } from "@/components/UniversalFileUploader";
+import { LogoUploader, UniversalFileUploader } from "@/components/UniversalFileUploader";
 
 // Schema لملف المدير الشخصي (منفصل تماماً عن المنصة)
 const adminProfileSchema = z.object({
@@ -37,10 +39,22 @@ export default function AdminProfile() {
   // Remove authentication check that was causing issues
 
   // الحصول على معلومات المدير الشخصية (منفصلة عن المنصة)
-  const { data: adminProfile, isLoading: isLoadingProfile } = useQuery({
+  const { data: adminProfile, isLoading: isLoadingProfile, refetch: refetchProfile } = useQuery({
     queryKey: ["/api/admin/profile"],
-    enabled: !!user,
-    queryFn: () => apiRequest(`/api/admin/profile`),
+    queryFn: async () => {
+      console.log("Fetching admin profile...");
+      const result = await apiRequest(`/api/admin/profile`);
+      console.log("Admin profile API response:", result);
+      return result;
+    },
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5000, // Refetch every 5 seconds
+    enabled: true,
+    retry: 3,
+    retryDelay: 1000,
   });
 
   // إعداد النموذج
@@ -57,37 +71,53 @@ export default function AdminProfile() {
 
   // تحديث النموذج عند تحميل البيانات
   useEffect(() => {
-    if (adminProfile) {
-      form.reset({
-        adminName: (adminProfile as any).adminName || (user as any)?.firstName + " " + (user as any)?.lastName || "",
-        adminEmail: (adminProfile as any).adminEmail || (user as any)?.email || "",
+    console.log("useEffect triggered - adminProfile:", adminProfile);
+    if (adminProfile && Object.keys(adminProfile).length > 0) {
+      console.log("Admin profile data loaded:", adminProfile);
+      const formData = {
+        adminName: (adminProfile as any).adminName || "",
+        adminEmail: (adminProfile as any).adminEmail || "",
         adminPhone: (adminProfile as any).adminPhone || "",
         adminAddress: (adminProfile as any).adminAddress || "",
         adminBio: (adminProfile as any).adminBio || "",
-      });
+      };
+      console.log("Setting form data:", formData);
+      
+      // Force form reset with new data
+      form.reset(formData);
+      
       setUploadedAvatarUrl((adminProfile as any).avatarUrl || "");
+      console.log("Avatar URL set to:", (adminProfile as any).avatarUrl);
+    } else {
+      console.log("No admin profile data or empty data:", adminProfile);
     }
-  }, [adminProfile, form, user]);
+  }, [adminProfile, form]);
 
   // تحديث الملف الشخصي للمدير
   const updateProfileMutation = useMutation({
     mutationFn: async (data: AdminProfileFormData) => {
-      return await apiRequest(`/api/admin/profile`, {
-        method: "POST",
-        body: data,
-      });
+      console.log("Sending profile data:", data);
+      return await apiRequest(`/api/admin/profile`, "PUT", data);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Profile update success:", data);
+      // Update the query cache with new data
+      queryClient.setQueryData(["/api/admin/profile"], data);
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ["/api/admin/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      // Force refetch to ensure UI updates
+      refetchProfile();
       toast({
         title: "تم الحفظ",
         description: "تم تحديث الملف الشخصي للمدير بنجاح",
       });
     },
     onError: (error) => {
+      console.error("Profile update error:", error);
       toast({
         title: "خطأ",
-        description: "فشل في تحديث الملف الشخصي",
+        description: `فشل في تحديث الملف الشخصي: ${error.message || error}`,
         variant: "destructive",
       });
     },
@@ -95,23 +125,27 @@ export default function AdminProfile() {
 
   // تحديث صورة المدير الشخصية
   const updateAvatarMutation = useMutation({
-    mutationFn: async (avatarURL: string) => {
-      return await apiRequest(`/api/admin/avatar`, {
-        method: "PUT",
-        body: { avatarURL },
-      });
+    mutationFn: async (avatarUrl: string) => {
+      console.log("Sending avatar URL:", avatarUrl);
+      return await apiRequest(`/api/admin/avatar`, "PUT", { avatarUrl });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Avatar update success:", data);
+      // Update the query cache and local state
       queryClient.invalidateQueries({ queryKey: ["/api/admin/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      // Force refetch to get updated data
+      refetchProfile();
       toast({
         title: "تم الحفظ",
         description: "تم تحديث الصورة الشخصية بنجاح",
       });
     },
     onError: (error) => {
+      console.error("Avatar update error:", error);
       toast({
         title: "خطأ",
-        description: "فشل في تحديث الصورة الشخصية",
+        description: `فشل في تحديث الصورة الشخصية: ${error.message || error}`,
         variant: "destructive",
       });
     },
@@ -124,9 +158,9 @@ export default function AdminProfile() {
   // معالجة رفع الصورة الشخصية
   const handleAvatarComplete = (uploadedFiles: { url: string; fileName: string; originalName: string; size: number }[]) => {
     if (uploadedFiles && uploadedFiles.length > 0) {
-      const avatarURL = uploadedFiles[0].url;
-      setUploadedAvatarUrl(avatarURL);
-      updateAvatarMutation.mutate(avatarURL);
+      const avatarUrl = uploadedFiles[0].url;
+      setUploadedAvatarUrl(avatarUrl);
+      updateAvatarMutation.mutate(avatarUrl);
     }
   };
 
@@ -156,28 +190,39 @@ export default function AdminProfile() {
               <CardContent className="space-y-4">
                 <div className="flex flex-col items-center space-y-4">
                   {/* عرض الصورة الحالية */}
-                  {(uploadedAvatarUrl || (user as any)?.profileImageUrl) && (
-                    <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-theme-primary theme-shadow">
+                  <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-theme-primary theme-shadow">
+                    {uploadedAvatarUrl ? (
                       <img
-                        src={uploadedAvatarUrl || (user as any)?.profileImageUrl}
+                        src={`https://sanadi.pro${uploadedAvatarUrl}`}
                         alt="صورة المدير"
                         className="w-full h-full object-cover"
                         onError={(e) => {
+                          console.log('Image failed to load:', uploadedAvatarUrl);
                           (e.target as HTMLImageElement).style.display = 'none';
                         }}
+                        onLoad={() => {
+                          console.log('Image loaded successfully:', uploadedAvatarUrl);
+                        }}
                       />
-                    </div>
-                  )}
+                    ) : (
+                      <div className="w-full h-full bg-theme-gradient flex items-center justify-center">
+                        <User className="h-16 w-16 text-white" />
+                      </div>
+                    )}
+                  </div>
                   
                   {/* رفع صورة شخصية جديدة */}
-                  <LogoUploader
+                  <UniversalFileUploader
                     onComplete={handleAvatarComplete}
                     maxFileSize={5 * 1024 * 1024} // 5MB
+                    acceptedFileTypes={['image/jpeg', 'image/png', 'image/gif', 'image/webp']}
+                    category="profiles"
+                    maxNumberOfFiles={1}
                     buttonClassName="bg-theme-gradient hover:opacity-90 text-white border-0 theme-shadow hover:shadow-lg transition-all duration-200"
                   >
                     <User className="h-4 w-4 mr-2" />
                     رفع صورة شخصية جديدة
-                  </LogoUploader>
+                  </UniversalFileUploader>
                   
                   <p className="text-sm text-muted-foreground text-center">
                     يُفضل أن تكون الصورة مربعة الشكل (1:1) ولا تتجاوز 5 ميجابايت

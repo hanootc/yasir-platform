@@ -21,7 +21,7 @@ interface PlatformSelectorProps {
 
 export function PlatformSelector({ value, onValueChange, placeholder = "اختر منصة..." }: PlatformSelectorProps) {
   const { data: platforms = [], isLoading } = useQuery<Platform[]>({
-    queryKey: ['/api/platforms-list'],
+    queryKey: ['/api/platforms'],
     enabled: true
   });
 
@@ -29,7 +29,7 @@ export function PlatformSelector({ value, onValueChange, placeholder = "اختر
   const selectedPlatform = platforms.find(p => p.id === value);
 
   const handleValueChange = (newValue: string) => {
-    if (newValue === 'all') {
+    if (newValue === 'none') {
       onValueChange(null);
     } else {
       onValueChange(newValue);
@@ -46,23 +46,30 @@ export function PlatformSelector({ value, onValueChange, placeholder = "اختر
   }
 
   return (
-    <Select value={value || 'all'} onValueChange={handleValueChange}>
+    <Select value={value || ''} onValueChange={handleValueChange}>
       <SelectTrigger className="w-[280px] bg-white dark:bg-black/50 border-gray-200 dark:border-gray-700 hover:border-theme-primary dark:hover:border-theme-primary transition-colors">
         <SelectValue placeholder={placeholder}>
           {value && selectedPlatform ? (
             <div className="flex items-center gap-3">
-              <Avatar className="w-6 h-6">
-                <AvatarImage 
-                  src={selectedPlatform.logoUrl?.startsWith('/objects/') 
-                    ? selectedPlatform.logoUrl.replace('/objects/', '/public-objects/')
-                    : selectedPlatform.logoUrl
-                  }
+{selectedPlatform.logoUrl ? (
+                <img 
+                  src={selectedPlatform.logoUrl}
                   alt={selectedPlatform.platformName}
+                  className="w-6 h-6 rounded-full object-cover border"
+                  onLoad={() => {
+                    console.log('Image loaded successfully:', selectedPlatform.logoUrl);
+                  }}
+                  onError={(e) => {
+                    console.log('Image failed to load:', selectedPlatform.logoUrl);
+                    console.log('Platform name:', selectedPlatform.platformName);
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
-                <AvatarFallback className="bg-theme-primary text-white text-xs">
-                  <Building2 className="w-3 h-3" />
-                </AvatarFallback>
-              </Avatar>
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-theme-primary flex items-center justify-center">
+                  <Building2 className="w-3 h-3 text-white" />
+                </div>
+              )}
               <div className="text-right flex-1 min-w-0">
                 <div className="font-medium text-sm truncate text-gray-900 dark:text-white">
                   {selectedPlatform.platformName}
@@ -75,24 +82,24 @@ export function PlatformSelector({ value, onValueChange, placeholder = "اختر
           ) : (
             <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
               <Building2 className="w-4 h-4" />
-              <span>جميع المنصات</span>
+              <span>اختر منصة...</span>
             </div>
           )}
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-xl">
         <SelectItem 
-          value="all" 
+          value="none" 
           className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 focus:bg-theme-primary focus:text-white data-[highlighted]:bg-theme-primary data-[highlighted]:text-white"
         >
           <div className="flex items-center gap-3 py-1">
-            <div className="w-6 h-6 rounded-full bg-theme-primary flex items-center justify-center">
+            <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center">
               <Building2 className="w-3 h-3 text-white" />
             </div>
             <div className="text-right">
-              <div className="font-medium text-sm">جميع المنصات</div>
+              <div className="font-medium text-sm">إلغاء التحديد</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
-                عرض بيانات كافة المشتركين
+                عدم عرض أي بيانات
               </div>
             </div>
           </div>
@@ -105,18 +112,25 @@ export function PlatformSelector({ value, onValueChange, placeholder = "اختر
             className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 focus:bg-theme-primary focus:text-white data-[highlighted]:bg-theme-primary data-[highlighted]:text-white"
           >
             <div className="flex items-center gap-3 py-1">
-              <Avatar className="w-6 h-6">
-                <AvatarImage 
-                  src={platform.logoUrl?.startsWith('/objects/') 
-                    ? platform.logoUrl.replace('/objects/', '/public-objects/')
-                    : platform.logoUrl
-                  }
+{platform.logoUrl ? (
+                <img 
+                  src={platform.logoUrl}
                   alt={platform.platformName}
+                  className="w-6 h-6 rounded-full object-cover border"
+                  onLoad={() => {
+                    console.log('Image loaded successfully:', platform.logoUrl);
+                  }}
+                  onError={(e) => {
+                    console.log('Image failed to load:', platform.logoUrl);
+                    console.log('Platform name:', platform.platformName);
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
-                <AvatarFallback className="bg-theme-primary text-white text-xs">
-                  <Building2 className="w-3 h-3" />
-                </AvatarFallback>
-              </Avatar>
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-theme-primary flex items-center justify-center">
+                  <Building2 className="w-3 h-3 text-white" />
+                </div>
+              )}
               <div className="text-right flex-1 min-w-0">
                 <div className="font-medium text-sm truncate">
                   {platform.platformName}

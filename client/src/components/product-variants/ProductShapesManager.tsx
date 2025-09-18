@@ -58,27 +58,37 @@ export function ProductShapesManager({ productId, platformId }: ProductShapesMan
   });
 
   // Helper function for API requests with JSON response
-  const fetchJson = async (url: string, options?: RequestInit) => {
-    const response = await apiRequest(url, {
-      method: options?.method || "GET",
-      body: options?.body ? JSON.parse(options.body as string) : undefined
-    });
-    return response.json();
+  const fetchJson = async (url: string, method: string = "GET", body?: unknown) => {
+    const response = await apiRequest(url, method, body);
+    return response; // apiRequest already returns parsed JSON
   };
 
   // Fetch product shapes
   const { data: shapes = [], isLoading } = useQuery({
     queryKey: ["products", productId, "shapes"],
-    queryFn: () => fetchJson(`/api/products/${productId}/shapes`),
+    queryFn: async () => {
+      const result = await fetchJson(`/api/products/${productId}/shapes`, "GET");
+      return Array.isArray(result) ? result : [];
+    },
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   // Create shape mutation
   const createShapeMutation = useMutation({
-    mutationFn: (shapeData: ShapeFormData) =>
-      fetchJson(`/api/products/${productId}/shapes`, {
-        method: "POST",
-        body: JSON.stringify({ ...shapeData, platformId }),
-      }),
+    mutationFn: async (shapeData: ShapeFormData) => {
+      console.log('🔶 Sending shape data:', shapeData);
+      const result = await apiRequest(`/api/products/${productId}/shapes`, "POST", {
+        shapeName: shapeData.shapeName,
+        shapeImageUrl: shapeData.shapeImageUrl || null,
+        shapeDescription: shapeData.shapeDescription || null,
+        sortOrder: shapeData.sortOrder || 0
+      });
+      console.log('🔶 Shape creation result:', result);
+      return result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "shapes"] });
       setIsAddDialogOpen(false);
@@ -88,10 +98,12 @@ export function ProductShapesManager({ productId, platformId }: ProductShapesMan
         description: "تم إضافة الشكل بنجاح",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error("Shape creation error:", error);
+      console.error("Full error details:", JSON.stringify(error, null, 2));
       toast({
         title: "خطأ",
-        description: "فشل في إضافة الشكل",
+        description: error?.message || "فشل في إضافة الشكل",
         variant: "destructive",
       });
     },
@@ -100,10 +112,7 @@ export function ProductShapesManager({ productId, platformId }: ProductShapesMan
   // Update shape mutation
   const updateShapeMutation = useMutation({
     mutationFn: ({ shapeId, shapeData }: { shapeId: string; shapeData: Partial<ShapeFormData> }) =>
-      fetchJson(`/api/product-shapes/${shapeId}`, {
-        method: "PUT",
-        body: JSON.stringify(shapeData),
-      }),
+      fetchJson(`/api/product-shapes/${shapeId}`, "PUT", shapeData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "shapes"] });
       setEditingShape(null);
@@ -125,9 +134,7 @@ export function ProductShapesManager({ productId, platformId }: ProductShapesMan
   // Delete shape mutation
   const deleteShapeMutation = useMutation({
     mutationFn: (shapeId: string) =>
-      fetchJson(`/api/product-shapes/${shapeId}`, {
-        method: "DELETE",
-      }),
+      fetchJson(`/api/product-shapes/${shapeId}`, "DELETE"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products", productId, "shapes"] });
       toast({
@@ -197,11 +204,14 @@ export function ProductShapesManager({ productId, platformId }: ProductShapesMan
               إضافة شكل
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" aria-describedby="shape-dialog-description">
             <DialogHeader>
               <DialogTitle>
                 {editingShape ? "تعديل الشكل" : "إضافة شكل جديد"}
               </DialogTitle>
+              <div id="shape-dialog-description" className="sr-only">
+                نافذة لإضافة أو تعديل شكل المنتج
+              </div>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

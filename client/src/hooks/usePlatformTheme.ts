@@ -194,12 +194,12 @@ export const usePlatformTheme = () => {
     if (!sessionLoading && !themeLoading && !platformTheme && session?.platformId && !isThemeLoaded) {
       const defaultTheme: PlatformTheme = {
         platformId: session.platformId,
-        themeId: 'ocean-breeze',
-        darkMode: false
+        themeId: 'ruby-red',
+        darkMode: true
       };
       applyTheme(defaultTheme);
       setIsThemeLoaded(true);
-      console.log('🎨 تم تطبيق الثيم الافتراضي للمنصة');
+      console.log('🎨 تم تطبيق الثيم الافتراضي للمنصة (ruby-red + dark mode)');
     }
   }, [session, sessionLoading, themeLoading, platformTheme, isThemeLoaded]);
 

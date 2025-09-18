@@ -7,6 +7,7 @@ import { Link } from "wouter";
 export default function TopProducts() {
   const { data: products, isLoading } = useQuery({
     queryKey: ["/api/dashboard/top-products"],
+    enabled: false, // Disable automatic loading
   });
 
   return (

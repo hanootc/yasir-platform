@@ -3,7 +3,7 @@ import express from "express";
 import session from "express-session";
 import bcrypt from "bcrypt";
 import { db } from "./db";
-import { adminUsers } from "@shared/schema-sqlite";
+import { adminUsers } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -13,25 +13,26 @@ const loginSchema = z.object({
   password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل")
 });
 
-export function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // أسبوع واحد
+export async function setupCustomAuth(app: Express) {
+  // إعداد الجلسة للمصادقة المخصصة
+  app.set("trust proxy", 1);
   
-  // استخدام MemoryStore للتطوير المحلي مع SQLite
-  return session({
-    secret: process.env.SESSION_SECRET || 'your-super-secret-key-change-this-in-production',
+  // إضافة إعدادات الجلسة
+  const sessionTtl = 1000 * 60 * 60 * 24 * 7; // 7 days
+  
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'default-secret-key-change-in-production',
+    name: 'sanadi.sid',
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // HTTPS في الإنتاج فقط
+      secure: process.env.NODE_ENV === 'production', // Only secure in production
       maxAge: sessionTtl,
+      sameSite: 'lax',
+      domain: process.env.NODE_ENV === 'production' ? '.sanadi.pro' : undefined // Only set domain in production
     },
-  });
-}
-
-export async function setupCustomAuth(app: Express) {
-  app.set("trust proxy", 1);
-  app.use(getSession());
+  }));
   
   // تسجيل دخول الأدمن الرئيسي
   app.post("/api/admin/login", async (req, res) => {
@@ -84,6 +85,10 @@ export async function setupCustomAuth(app: Express) {
         isActive: admin.isActive
       };
       
+      // حفظ بيانات الإدارة للـ middleware
+      (req.session as any).adminId = admin.id;
+      (req.session as any).adminEmail = admin.email;
+      
       res.json({
         success: true,
         user: {
@@ -132,6 +137,14 @@ export async function setupCustomAuth(app: Express) {
 // Middleware للتحقق من تسجيل الدخول للأدمن
 export const isAdminAuthenticated: RequestHandler = (req, res, next) => {
   const user = (req.session as any).user;
+  
+  console.log('Admin Auth Check:', {
+    hasSession: !!req.session,
+    hasUser: !!user,
+    userId: user?.id,
+    userActive: user?.isActive,
+    sessionId: req.sessionID
+  });
   
   if (!user || !user.id) {
     return res.status(401).json({ message: "غير مخول للوصول" });

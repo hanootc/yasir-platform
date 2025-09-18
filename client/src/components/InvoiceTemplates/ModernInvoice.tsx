@@ -222,6 +222,10 @@ const ModernInvoice = forwardRef<HTMLDivElement, ModernInvoiceProps>(
                           maxHeight: '50px',
                           objectFit: 'contain'
                         }}
+                        onError={(e) => {
+                          console.log('Delivery logo failed to load:', deliverySettings.companyLogo);
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
                       <div style={{
                         fontSize: '10px',

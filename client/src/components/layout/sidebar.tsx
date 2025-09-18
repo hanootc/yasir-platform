@@ -5,10 +5,72 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSessionInfo } from "@/hooks/useSessionInfo";
+import { apiRequest } from "@/lib/queryClient";
+
+// Component to display admin profile in sidebar
+function AdminProfileDisplay() {
+  const { data: adminProfile, isError } = useQuery({
+    queryKey: ["/api/admin/profile"],
+    queryFn: async () => {
+      return await apiRequest(`/api/admin/profile`);
+    },
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: 3000, // Refetch every 3 seconds for faster updates
+    retry: 1,
+  });
+
+  const { user } = useAuth();
+
+  // Get the avatar URL, prioritizing admin profile over user profile
+  const avatarUrl = (adminProfile as any)?.avatarUrl || (user as any)?.profileImageUrl;
+  
+  // Get the display name, prioritizing admin profile over user profile
+  const displayName = (adminProfile as any)?.adminName || 
+                     ((user as any)?.firstName && (user as any)?.lastName ? 
+                      `${(user as any).firstName} ${(user as any).lastName}` : 
+                      (user as any)?.firstName) || 
+                     (user as any)?.email || 
+                     "مدير النظام";
+
+  console.log('Sidebar AdminProfile data:', { adminProfile, avatarUrl, displayName });
+
+  return (
+    <div className="flex items-center mb-3">
+      {avatarUrl ? (
+        <img 
+          className="h-8 w-8 rounded-full object-cover border-2 border-theme-primary/20" 
+          src={`https://sanadi.pro${avatarUrl}`} 
+          alt="صورة المدير"
+          onError={(e) => {
+            console.log('Sidebar image failed to load:', avatarUrl);
+            // Hide image if it fails to load
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+          onLoad={() => {
+            console.log('Sidebar image loaded successfully:', avatarUrl);
+          }}
+        />
+      ) : (
+        <div className="h-8 w-8 rounded-full bg-theme-gradient flex items-center justify-center">
+          <i className="fas fa-user text-white text-sm"></i>
+        </div>
+      )}
+      <div className="mr-3">
+        <p className="text-sm font-medium text-gray-900 dark:text-white">
+          {displayName}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">مدير النظام</p>
+      </div>
+    </div>
+  );
+}
 
 const menuItems = [
   {
-    href: "/",
+    href: "/dashboard",
     icon: "fas fa-chart-pie",
     label: "لوحة التحكم",
     exact: true,
@@ -27,7 +89,6 @@ const menuItems = [
     href: "/products",
     icon: "fas fa-box",
     label: "إدارة المنتجات",
-    badge: "24",
     permission: "products_view",
   },
   {
@@ -46,8 +107,6 @@ const menuItems = [
     href: "/orders",
     icon: "fas fa-shopping-cart",
     label: "إدارة الطلبات",
-    badge: "12",
-    badgeVariant: "destructive" as const,
     permission: "orders_view",
   },
 
@@ -82,19 +141,18 @@ export default function Sidebar() {
   const { hasPermission, isEmployee } = useSessionInfo();
 
 
-  // Get pending orders count
-  const { data: pendingOrdersData } = useQuery<{ count: number }>({
-    queryKey: ["/api/orders/pending-count"],
-    enabled: isAuthenticated,
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  // Remove unnecessary API calls that cause 404 errors
+  // const { data: pendingOrdersData } = useQuery<{ count: number }>({
+  //   queryKey: ["/api/orders/pending-count"],
+  //   enabled: isAuthenticated,
+  //   refetchInterval: 30000,
+  // });
 
-  // Get products count
-  const { data: productsCountData } = useQuery<{ count: number }>({
-    queryKey: ["/api/products/count"],
-    enabled: isAuthenticated,
-    refetchInterval: 60000, // Refresh every minute
-  });
+  // const { data: productsCountData } = useQuery<{ count: number }>({
+  //   queryKey: ["/api/products/count"],
+  //   enabled: isAuthenticated,
+  //   refetchInterval: 60000,
+  // });
 
   const handleLogout = () => {
     if (confirm("هل أنت متأكد من تسجيل الخروج؟")) {
@@ -157,21 +215,7 @@ export default function Sidebar() {
                 >
                   <i className={`${item.icon} ml-3 h-5 w-5`}></i>
                   <span className="flex-1">{item.label}</span>
-                  {item.href === "/orders" && pendingOrdersData?.count > 0 ? (
-                    <Badge 
-                      variant="destructive"
-                      className="ml-auto px-2 py-1 text-xs"
-                    >
-                      {pendingOrdersData.count}
-                    </Badge>
-                  ) : item.href === "/products" && productsCountData?.count > 0 ? (
-                    <Badge 
-                      variant="secondary"
-                      className="ml-auto px-2 py-1 text-xs bg-theme-primary-light text-theme-primary"
-                    >
-                      {productsCountData.count}
-                    </Badge>
-                  ) : item.badge && item.href !== "/orders" && item.href !== "/products" ? (
+                  {item.badge ? (
                     <Badge 
                       variant={item.badgeVariant || "secondary"}
                       className="ml-auto px-2 py-1 text-xs"
@@ -188,21 +232,7 @@ export default function Sidebar() {
         {/* User Profile */}
         <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
           <div className="px-4">
-            {user && (
-              <div className="flex items-center mb-3">
-                <img 
-                  className="h-8 w-8 rounded-full object-cover" 
-                  src={(user as any).profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100"} 
-                  alt="صورة المستخدم"
-                />
-                <div className="mr-3">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {(user as any).firstName || (user as any).lastName ? `${(user as any).firstName || ""} ${(user as any).lastName || ""}`.trim() : (user as any).email}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{(user as any).role === "admin" ? "مدير النظام" : "موظف"}</p>
-                </div>
-              </div>
-            )}
+            <AdminProfileDisplay />
             <Button 
               variant="ghost" 
               size="sm"

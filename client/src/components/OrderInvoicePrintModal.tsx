@@ -24,7 +24,7 @@ import InvoiceTemplateSelector from './InvoiceTemplateSelector';
 interface OrderInvoicePrintModalProps {
   orders: any[];
   platformName: string;
-  platformLogo?: string;
+  platformLogo?: string | null;
   platformId?: string;
   isOpen: boolean;
   onClose: () => void;
@@ -88,7 +88,7 @@ export default function OrderInvoicePrintModal({
   });
 
   // Get active delivery companies
-  const { data: activeDeliveryCompanies = [], isLoading: isLoadingCompanies } = useQuery({
+  const { data: activeDeliveryCompanies = [], isLoading: isLoadingCompanies } = useQuery<any[]>({
     queryKey: [`/api/platforms/${platformId}/active-delivery-companies`],
     enabled: !!platformId,
     retry: false,
@@ -99,7 +99,7 @@ export default function OrderInvoicePrintModal({
   // Set default active delivery company when modal opens and companies are loaded
   // Only if no saved setting exists (first time user)
   useEffect(() => {
-    if (isOpen && activeDeliveryCompanies.length > 0 && selectedDeliveryCompany === 'none' && !savedSettings.selectedDeliveryCompany) {
+    if (isOpen && Array.isArray(activeDeliveryCompanies) && activeDeliveryCompanies.length > 0 && selectedDeliveryCompany === 'none' && !savedSettings.selectedDeliveryCompany) {
       // Find the active company (assuming there's only one active, or pick the first one)
       const activeCompany = activeDeliveryCompanies.find((company: any) => company.isActive) || activeDeliveryCompanies[0];
       if (activeCompany) {
@@ -202,10 +202,9 @@ export default function OrderInvoicePrintModal({
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `فواتير-${new Date().toLocaleDateString('ar')}`,
-    onBeforeGetContent: () => {
+    onBeforePrint: async () => {
       // Set print date when user clicks print
       setPrintDate(new Date());
-      return Promise.resolve();
     },
     pageStyle: `
       @page {
@@ -269,9 +268,9 @@ export default function OrderInvoicePrintModal({
   const selectedOrdersData = orders.filter(order => selectedOrders.includes(order.id));
 
   // Get selected delivery company data
-  const selectedDeliveryCompanyData = activeDeliveryCompanies.find(
+  const selectedDeliveryCompanyData = Array.isArray(activeDeliveryCompanies) ? activeDeliveryCompanies.find(
     (company: any) => company.id === selectedDeliveryCompany
-  );
+  ) : undefined;
 
   return (
     <>
@@ -563,7 +562,7 @@ export default function OrderInvoicePrintModal({
                       <SimpleLargeInvoice
                         orders={selectedOrdersData}
                         platformName={platformName}
-                        platformLogo={platformLogo}
+                        platformLogo={platformLogo || undefined}
                         deliverySettings={deliverySettings}
                         selectedDeliveryCompany={selectedDeliveryCompanyData}
                         paperSize={selectedPaperSize}
@@ -576,7 +575,7 @@ export default function OrderInvoicePrintModal({
                       <MinimalInvoice
                         orders={selectedOrdersData}
                         platformName={platformName}
-                        platformLogo={platformLogo}
+                        platformLogo={platformLogo || undefined}
                         deliverySettings={deliverySettings}
                         selectedDeliveryCompany={selectedDeliveryCompanyData}
                         paperSize={selectedPaperSize}
@@ -619,7 +618,7 @@ export default function OrderInvoicePrintModal({
             <SimpleLargeInvoice
               orders={selectedOrdersData}
               platformName={platformName}
-              platformLogo={platformLogo}
+              platformLogo={platformLogo || undefined}
               deliverySettings={deliverySettings}
               selectedDeliveryCompany={selectedDeliveryCompanyData}
               paperSize={selectedPaperSize}
@@ -631,27 +630,21 @@ export default function OrderInvoicePrintModal({
         )}
         {selectedTemplate === 'simple-classic' && (
           <div ref={componentRef}>
-            <SimpleClassicInvoice
+            <ClassicInvoice
               orders={selectedOrdersData}
               platformName={platformName}
-              platformLogo={platformLogo}
+              platformLogo={platformLogo || undefined}
               deliverySettings={deliverySettings}
-              selectedDeliveryCompany={selectedDeliveryCompanyData}
-              paperSize={selectedPaperSize}
-              orientation={paperOrientation}
             />
           </div>
         )}
         {selectedTemplate === 'simple-modern' && (
           <div ref={componentRef}>
-            <SimpleModernInvoice
+            <ModernInvoice
               orders={selectedOrdersData}
               platformName={platformName}
-              platformLogo={platformLogo}
+              platformLogo={platformLogo || undefined}
               deliverySettings={deliverySettings}
-              selectedDeliveryCompany={selectedDeliveryCompanyData}
-              paperSize={selectedPaperSize}
-              orientation={paperOrientation}
             />
           </div>
         )}
@@ -660,7 +653,7 @@ export default function OrderInvoicePrintModal({
             ref={componentRef}
             orders={selectedOrdersData}
             platformName={platformName}
-            platformLogo={platformLogo}
+            platformLogo={platformLogo || undefined}
             deliverySettings={deliverySettings}
             selectedDeliveryCompany={selectedDeliveryCompanyData}
             paperSize={selectedPaperSize}
@@ -677,7 +670,7 @@ export default function OrderInvoicePrintModal({
         onClose={() => setShowTemplateSelector(false)}
         orders={orders}
         platformName={platformName}
-        platformLogo={platformLogo}
+        platformLogo={platformLogo || undefined}
         deliverySettings={deliverySettings}
         onTemplateSelect={(template) => setSelectedTemplate(template)}
       />

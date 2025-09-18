@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,8 @@ import { Loader2, X, Unlock, Lock, Wand2, CheckCircle, XCircle } from 'lucide-re
 import { isUnauthorizedError } from '@/lib/authUtils';
 import { ImageUploadManager } from '@/components/ui/image-upload-manager';
 import { FlexibleOffersManager } from '@/components/ui/flexible-offers-manager';
+import { ProductVariantsTab } from '@/components/product-variants/ProductVariantsTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PriceOffer } from '@shared/schema';
 
 interface EditProductModalProps {
@@ -33,6 +35,23 @@ export default function EditProductModal({ isOpen, onClose, product, platformId 
     categoryId: '',
     isActive: true
   });
+
+  // إعادة تعيين النموذج فقط عند الإغلاق (وليس عند الفتح)
+  const handleClose = () => {
+    setFormData({
+      name: '',
+      description: '',
+      price: '',
+      cost: '',
+      stock: '',
+      categoryId: '',
+      isActive: true
+    });
+    setProductImages([]);
+    setAdditionalImages([]);
+    setPriceOffers([]);
+    onClose();
+  };
 
   const [productImages, setProductImages] = useState<string[]>([]);
   const [additionalImages, setAdditionalImages] = useState<string[]>([]);
@@ -55,69 +74,146 @@ export default function EditProductModal({ isOpen, onClose, product, platformId 
 
   useEffect(() => {
     if (product) {
-      setFormData({
-        name: product.name || '',
-        description: product.description || '',
-        price: product.price ? Math.round(product.price).toLocaleString('en-US') : '',
-        cost: product.cost ? Math.round(product.cost).toLocaleString('en-US') : '',
-        stock: product.stock ? Math.round(product.stock).toLocaleString('en-US') : '',
-        categoryId: product.categoryId || '',
-        isActive: product.isActive ?? true
+      console.log('Product data received in modal:', product);
+      console.log('Available fields:', Object.keys(product));
+      
+      // Extract cost value from multiple possible field names
+      const costValue = product.costPerItem || product.cost || product.cost_per_item || product.costperitem;
+      const stockValue = product.quantity || product.stock;
+      const categoryValue = product.categoryId || product.category_id;
+      const activeValue = product.isActive ?? product.is_active;
+      
+      console.log('Extracted values:', {
+        cost: costValue,
+        stock: stockValue,
+        category: categoryValue,
+        active: activeValue
       });
       
+      const formDataToSet = {
+        name: product.name || '',
+        description: product.description || '',
+        price: product.price ? Math.round(parseFloat(product.price)).toLocaleString('en-US') : '',
+        cost: costValue && costValue !== null ? Math.round(parseFloat(costValue)).toLocaleString('en-US') : '',
+        stock: stockValue && stockValue !== null ? Math.round(parseFloat(stockValue)).toLocaleString('en-US') : '',
+        categoryId: categoryValue || '',
+        isActive: activeValue ?? true
+      };
+      
+      console.log('Setting form data to:', formDataToSet);
+      setFormData(formDataToSet);
+      
       // تحديد الصور الحالية
-      setProductImages(product.imageUrls || []);
-      setAdditionalImages(product.additionalImages || []);
+      let currentImages = [];
+      if (product.imageUrls && Array.isArray(product.imageUrls) && product.imageUrls.length > 0) {
+        currentImages = product.imageUrls;
+        console.log('Using imageUrls:', currentImages);
+      } else if (product.images) {
+        try {
+          const parsedImages = JSON.parse(product.images);
+          if (Array.isArray(parsedImages) && parsedImages.length > 0) {
+            currentImages = parsedImages;
+            console.log('Using parsed images:', currentImages);
+          }
+        } catch (e) {
+          console.warn('Failed to parse product images:', e);
+        }
+      }
+      setProductImages(currentImages);
+      // تحديد الصور الإضافية
+      let currentAdditionalImages = [];
+      if (product.additionalImages) {
+        if (Array.isArray(product.additionalImages)) {
+          currentAdditionalImages = product.additionalImages;
+        } else if (typeof product.additionalImages === 'string') {
+          try {
+            const parsedAdditionalImages = JSON.parse(product.additionalImages);
+            if (Array.isArray(parsedAdditionalImages)) {
+              currentAdditionalImages = parsedAdditionalImages;
+            }
+          } catch (e) {
+            console.warn('Failed to parse additional images:', e);
+          }
+        }
+      }
+      setAdditionalImages(currentAdditionalImages);
       
       // تحديد العروض المرنة الحالية
-      setPriceOffers(product.priceOffers || []);
+      let currentPriceOffers = [];
+      if (product.priceOffers) {
+        if (Array.isArray(product.priceOffers)) {
+          currentPriceOffers = product.priceOffers;
+        } else if (typeof product.priceOffers === 'string') {
+          try {
+            const parsedOffers = JSON.parse(product.priceOffers);
+            if (Array.isArray(parsedOffers)) {
+              currentPriceOffers = parsedOffers;
+            }
+          } catch (e) {
+            console.warn('Failed to parse price offers:', e);
+          }
+        }
+      }
+      setPriceOffers(currentPriceOffers);
     }
   }, [product]);
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
+      console.log('🔄 Starting product update...');
+      console.log('Form data received:', data);
+      console.log('Product ID:', product.id);
+      console.log('Platform ID:', platformId);
+      
       const updateData = {
-        name: data.name,
-        description: data.description,
-        price: parseFloat(data.price.replace(/,/g, '')) || 0,
-        cost: data.cost ? parseFloat(data.cost.replace(/,/g, '')) : undefined,
-        stock: data.stock ? parseInt(data.stock.replace(/,/g, '')) : undefined,
-        categoryId: data.categoryId && data.categoryId !== 'none' ? data.categoryId : undefined,
-        isActive: data.isActive,
+        name: formData.name,
+        description: formData.description,
+        price: parseFloat(formData.price.replace(/,/g, '')),
+        cost: formData.cost ? parseFloat(formData.cost.replace(/,/g, '')) : null,
+        stock: formData.stock ? parseFloat(formData.stock.replace(/,/g, '')) : null,
+        categoryId: formData.categoryId || null,
+        isActive: formData.isActive,
         imageUrls: productImages,
         additionalImages: additionalImages,
-        priceOffers: priceOffers.length > 0 ? priceOffers : null
+        priceOffers: priceOffers
       };
-      return apiRequest(`/api/platforms/${platformId}/products/${product.id}`, 'PATCH', updateData);
+      
+      console.log('📤 Sending update data:', updateData);
+      
+      const response = await apiRequest(`/api/platforms/${platformId}/products/${product.id}`, 'PATCH', updateData);
+      
+      console.log('✅ Update response:', response);
+      return response;
     },
-    onSuccess: () => {
+    onSuccess: (updatedProduct) => {
+      console.log('✅ Product updated successfully, received:', updatedProduct);
+      
       toast({
         title: 'تم التحديث بنجاح',
         description: 'تم تحديث المنتج بنجاح',
       });
       
-      // Invalidate all relevant queries
+      // Invalidate and refetch all product-related queries immediately
       queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/products`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/landing-pages`] });
       queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/product-names`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/products/${product.id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/landing-pages`] });
       
-      // Also invalidate any landing pages associated with this product
+      // Invalidate specific product queries
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const queryKey = query.queryKey as string[];
           return queryKey.some(key => 
             typeof key === 'string' && 
-            (key.includes('landing') || key.includes('product') || key.includes('public'))
+            (key.includes('public/products') || key.includes(`products/${product.id}`))
           );
         }
       });
       
-      // Specifically invalidate public product endpoints that landing pages use
-      queryClient.invalidateQueries({ queryKey: ['/api/public/products'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/public/products', product.id] });
+      // Force immediate refetch to update UI
+      queryClient.refetchQueries({ queryKey: [`/api/platforms/${platformId}/products`] });
       
-      onClose();
+      // Close modal immediately - data will update automatically
+      handleClose();
     },
     onError: (error: any) => {
       toast({
@@ -223,22 +319,33 @@ export default function EditProductModal({ isOpen, onClose, product, platformId 
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 border-0">
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 border-0">
         <DialogHeader className="flex flex-row items-center justify-between border-0 pb-4">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            onClick={onClose}
+            onClick={handleClose}
             className="w-8 h-8 rounded-full bg-theme-gradient hover:opacity-90 text-white flex items-center justify-center p-0 flex-shrink-0 transition-all duration-200 hover:shadow-md"
           >
             <X className="h-4 w-4" />
           </Button>
           <div className="flex-1 text-right pr-4">
             <DialogTitle className="text-xl font-semibold text-theme-primary">تعديل المنتج</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              قم بتحديث معلومات المنتج وحفظ التغييرات
+            </DialogDescription>
           </div>
         </DialogHeader>
+        
+        <Tabs defaultValue="basic" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="basic">المعلومات الأساسية</TabsTrigger>
+            <TabsTrigger value="variants">المتغيرات والأحجام</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="basic" className="space-y-4">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="name">اسم المنتج*</Label>
@@ -358,11 +465,11 @@ export default function EditProductModal({ isOpen, onClose, product, platformId 
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">بدون تصنيف</SelectItem>
-                {categories && Array.isArray(categories) && categories.map((category: any) => (
+                {categories && Array.isArray(categories) ? categories.map((category: any) => (
                   <SelectItem key={category.id} value={category.id}>
-                    {category.name || ''}
+                    {String(category.name || '')}
                   </SelectItem>
-                ))}
+                )) : null}
               </SelectContent>
             </Select>
           </div>
@@ -422,37 +529,43 @@ export default function EditProductModal({ isOpen, onClose, product, platformId 
             </Label>
           </div>
 
-          <DialogFooter className="gap-3 pt-6 border-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={mutation.isPending}
-              className="px-6 py-3 text-base theme-border hover:bg-theme-primary-light hover:text-theme-primary"
-            >
-              إلغاء
-            </Button>
-            <Button
-              type="submit"
-              disabled={mutation.isPending || isUploadingImages || isUploadingAdditionalImages}
-              className="bg-theme-gradient hover:opacity-90 px-6 py-3 text-base font-semibold text-white transition-all duration-200 hover:shadow-lg"
-            >
-              {(isUploadingImages || isUploadingAdditionalImages) ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-                  يتم رفع الصور...
-                </>
-              ) : mutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  جارٍ الحفظ...
-                </>
-              ) : (
-                "حفظ التعديلات"
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter className="gap-3 pt-6 border-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={mutation.isPending}
+                className="px-6 py-3 text-base theme-border hover:bg-theme-primary-light hover:text-theme-primary"
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                disabled={mutation.isPending || isUploadingImages || isUploadingAdditionalImages}
+                className="bg-theme-gradient hover:opacity-90 px-6 py-3 text-base font-semibold text-white transition-all duration-200 hover:shadow-lg"
+              >
+                {(isUploadingImages || isUploadingAdditionalImages) ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
+                    يتم رفع الصور...
+                  </>
+                ) : mutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    جارٍ الحفظ...
+                  </>
+                ) : (
+                  "حفظ التعديلات"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+          </TabsContent>
+          
+          <TabsContent value="variants" className="space-y-4">
+            <ProductVariantsTab productId={product?.id} platformId={platformId} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
 
       {/* AI Generated Description Preview */}

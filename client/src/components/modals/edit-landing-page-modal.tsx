@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -80,9 +81,20 @@ export default function EditLandingPageModal({
   // Get platform session
   const { session: platformSession } = usePlatformSession();
 
+  // Get employee session if available
+  const { data: employeeSession } = useQuery({
+    queryKey: ["/api/employee-session"],
+    retry: false,
+  });
+
+  // Extract platform ID - handle both platform and employee sessions
+  const platformId = (employeeSession as any)?.success 
+    ? (employeeSession as any).employee.platformId 
+    : platformSession?.platformId;
+
   const { data: products } = useQuery({
-    queryKey: [`/api/platforms/${platformSession?.platformId}/products`],
-    enabled: !!platformSession?.platformId,
+    queryKey: [`/api/platforms/${platformId}/products`],
+    enabled: !!platformId,
   });
 
   const form = useForm<EditLandingPageFormData>({
@@ -113,17 +125,14 @@ export default function EditLandingPageModal({
 
   const updateLandingPageMutation = useMutation({
     mutationFn: async (data: EditLandingPageFormData) => {
-      if (!platformSession?.platformId) {
+      if (!platformId) {
         throw new Error('معرف المنصة غير متوفر');
       }
-      return apiRequest(`/api/platforms/${platformSession.platformId}/landing-pages/${landingPage.id}`, {
-        method: "PATCH",
-        body: data
-      });
+      return apiRequest(`/api/platforms/${platformId}/landing-pages/${landingPage.id}`, "PATCH", data);
     },
     onSuccess: () => {
-      if (platformSession?.platformId) {
-        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformSession.platformId}/landing-pages`] });
+      if (platformId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/landing-pages`] });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
       
@@ -183,6 +192,9 @@ export default function EditLandingPageModal({
           <DialogTitle className="text-right text-xl font-bold text-theme-primary">
             تحرير صفحة الهبوط: {landingPage?.title}
           </DialogTitle>
+          <DialogDescription className="text-right text-gray-600">
+            قم بتحرير إعدادات وتصميم صفحة الهبوط الخاصة بك
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

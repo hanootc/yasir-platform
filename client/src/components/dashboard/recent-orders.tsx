@@ -66,6 +66,7 @@ const formatTimeAgo = (date: string) => {
 export default function RecentOrders() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ["/api/dashboard/recent-orders"],
+    enabled: false, // Disable automatic loading
   });
 
   return (

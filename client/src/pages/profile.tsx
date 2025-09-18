@@ -28,6 +28,18 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
 
+interface PlatformSession {
+  platformId: string;
+  platformName: string;
+  subdomain: string;
+  userType: string;
+  logoUrl?: string;
+  description?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  whatsappNumber?: string;
+}
+
 // Schema for basic profile update
 const profileSchema = z.object({
   platformName: z.string().min(1, "اسم المنصة مطلوب"),
@@ -68,16 +80,19 @@ export default function Profile() {
     retry: false,
   });
 
+  // Type the session data
+  const platformSession = session as PlatformSession | undefined;
+
   // Profile form
   const profileForm = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      platformName: session?.platformName || "",
-      subdomain: session?.subdomain || "",
-      description: session?.description || "",
-      contactEmail: session?.contactEmail || "",
-      contactPhone: session?.contactPhone || "",
-      whatsappNumber: session?.whatsappNumber || "",
+      platformName: platformSession?.platformName || "",
+      subdomain: platformSession?.subdomain || "",
+      description: platformSession?.description || "",
+      contactEmail: platformSession?.contactEmail || "",
+      contactPhone: platformSession?.contactPhone || "",
+      whatsappNumber: platformSession?.whatsappNumber || "",
     },
   });
 
@@ -94,10 +109,7 @@ export default function Profile() {
   // Update profile mutation
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      return apiRequest(`/api/platforms/${session?.platformId}/profile`, {
-        method: "PATCH",
-        body: data
-      });
+      return apiRequest(`/api/platforms/${platformSession?.platformId}/profile`, "PATCH", data);
     },
     onSuccess: () => {
       toast({
@@ -107,6 +119,7 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["/api/platform-session"] });
     },
     onError: (error) => {
+      console.error('Profile update error:', error);
       if (isUnauthorizedError(error)) {
         toast({
           title: "غير مخول",
@@ -114,13 +127,13 @@ export default function Profile() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/platform-login";
         }, 500);
         return;
       }
       toast({
         title: "خطأ",
-        description: "فشل في تحديث الملف الشخصي",
+        description: `فشل في تحديث الملف الشخصي: ${error}`,
         variant: "destructive",
       });
     },
@@ -129,10 +142,7 @@ export default function Profile() {
   // Change password mutation
   const changePasswordMutation = useMutation({
     mutationFn: async (data: PasswordFormData) => {
-      return apiRequest(`/api/platforms/${session?.platformId}/change-password`, {
-        method: "POST",
-        body: data
-      });
+      return apiRequest(`/api/platforms/${platformSession?.platformId}/change-password`, "POST", data);
     },
     onSuccess: () => {
       toast({
@@ -149,7 +159,7 @@ export default function Profile() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/platform-login";
         }, 500);
         return;
       }
@@ -164,10 +174,7 @@ export default function Profile() {
   // Logo update mutation
   const updateLogoMutation = useMutation({
     mutationFn: async (logoURL: string) => {
-      return apiRequest(`/api/platforms/${session?.platformId}/logo`, {
-        method: "PUT",
-        body: { logoURL }
-      });
+      return apiRequest(`/api/platforms/${platformSession?.platformId}/logo`, "PUT", { logoURL });
     },
     onSuccess: (updatedPlatform) => {
       toast({
@@ -185,7 +192,7 @@ export default function Profile() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/platform-login";
         }, 500);
         return;
       }
@@ -206,14 +213,14 @@ export default function Profile() {
   };
 
   // Update form defaults when session loads
-  if (session && session.platformName && !profileForm.getValues().platformName) {
+  if (platformSession && platformSession.platformName && !profileForm.getValues().platformName) {
     profileForm.reset({
-      platformName: session.platformName || "",
-      subdomain: session.subdomain || "",
-      description: session.description || "",
-      contactEmail: session.contactEmail || "",
-      contactPhone: session.contactPhone || "",
-      whatsappNumber: session.whatsappNumber || "",
+      platformName: platformSession.platformName || "",
+      subdomain: platformSession.subdomain || "",
+      description: platformSession.description || "",
+      contactEmail: platformSession.contactEmail || "",
+      contactPhone: platformSession.contactPhone || "",
+      whatsappNumber: platformSession.whatsappNumber || "",
     });
   }
 
@@ -228,7 +235,7 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-theme-primary-lighter flex relative" dir="rtl">
       <PlatformSidebar 
-        session={session} 
+        session={platformSession || {} as PlatformSession} 
         currentPath="/profile" 
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -292,10 +299,10 @@ export default function Profile() {
                           <h4 className="text-lg font-semibold mb-3 text-theme-text">شعار المنصة</h4>
                           
                           {/* Current Logo Display */}
-                          {session?.logoUrl ? (
+                          {platformSession?.logoUrl ? (
                             <div className="mb-4">
                               <img
-                                src={session.logoUrl}
+                                src={platformSession.logoUrl}
                                 alt="شعار المنصة"
                                 className="w-24 h-24 object-contain mx-auto rounded-lg theme-border bg-theme-primary-lighter p-2"
                               />
@@ -323,7 +330,7 @@ export default function Profile() {
                             buttonClassName="bg-theme-gradient text-white theme-shadow"
                           >
                             <Upload className="h-4 w-4 ml-2" />
-                            {session?.logoUrl ? "تغيير الشعار" : "رفع شعار"}
+                            {platformSession?.logoUrl ? "تغيير الشعار" : "رفع شعار"}
                           </LogoUploader>
                           
                           <p className="text-xs text-theme-text-secondary mt-2">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -6,20 +6,48 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CategoriesManager } from "@/components/categories/categories-manager";
 import { PlatformSelector } from "@/components/PlatformSelector";
 import { Badge } from "@/components/ui/badge";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Categories() {
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [session, setSession] = useState<any>(null);
+
+  // Get platform session - removed admin API call
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        // Use platform session instead of admin user
+        const response = await fetch('/api/platform-session', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const sessionData = await response.json();
+          if (!sessionData.error) {
+            setSession({ user: sessionData, platformId: sessionData.platformId });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching session:', error);
+        // Set empty session to continue
+        setSession({ user: null, platformId: null });
+      }
+    };
+    fetchSession();
+  }, []);
 
   const { data: categories, isLoading } = useQuery({
     queryKey: selectedPlatform ? ["/api/categories", { platformId: selectedPlatform }] : ["/api/categories"],
     queryFn: async () => {
-      const url = selectedPlatform 
-        ? `/api/categories?platformId=${selectedPlatform}`
-        : '/api/categories';
+      if (!selectedPlatform) {
+        return [];
+      }
+      
+      const url = `/api/categories?platformId=${selectedPlatform}`;
       
       console.log("🔍 Fetching categories from:", url);
       const response = await fetch(url, {
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
@@ -29,8 +57,28 @@ export default function Categories() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      return response.json();
-    }
+      const data = await response.json();
+      
+      // Filter out duplicates by grouping by name and taking the most recent one
+      if (Array.isArray(data)) {
+        const uniqueCategories = data.reduce((acc: any[], category: any) => {
+          const existingIndex = acc.findIndex(c => c.name === category.name);
+          if (existingIndex === -1) {
+            acc.push(category);
+          } else {
+            // Keep the most recent one (latest createdAt)
+            if (new Date(category.createdAt) > new Date(acc[existingIndex].createdAt)) {
+              acc[existingIndex] = category;
+            }
+          }
+          return acc;
+        }, []);
+        return uniqueCategories;
+      }
+      
+      return data;
+    },
+    enabled: !!selectedPlatform
   });
 
   const handleCreateCategory = () => {
@@ -92,7 +140,17 @@ export default function Categories() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <CategoriesManager />
+              {selectedPlatform ? (
+                <CategoriesManager platformId={selectedPlatform} />
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-gray-500 mb-4">
+                    <i className="fas fa-tags text-6xl mb-4"></i>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">اختر منصة لعرض التصنيفات</h3>
+                  <p className="text-gray-500">يرجى اختيار منصة من القائمة أعلاه لعرض وإدارة التصنيفات</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </main>

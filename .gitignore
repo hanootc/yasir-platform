@@ -4,3 +4,50 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Database files
+server/database.sqlite
+server/database.sqlite-*
+
+# Upload files
+public/uploads/
+uploads/
+
+# Log files
+*.log
+server.log
+
+# Test files
+*_test.txt
+*test*.html
+*test*.js
+test_*.txt
+working_session.txt
+refresh_test.txt
+settings_test.txt
+
+# Backup files
+*.backup
+*.bak
+
+# Environment files
+.env.local
+.env.production
+
+# Temporary files
+*.tmp
+*.temp
+
+# WhatsApp session files
+.wwebjs_auth/
+whatsapp_sessions.json
+.session_cookies
+
+# Development database
+local-dev.db
+
+# Environment files
+.env
+
+# Other files
+-H

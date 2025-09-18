@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, lazy } from "react";
 import { useThemeInitializer } from "@/hooks/useThemeInitializer";
+import { AuthGuard } from "@/components/AuthGuard";
+import { AdminAuthGuard } from "@/components/AdminAuthGuard";
 
 // Import components directly for faster loading
 import NotFound from "@/pages/not-found";
@@ -82,30 +84,54 @@ const LoadingSpinner = () => (
 );
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-
+  // Don't call useAuth in Router - causes unnecessary API calls on all pages
   return (
     <Switch>
       <Route path="/thank-you/:orderId" component={ThankYou} />
+      <Route path="/:platform/thank-you/:orderId" component={ThankYou} />
       <Route path="/view-landing/:slug" component={LandingPageView} />
       <Route path="/product-preview/:id" component={ProductPreview} />
       <Route path="/public-product/:id" component={PublicProductView} />
 
       <Route path="/platform-success" component={PlatformSuccess} />
       <Route path="/platform-login" component={PlatformAdminLogin} />
-      <Route path="/admin/:subdomain" component={PlatformDashboard} />
-      <Route path="/admin/:subdomain/products" component={PlatformProducts} />
-      <Route path="/admin/:subdomain/orders" component={PlatformOrders} />
-      <Route path="/platform/:platformId" component={PlatformDashboard} />
-      <Route path="/platform/:platformId/dashboard" component={PlatformDashboard} />
-      <Route path="/platform/:platformId/products" component={PlatformProducts} />
-      <Route path="/platform/:platformId/landing-pages" component={PlatformLandingPages} />
-      <Route path="/platform/:platformId/orders" component={PlatformOrders} />
-      <Route path="/platform/:platformId/inventory" component={PlatformInventory} />
-      <Route path="/platform/:platformId/whatsapp" component={PlatformWhatsApp} />
-      <Route path="/platform" component={PlatformDashboard} />
-      <Route path="/platform-dashboard" component={PlatformDashboard} />
-      <Route path="/platform-products" component={PlatformProducts} />
+      
+      {/* Protected platform routes - MUST come before /:subdomain/:slug */}
+      <Route path="/admin/:subdomain" component={() => <AuthGuard><PlatformDashboard /></AuthGuard>} />
+      <Route path="/admin/:subdomain/products" component={() => <AuthGuard><PlatformProducts /></AuthGuard>} />
+      <Route path="/admin/:subdomain/orders" component={() => <AuthGuard><PlatformOrders /></AuthGuard>} />
+      <Route path="/platform/:subdomain" component={() => <AuthGuard><PlatformDashboard /></AuthGuard>} />
+      <Route path="/platform/:subdomain/dashboard" component={() => <AuthGuard><PlatformDashboard /></AuthGuard>} />
+      <Route path="/platform/:subdomain/products" component={() => <AuthGuard><PlatformProducts /></AuthGuard>} />
+      <Route path="/platform/:subdomain/categories" component={() => <AuthGuard><PlatformCategories /></AuthGuard>} />
+      <Route path="/platform/:subdomain/landing-pages" component={() => <AuthGuard><PlatformLandingPages /></AuthGuard>} />
+      <Route path="/platform/:subdomain/orders" component={() => <AuthGuard><PlatformOrders /></AuthGuard>} />
+      <Route path="/platform/:subdomain/inventory" component={() => <AuthGuard><PlatformInventory /></AuthGuard>} />
+      <Route path="/platform/:subdomain/whatsapp" component={() => <AuthGuard><PlatformWhatsApp /></AuthGuard>} />
+      <Route path="/platform/:subdomain/employees" component={() => <AuthGuard><PlatformEmployees /></AuthGuard>} />
+      <Route path="/platform/:subdomain/ads-tiktok" component={() => <AuthGuard><PlatformAdsTikTok /></AuthGuard>} />
+      <Route path="/platform/:subdomain/ads-meta" component={() => <AuthGuard><PlatformAdsMeta /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting" component={() => <AuthGuard><AccountingDashboard /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/dashboard" component={() => <AuthGuard><AccountingDashboard /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/cash-management" component={() => <AuthGuard><CashManagement /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/chart-of-accounts" component={() => <AuthGuard><ChartOfAccounts /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/expenses" component={() => <AuthGuard><ExpenseManagement /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/journal-entries" component={() => <AuthGuard><JournalEntries /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/journal-entries/new" component={() => <AuthGuard><CreateJournalEntry /></AuthGuard>} />
+      <Route path="/platform/:subdomain/accounting/reports" component={() => <AuthGuard><FinancialReports /></AuthGuard>} />
+      <Route path="/platform/:subdomain/reports" component={() => <AuthGuard><PlatformReports /></AuthGuard>} />
+      <Route path="/platform/:subdomain/settings" component={() => <AuthGuard><PlatformSettings /></AuthGuard>} />
+      <Route path="/platform/:subdomain/general-settings" component={() => <AuthGuard><PlatformGeneralSettings /></AuthGuard>} />
+      <Route path="/platform/:subdomain/store-settings" component={() => <AuthGuard><PlatformStoreSettings /></AuthGuard>} />
+      <Route path="/platform/:subdomain/delivery-settings" component={() => <AuthGuard><DeliverySettings /></AuthGuard>} />
+      <Route path="/platform/:subdomain/whatsapp-settings" component={() => <AuthGuard><WhatsAppSettings /></AuthGuard>} />
+      <Route path="/platform/:subdomain/profile" component={() => <AuthGuard><Profile /></AuthGuard>} />
+      <Route path="/platform/:subdomain/my-accounts" component={() => <AuthGuard><MyAccounts /></AuthGuard>} />
+      <Route path="/platform/:subdomain/ads-tiktok-management" component={() => <AuthGuard><PlatformAdsTikTokManagement /></AuthGuard>} />
+      <Route path="/platform/:subdomain/ads-meta-management" component={() => <AuthGuard><PlatformAdsMetaManagement /></AuthGuard>} />
+      <Route path="/platform" component={() => <AuthGuard><PlatformDashboard /></AuthGuard>} />
+      <Route path="/platform-dashboard" component={() => <AuthGuard><PlatformDashboard /></AuthGuard>} />
+      <Route path="/platform-products" component={() => <AuthGuard><PlatformProducts /></AuthGuard>} />
       <Route path="/platform-categories" component={PlatformCategories} />
       <Route path="/platform-landing-pages" component={PlatformLandingPages} />
       <Route path="/platform-orders" component={PlatformOrders} />
@@ -136,6 +162,7 @@ function Router() {
       <Route path="/employee/login" component={EmployeeLogin} />
       <Route path="/employee/dashboard" component={EmployeeDashboard} />
       <Route path="/employee-dashboard" component={EmployeeDashboard} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/privacy/:slug" component={PrivacyPolicy} />
       <Route path="/product/:slug" component={LandingPageView} />
       <Route path="/profile" component={Profile} />
@@ -147,13 +174,27 @@ function Router() {
       <Route path="/whatsapp-settings" component={WhatsAppSettings} />
       <Route path="/login" component={Login} />
       <Route path="/system-admin-login" component={SystemAdminLogin} />
+      <Route path="/dashboard" component={() => <AdminAuthGuard><Dashboard /></AdminAuthGuard>} />
+      <Route path="/admin-dashboard" component={() => <AdminAuthGuard><AdminDashboard /></AdminAuthGuard>} />
+      <Route path="/payment" component={() => <AdminAuthGuard><AdminDashboard /></AdminAuthGuard>} />
+      <Route path="/direct-access" component={() => <AdminAuthGuard><DirectAccess /></AdminAuthGuard>} />
+      <Route path="/admin-profile" component={() => <AdminAuthGuard><AdminProfile /></AdminAuthGuard>} />
       <Route path="/register-platform" component={PlatformRegistration} />
       <Route path="/platform-registration" component={PlatformRegistration} />
       <Route path="/subscription-expired" component={SubscriptionExpired} />
       <Route path="/subscription-renewal" component={SubscriptionRenewal} />
-      <Route path="/payment" component={Payment} />
-      {/* Customer store route - should be at the end to avoid conflicts */}
-      <Route path="/:subdomain" component={CustomerStore} />
+      
+      {/* Admin sidebar routes - must be before parametric routes */}
+      <Route path="/products" component={Products} />
+      <Route path="/categories" component={Categories} />
+      <Route path="/landing-pages" component={LandingPages} />
+      <Route path="/orders" component={OrdersTable} />
+      <Route path="/orders-table" component={OrdersTable} />
+      <Route path="/accounting" component={Accounting} />
+      <Route path="/employees" component={Employees} />
+      <Route path="/reports" component={Reports} />
+      <Route path="/settings" component={Settings} />
+      
       {/* Employee routes using subdomain format */}
       <Route path="/souqnaiq/dashboard" component={EmployeeDashboard} />
       <Route path="/souqnaiq/products" component={PlatformProducts} />
@@ -166,21 +207,14 @@ function Router() {
       <Route path="/souqnaiq/reports" component={PlatformReports} />
       <Route path="/souqnaiq/settings" component={PlatformSettings} />
       
-      <Route path="/:platform/:slug" component={LandingPageView} />
-      <Route path="/" component={Dashboard} />
-
-      <Route path="/admin-dashboard" component={AdminDashboard} />
-      <Route path="/products" component={Products} />
-      <Route path="/categories" component={Categories} />
-      <Route path="/landing-pages" component={LandingPages} />
-      <Route path="/orders" component={OrdersTable} />
-      <Route path="/orders-table" component={OrdersTable} />
-      <Route path="/accounting" component={Accounting} />
-      <Route path="/employees" component={Employees} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/direct-access" component={DirectAccess} />
-      <Route path="/admin-profile" component={AdminProfile} />
+      
+      <Route path="/" component={MarketingLanding} />
+      
+      {/* Landing page routes - must come before /:subdomain to avoid conflicts */}
+      <Route path="/:subdomain/:slug" component={LandingPageView} />
+      
+      {/* Customer store route - should be at the end to avoid conflicts */}
+      <Route path="/:subdomain" component={CustomerStore} />
       <Route component={NotFound} />
     </Switch>
   );

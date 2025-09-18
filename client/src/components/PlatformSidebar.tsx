@@ -69,64 +69,64 @@ const permissionMap: { [key: string]: string } = {
 };
 
 // Navigation menu items - centralized configuration
-const menuItems = [
+const getMenuItems = (subdomain: string) => [
   {
-    href: "/platform-dashboard", // Will be dynamically changed to /employee-dashboard for employees
+    href: `/platform/${subdomain}`, // Will be dynamically changed to /employee-dashboard for employees
     icon: "fas fa-chart-pie",
     label: "لوحة التحكم",
     permission: "dashboard_view",
   },
   {
-    href: "/platform-products",
+    href: `/platform/${subdomain}/products`,
     icon: "fas fa-box",
     label: "إدارة المنتجات",
     permission: "products_view",
   },
   {
-    href: "/platform-categories",
+    href: `/platform/${subdomain}/categories`,
     icon: "fas fa-tags",
     label: "إدارة التصنيفات",
     permission: "categories_view",
   },
   {
-    href: "/platform-landing-pages",
+    href: `/platform/${subdomain}/landing-pages`,
     icon: "fas fa-pager",
     label: "صفحات الهبوط",
     permission: "landing_pages_view",
   },
   {
-    href: "/platform-orders", 
+    href: `/platform/${subdomain}/orders`, 
     icon: "fas fa-shopping-cart",
     label: "إدارة الطلبات",
     badgeVariant: "destructive" as const,
     permission: "orders_view",
   },
   {
-    href: "/platform-inventory",
+    href: `/platform/${subdomain}/inventory`,
     icon: "fas fa-warehouse",
     label: "إدارة المخزن",
     permission: "inventory_view",
   },
   {
-    href: "/platform-whatsapp",
+    href: `/platform/${subdomain}/whatsapp`,
     icon: "fab fa-whatsapp",
     label: "واتساب للأعمال",
     permission: "whatsapp_view",
   },
   {
-    href: "/platform-employees",
+    href: `/platform/${subdomain}/employees`,
     icon: "fas fa-users",
     label: "إدارة الموظفين",
     permission: "employees_view",
   },
   {
-    href: "/platform-accounting",
+    href: `/platform/${subdomain}/accounting`,
     icon: "fas fa-calculator", 
     label: "النظام المحاسبي",
     permission: "accounting_view",
   },
   {
-    href: "/platform-reports",
+    href: `/platform/${subdomain}/reports`,
     icon: "fas fa-chart-bar",
     label: "التقارير والإحصائيات",
     permission: "reports_view",
@@ -134,92 +134,92 @@ const menuItems = [
 ];
 
 // Ads submenu items
-const adsSubmenuItems = [
+const getAdsSubmenuItems = (subdomain: string) => [
   {
-    href: "/platform-ads-tiktok",
+    href: `/platform/${subdomain}/ads-tiktok`,
     icon: "fab fa-tiktok",
     label: "إعلانات تيك توك",
   },
   {
-    href: "/platform-ads-tiktok-management",
+    href: `/platform/${subdomain}/ads-tiktok-management`,
     icon: "fas fa-chart-line",
     label: "إدارة إعلانات تيكتوك",
   },
   {
-    href: "/platform-ads-meta",
+    href: `/platform/${subdomain}/ads-meta`,
     icon: "fab fa-meta",
     label: "إعلانات ميتا",
   },
   {
-    href: "/platform-ads-meta-management",
+    href: `/platform/${subdomain}/ads-meta-management`,
     icon: "fas fa-chart-line",
     label: "إدارة إعلانات ميتا",
   },
 ];
 
 // Settings submenu items
-const settingsSubmenuItems = [
+const getSettingsSubmenuItems = (subdomain: string) => [
   {
-    href: "/profile",
+    href: `/platform/${subdomain}/profile`,
     icon: "fas fa-user",
     label: "الملف الشخصي",
   },
   {
-    href: "/platform-general-settings", 
+    href: `/platform/${subdomain}/general-settings`, 
     icon: "fas fa-cog",
     label: "إعدادات المنصة",
   },
   {
-    href: "/platform-store-settings",
+    href: `/platform/${subdomain}/store-settings`,
     icon: "fas fa-store",
     label: "إعدادات المتجر",
   },
   {
-    href: "/platform-settings",
+    href: `/platform/${subdomain}/settings`,
     icon: "fas fa-bullhorn", 
     label: "إعدادات الإعلانات",
   },
   {
-    href: "/delivery-settings",
+    href: `/platform/${subdomain}/delivery-settings`,
     icon: "fas fa-truck",
     label: "إعدادات التوصيل",
   },
   {
-    href: "/whatsapp-settings",
+    href: `/platform/${subdomain}/whatsapp-settings`,
     icon: "fab fa-whatsapp",
     label: "إعدادات واتساب",
   },
 ];
 
 // Accounting submenu items
-const accountingSubmenuItems = [
+const getAccountingSubmenuItems = (subdomain: string) => [
   {
-    href: "/platform-accounting/dashboard",
+    href: `/platform/${subdomain}/accounting/dashboard`,
     icon: "fas fa-chart-pie",
     label: "لوحة المحاسبة",
   },
   {
-    href: "/platform-accounting/cash-management",
+    href: `/platform/${subdomain}/accounting/cash-management`,
     icon: "fas fa-money-bill-wave",
     label: "إدارة النقدية",
   },
   {
-    href: "/platform-accounting/chart-of-accounts",
+    href: `/platform/${subdomain}/accounting/chart-of-accounts`,
     icon: "fas fa-list-alt",
     label: "دليل الحسابات",
   },
   {
-    href: "/platform-accounting/expenses",
+    href: `/platform/${subdomain}/accounting/expenses`,
     icon: "fas fa-receipt",
     label: "إدارة المصروفات",
   },
   {
-    href: "/platform-accounting/journal-entries",
+    href: `/platform/${subdomain}/accounting/journal-entries`,
     icon: "fas fa-file-invoice",
     label: "القيود المحاسبية",
   },
   {
-    href: "/platform-accounting/reports",
+    href: `/platform/${subdomain}/accounting/reports`,
     icon: "fas fa-chart-bar",
     label: "التقارير المالية",
   },
@@ -240,7 +240,7 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
   const [location, navigate] = useLocation();
 
   // Get real session info for permission checking
-  const { isEmployee, employeePermissions, employeeSession, platformSession } = useCurrentSession();
+  const { isEmployee, employeePermissions, employeeSession, platformSession, isLoading } = useCurrentSession();
   
   
   // Use platformSession if available, fallback to passed session
@@ -252,13 +252,23 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
     return employeePermissions.includes(permission);
   };
 
+  // Get menu items with current subdomain - don't render if no session data yet
+  if (isLoading || !currentSession?.subdomain) {
+    return <div className="flex items-center justify-center p-4">Loading...</div>;
+  }
+
+  const menuItems = getMenuItems(currentSession.subdomain);
+  const adsSubmenuItems = getAdsSubmenuItems(currentSession.subdomain);
+  const settingsSubmenuItems = getSettingsSubmenuItems(currentSession.subdomain);
+  const accountingSubmenuItems = getAccountingSubmenuItems(currentSession.subdomain);
+
   // Filter menu items based on permissions
   const filteredMenuItems = menuItems.filter(item => {
     if (!item.permission) return true;
     return hasPermission(item.permission);
   }).map(item => {
     // Change dashboard href for employees
-    if (item.href === "/platform-dashboard" && isEmployee) {
+    if (item.href.includes('/platform/') && isEmployee) {
       return { ...item, href: "/employee/dashboard" };
     }
     return item;
@@ -311,6 +321,19 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
       }
       const response = await fetch(`/api/platforms/${currentSession?.platformId}/orders/count`, { headers });
       if (!response.ok) throw new Error('Failed to fetch orders count');
+      return response.json();
+    },
+  });
+
+  // Fetch WhatsApp connection status
+  const { data: whatsappStatus } = useQuery({
+    queryKey: [`/api/whatsapp/status/${currentSession?.platformId}`],
+    retry: false,
+    enabled: !!currentSession?.platformId,
+    refetchInterval: 10000, // Refresh every 10 seconds
+    queryFn: async () => {
+      const response = await fetch(`/api/whatsapp/status/${currentSession?.platformId}`);
+      if (!response.ok) throw new Error('Failed to fetch WhatsApp status');
       return response.json();
     },
   });
@@ -529,11 +552,11 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
             {/* My Accounts - Single Menu Item */}
             {!isCollapsed && hasPermission("accounts_view") && (
               <div>
-                <Link href="/my-accounts">
+                <Link href={`/platform/${currentSession?.subdomain || 'platform'}/my-accounts`}>
                   <Button
-                    variant={currentPath === "/my-accounts" ? "default" : "ghost"}
+                    variant={currentPath === `/platform/${currentSession?.subdomain || 'platform'}/my-accounts` ? "default" : "ghost"}
                     className={`w-full justify-start text-right transition-all duration-200 ease-in-out sidebar-link ${
-                      currentPath === "/my-accounts"
+                      currentPath === `/platform/${currentSession?.subdomain || 'platform'}/my-accounts`
                         ? 'bg-theme-gradient text-white theme-shadow' 
                         : 'sidebar-hover-theme'
                     }`}
@@ -594,20 +617,24 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
 
             {/* Rest of menu items (excluding accounting and settings) */}
             {filteredMenuItems.slice(1).filter(item => 
-              item.href !== '/platform-accounting' && 
+              !item.href.includes('/accounting') && 
               !item.href.includes('settings') && 
-              item.href !== '/profile' &&
-              item.href !== '/platform-reports'
+              !item.href.includes('/profile') &&
+              !item.href.includes('/reports')
             ).map((item) => {
               const isActive = currentPath === item.href;
               
               // Get real badge count for products and orders
               let badgeCount = (item as any).badge;
-              if (item.href === '/platform-products' && productsCount && typeof productsCount === 'object' && 'count' in productsCount) {
+              if (item.href.includes('/products') && productsCount && typeof productsCount === 'object' && 'count' in productsCount) {
                 badgeCount = (productsCount as any).count?.toString();
-              } else if (item.href === '/platform-orders' && ordersCount && typeof ordersCount === 'object' && 'count' in ordersCount) {
+              } else if (item.href.includes('/orders') && ordersCount && typeof ordersCount === 'object' && 'count' in ordersCount) {
                 badgeCount = (ordersCount as any).count?.toString();
               }
+              
+              // WhatsApp status indicator
+              const isWhatsAppItem = item.href.includes('/whatsapp');
+              const whatsAppConnected = whatsappStatus?.isConnected || false;
               
               return (
                 <div key={item.href}>
@@ -622,21 +649,46 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
                       title={isCollapsed ? item.label : ''}
                     >
                       {isCollapsed ? (
-                        <i className={`${item.icon} text-sm`}></i>
+                        <div className="relative">
+                          <i className={`${item.icon} text-sm`}></i>
+                          {isWhatsAppItem && (
+                            <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${
+                              whatsAppConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500 animate-pulse'
+                            }`}></div>
+                          )}
+                        </div>
                       ) : (
                         <>
                           <div className="flex items-center gap-3">
-                            <i className={item.icon}></i>
+                            <div className="relative">
+                              <i className={item.icon}></i>
+                              {isWhatsAppItem && (
+                                <div className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${
+                                  whatsAppConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500 animate-pulse'
+                                }`}></div>
+                              )}
+                            </div>
                             <span>{item.label}</span>
                           </div>
-                          {badgeCount && (
-                            <Badge 
-                              variant={item.badgeVariant || "secondary"}
-                              className="mr-2 px-2 py-1 text-xs badge-theme"
-                            >
-                              {badgeCount}
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {isWhatsAppItem && (
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                whatsAppConnected 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
+                                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                              }`}>
+                                {whatsAppConnected ? 'متصل' : 'غير متصل'}
+                              </span>
+                            )}
+                            {badgeCount && !isWhatsAppItem && (
+                              <Badge 
+                                variant={item.badgeVariant || "secondary"}
+                                className="px-2 py-1 text-xs badge-theme"
+                              >
+                                {badgeCount}
+                              </Badge>
+                            )}
+                          </div>
                         </>
                       )}
                     </Button>

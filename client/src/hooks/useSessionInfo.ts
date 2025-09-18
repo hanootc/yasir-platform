@@ -34,6 +34,9 @@ export function useSessionInfo() {
   const { data: platformSession, isLoading: platformLoading } = useQuery<PlatformSession>({
     queryKey: ["/api/platform-session"],
     retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache
   });
 
   // Check if this is an employee session - use localStorage token as reliable indicator

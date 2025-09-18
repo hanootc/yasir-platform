@@ -316,15 +316,19 @@ export function SimpleLargeInvoice({
                 alignItems: 'center',
                 flex: '1'
               }}>
-                {selectedDeliveryCompany?.logo && (
+                {(selectedDeliveryCompany?.logo || deliverySettings?.companyLogo) && (
                   <div style={{ textAlign: 'center' }}>
                     <img 
-                      src={selectedDeliveryCompany.logo} 
+                      src={selectedDeliveryCompany?.logo || deliverySettings?.companyLogo} 
                       alt="شعار شركة التوصيل"
                       style={{
                         width: `calc(${currentSize.logoSize} * 1.6)`,
                         height: `calc(${currentSize.logoSize} * 1.6)`,
                         objectFit: 'contain'
+                      }}
+                      onError={(e) => {
+                        console.log('Delivery logo failed to load:', selectedDeliveryCompany?.logo || deliverySettings?.companyLogo);
+                        e.currentTarget.style.display = 'none';
                       }}
                     />
                     <div style={{ 
@@ -333,7 +337,7 @@ export function SimpleLargeInvoice({
                       fontWeight: 'bold',
                       color: '#000000'
                     }}>
-                      {selectedDeliveryCompany.name}
+                      {selectedDeliveryCompany?.name || deliverySettings?.companyName || 'شركة التوصيل'}
                     </div>
                   </div>
                 )}
@@ -475,7 +479,7 @@ export function SimpleLargeInvoice({
                     <div><strong>رقم البلاغات:</strong> {selectedDeliveryCompany.reportsPhone}</div>
                   )}
                   <div><strong>رقم الطلب:</strong> {order.orderNumber || order.id?.slice(-6)}</div>
-                  <div><strong>التاريخ:</strong> {formatDateWithDay(new Date(order.createdAt || order.orderDate || new Date()))}</div>
+                  <div><strong>التاريخ:</strong> {formatDateWithDay(new Date(order.createdAt || new Date()))}</div>
                   {printDate && (
                     <div><strong>تاريخ الطباعة:</strong> {formatDateWithDay(printDate)}</div>
                   )}
@@ -503,13 +507,25 @@ export function SimpleLargeInvoice({
               <div style={{ fontSize: `calc(${currentSize.fontSize} * 1.3)`, lineHeight: '1.6' }}>
                 <div><strong>المنتج:</strong> {(order as any).productName || (order as any).product?.name}</div>
                 <div><strong>الكمية:</strong> {(order as any).quantity || 1}</div>
-                {(order as any).selectedColorName && (
+                
+                {/* Display multiple colors */}
+                {((order as any).selectedColors && (order as any).selectedColors.length > 0) ? (
+                  <div><strong>الألوان:</strong> {(order as any).selectedColors.map((color: any) => color.name).join(', ')}</div>
+                ) : (order as any).selectedColorName && (
                   <div><strong>اللون:</strong> {(order as any).selectedColorName}</div>
                 )}
-                {(order as any).selectedSizeName && (
+                
+                {/* Display multiple sizes */}
+                {((order as any).selectedSizes && (order as any).selectedSizes.length > 0) ? (
+                  <div><strong>الأحجام:</strong> {(order as any).selectedSizes.map((size: any) => size.name).join(', ')}</div>
+                ) : (order as any).selectedSizeName && (
                   <div><strong>الحجم:</strong> {(order as any).selectedSizeName}</div>
                 )}
-                {(order as any).selectedShapeName && (
+                
+                {/* Display multiple shapes */}
+                {((order as any).selectedShapes && (order as any).selectedShapes.length > 0) ? (
+                  <div><strong>الأشكال:</strong> {(order as any).selectedShapes.map((shape: any) => shape.name).join(', ')}</div>
+                ) : (order as any).selectedShapeName && (
                   <div><strong>الشكل:</strong> {(order as any).selectedShapeName}</div>
                 )}
               </div>

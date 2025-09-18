@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
-import { LocalImageUploader } from "@/components/LocalImageUploader";
-import { X } from "lucide-react";
+import React, { useState, useRef, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { X, Upload } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 import { useToast } from "@/hooks/use-toast";
+import { LocalImageUploader } from "@/components/LocalImageUploader";
 
 interface ImageUploadManagerProps {
   initialImages?: string[];
@@ -37,13 +39,9 @@ export function ImageUploadManager({
     
     // تحديث ACL للصورة المرفوعة  
     try {
-      await fetch("/api/objects/set-acl", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          objectPath: imageUrl,
-          visibility: "public"
-        }),
+      await apiRequest("/api/objects/set-acl", "POST", {
+        objectPath: imageUrl,
+        visibility: "public"
       });
     } catch (error) {
       console.error("Error setting ACL:", error);

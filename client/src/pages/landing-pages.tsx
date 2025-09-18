@@ -34,11 +34,13 @@ export default function LandingPages() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
 
   const { data: landingPages, isLoading } = useQuery({
-    queryKey: selectedPlatform ? ["/api/landing-pages", { platformId: selectedPlatform }] : ["/api/landing-pages"],
+    queryKey: selectedPlatform ? ["/api/admin/platforms", selectedPlatform, "landing-pages"] : ["/api/landing-pages"],
     queryFn: async () => {
-      const url = selectedPlatform 
-        ? `/api/landing-pages?platformId=${selectedPlatform}`
-        : '/api/landing-pages';
+      if (!selectedPlatform) {
+        return [];
+      }
+      
+      const url = `/api/admin/platforms/${selectedPlatform}/landing-pages`;
       
       console.log("🔍 Fetching landing pages from:", url);
       const response = await fetch(url, {
@@ -52,7 +54,8 @@ export default function LandingPages() {
       }
       
       return response.json();
-    }
+    },
+    enabled: !!selectedPlatform
   });
 
   const { data: products } = useQuery({
@@ -75,7 +78,7 @@ export default function LandingPages() {
 
   const deleteLandingPageMutation = useMutation({
     mutationFn: async (pageId: string) => {
-      return apiRequest(`/api/landing-pages/${pageId}`, { method: "DELETE" });
+      return apiRequest(`/api/landing-pages/${pageId}`, "DELETE");
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/landing-pages"] });

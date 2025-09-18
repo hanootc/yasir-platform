@@ -8,10 +8,13 @@ export const useThemeInitializer = () => {
       const savedColorTheme = localStorage.getItem('colorTheme');
       const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       
-      // تطبيق نمط الظلام/النهار
-      const shouldBeDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+      // تطبيق نمط الظلام/النهار - الوضع الليلي افتراضي
+      const shouldBeDark = savedTheme !== 'light'; // دائماً dark إلا إذا اختار المستخدم light صراحة
       if (shouldBeDark) {
         document.documentElement.classList.add('dark');
+        if (!savedTheme) {
+          localStorage.setItem('theme', 'dark'); // حفظ الوضع الليلي كافتراضي
+        }
       } else {
         document.documentElement.classList.remove('dark');
       }

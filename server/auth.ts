@@ -7,17 +7,17 @@ import { storage } from "./storage";
 import type { SelectAdminUser } from "@shared/schema";
 
 export function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  
-  // استخدام MemoryStore للتطوير المحلي مع SQLite
+  const sessionTtl = 1000 * 60 * 60 * 24 * 7; // 7 days
   return session({
-    secret: process.env.SESSION_SECRET || 'your-super-secret-key-change-this-in-production',
+    secret: process.env.SESSION_SECRET || 'default-secret-key-change-in-production',
+    name: 'sanadi.sid',
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false, // Disable secure for local testing
       maxAge: sessionTtl,
+      sameSite: 'lax'
     },
   });
 }
@@ -57,8 +57,9 @@ export async function setupAuth(app: Express) {
     }
   }));
 
-  passport.serializeUser((user: SelectAdminUser, done) => {
-    done(null, user.id);
+  // استخدام any لتفادي تعارض الأنواع مع Passport types
+  passport.serializeUser((user: any, done) => {
+    done(null, (user as any).id);
   });
 
   passport.deserializeUser(async (id: string, done) => {
@@ -72,6 +73,33 @@ export async function setupAuth(app: Express) {
 
   // Login route
   app.post("/api/login", (req, res, next) => {
+    passport.authenticate('local', (err: any, user: SelectAdminUser | false, info: any) => {
+      if (err) {
+        return res.status(500).json({ message: "خطأ في الخادم" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "فشل تسجيل الدخول" });
+      }
+      req.logIn(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "خطأ في تسجيل الدخول" });
+        }
+        return res.json({ 
+          message: "تم تسجيل الدخول بنجاح",
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role
+          }
+        });
+      });
+    })(req, res, next);
+  });
+
+  // Auth login route (alternative endpoint)
+  app.post("/api/auth/login", (req, res, next) => {
     passport.authenticate('local', (err: any, user: SelectAdminUser | false, info: any) => {
       if (err) {
         return res.status(500).json({ message: "خطأ في الخادم" });
@@ -147,22 +175,7 @@ export async function setupAuth(app: Express) {
     });
   });
 
-  // Get current user
-  app.get("/api/auth/user", (req, res) => {
-    if (req.isAuthenticated() && req.user) {
-      const user = req.user as SelectAdminUser;
-      res.json({
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        isActive: user.isActive
-      });
-    } else {
-      res.status(401).json({ message: "Unauthorized" });
-    }
-  });
+  // Get current user - moved to routes.ts to avoid conflicts
 }
 
 export const isAuthenticated: RequestHandler = (req, res, next) => {
@@ -182,7 +195,8 @@ export const requireRole = (roles: string[]): RequestHandler => {
     }
 
     const user = req.user as SelectAdminUser;
-    if (!roles.includes(user.role)) {
+    const role = (user as any)?.role ?? "";
+    if (!roles.includes(role)) {
       return res.status(403).json({ message: "Insufficient permissions" });
     }
 

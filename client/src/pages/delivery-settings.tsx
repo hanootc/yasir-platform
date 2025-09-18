@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Truck, Clock, DollarSign, Package, Upload, X } from "lucide-react";
+import { Loader2, Truck, Clock, DollarSign, Package, Upload, X, Trash2 } from "lucide-react";
 import { useIsMobile } from '@/hooks/use-mobile';
 import ThemeToggle from '@/components/ThemeToggle';
 import ColorThemeSelector from '@/components/ColorThemeSelector';
@@ -79,8 +79,13 @@ export default function DeliverySettings() {
 
   // حفظ الإعدادات
   const saveSettingsMutation = useMutation({
-    mutationFn: (data: DeliverySettings) => apiRequest("/api/delivery/settings", "POST", data),
-    onSuccess: () => {
+    mutationFn: (data: DeliverySettings) => {
+      console.log('🚚 Mutation function called with data:', data);
+      const subdomain = session?.subdomain || window.location.hostname.split('.')[0];
+      return apiRequest(`/api/delivery/settings?subdomain=${subdomain}`, "POST", data);
+    },
+    onSuccess: (result) => {
+      console.log('🚚 Mutation success:', result);
       toast({
         title: "تم الحفظ بنجاح",
         description: "تم حفظ إعدادات التوصيل بنجاح",
@@ -89,12 +94,37 @@ export default function DeliverySettings() {
       setShowForm(false); // إخفاء النموذج بعد الحفظ
     },
     onError: (error) => {
+      console.error('🚚 Mutation error:', error);
       toast({
         title: "خطأ في الحفظ",
         description: "فشل في حفظ إعدادات التوصيل",
         variant: "destructive",
       });
       console.error("Error saving delivery settings:", error);
+    }
+  });
+
+  // حذف شركة التوصيل
+  const deleteDeliveryCompanyMutation = useMutation({
+    mutationFn: () => {
+      const subdomain = session?.subdomain || window.location.hostname.split('.')[0];
+      return apiRequest(`/api/delivery/settings?subdomain=${subdomain}`, "DELETE");
+    },
+    onSuccess: () => {
+      toast({
+        title: "تم الحذف بنجاح",
+        description: "تم حذف شركة التوصيل بنجاح",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/delivery/settings"] });
+      setShowForm(true); // عرض النموذج لإضافة شركة جديدة
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ في الحذف",
+        description: "فشل في حذف شركة التوصيل",
+        variant: "destructive",
+      });
+      console.error("Error deleting delivery company:", error);
     }
   });
 
@@ -107,15 +137,20 @@ export default function DeliverySettings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚚 Form submitted - handleSubmit called');
+    console.log('🚚 Form data:', formData);
     
     let updatedFormData = { ...formData };
     
     // رفع الشعار إذا تم اختيار ملف جديد
     if (logoFile) {
       try {
+        console.log('🚚 Uploading logo...');
         const logoPath = await uploadLogo(logoFile);
         updatedFormData.companyLogo = logoPath;
+        console.log('🚚 Logo uploaded:', logoPath);
       } catch (error) {
+        console.error('🚚 Logo upload error:', error);
         toast({
           title: "خطأ في رفع الشعار",
           description: "فشل في رفع صورة الشعار",
@@ -125,6 +160,7 @@ export default function DeliverySettings() {
       }
     }
     
+    console.log('🚚 Calling mutation with data:', updatedFormData);
     saveSettingsMutation.mutate(updatedFormData);
   };
 
@@ -292,7 +328,6 @@ export default function DeliverySettings() {
                           placeholder="مثال: شركة التوصيل السريع"
                           className="text-right"
                           dir="rtl"
-                          required
                         />
                       </div>
                       
@@ -398,8 +433,8 @@ export default function DeliverySettings() {
                         type="number"
                         min="0"
                         step="500"
-                        value={Math.round(formData.deliveryPriceBaghdad)}
-                        onChange={(e) => handleInputChange('deliveryPriceBaghdad', Number(e.target.value))}
+                        value={isNaN(formData.deliveryPriceBaghdad) ? '' : Math.round(formData.deliveryPriceBaghdad)}
+                        onChange={(e) => handleInputChange('deliveryPriceBaghdad', e.target.value === '' ? 0 : Number(e.target.value))}
                         placeholder="3000"
                         className="text-right"
                         dir="rtl"
@@ -414,8 +449,8 @@ export default function DeliverySettings() {
                         type="number"
                         min="0"
                         step="500"
-                        value={Math.round(formData.deliveryPriceProvinces)}
-                        onChange={(e) => handleInputChange('deliveryPriceProvinces', Number(e.target.value))}
+                        value={isNaN(formData.deliveryPriceProvinces) ? '' : Math.round(formData.deliveryPriceProvinces)}
+                        onChange={(e) => handleInputChange('deliveryPriceProvinces', e.target.value === '' ? 0 : Number(e.target.value))}
                         placeholder="5000"
                         className="text-right"
                         dir="rtl"
@@ -430,8 +465,8 @@ export default function DeliverySettings() {
                         type="number"
                         min="0"
                         step="1000"
-                        value={Math.round(formData.freeDeliveryThreshold)}
-                        onChange={(e) => handleInputChange('freeDeliveryThreshold', Number(e.target.value))}
+                        value={isNaN(formData.freeDeliveryThreshold) ? '' : Math.round(formData.freeDeliveryThreshold)}
+                        onChange={(e) => handleInputChange('freeDeliveryThreshold', e.target.value === '' ? 0 : Number(e.target.value))}
                         placeholder="50000"
                         className="text-right"
                         dir="rtl"
@@ -449,8 +484,8 @@ export default function DeliverySettings() {
                         id="deliveryTimeMin"
                         type="number"
                         min="1"
-                        value={formData.deliveryTimeMin}
-                        onChange={(e) => handleInputChange('deliveryTimeMin', Number(e.target.value))}
+                        value={isNaN(formData.deliveryTimeMin) ? '' : formData.deliveryTimeMin}
+                        onChange={(e) => handleInputChange('deliveryTimeMin', e.target.value === '' ? 24 : Number(e.target.value))}
                         placeholder="24"
                         className="text-right"
                         dir="rtl"
@@ -465,8 +500,8 @@ export default function DeliverySettings() {
                         id="deliveryTimeMax"
                         type="number"
                         min="1"
-                        value={formData.deliveryTimeMax}
-                        onChange={(e) => handleInputChange('deliveryTimeMax', Number(e.target.value))}
+                        value={isNaN(formData.deliveryTimeMax) ? '' : formData.deliveryTimeMax}
+                        onChange={(e) => handleInputChange('deliveryTimeMax', e.target.value === '' ? 72 : Number(e.target.value))}
                         placeholder="72"
                         className="text-right"
                         dir="rtl"
@@ -584,6 +619,10 @@ export default function DeliverySettings() {
                   type="submit"
                   disabled={saveSettingsMutation.isPending}
                   className="bg-theme-gradient hover:opacity-90 text-white px-8"
+                  onClick={(e) => {
+                    console.log('🚚 Save button clicked!');
+                    // Let the form handle the submission naturally
+                  }}
                 >
                   {saveSettingsMutation.isPending ? (
                     <>
@@ -646,14 +685,33 @@ export default function DeliverySettings() {
 
                 <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur border border-gray-200/50 dark:border-gray-700/50">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <Button
-                      onClick={() => setShowForm(true)}
-                      className="bg-theme-gradient hover:opacity-90 text-white px-3 py-1.5 text-sm"
-                      size="sm"
-                    >
-                      <i className="fas fa-edit ml-1 h-3 w-3"></i>
-                      تعديل
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => setShowForm(true)}
+                        className="bg-theme-gradient hover:opacity-90 text-white px-3 py-1.5 text-sm"
+                        size="sm"
+                      >
+                        <i className="fas fa-edit ml-1 h-3 w-3"></i>
+                        تعديل
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          if (window.confirm('هل أنت متأكد من حذف شركة التوصيل؟ سيتم حذف جميع الإعدادات المرتبطة بها.')) {
+                            deleteDeliveryCompanyMutation.mutate();
+                          }
+                        }}
+                        disabled={deleteDeliveryCompanyMutation.isPending}
+                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 text-sm"
+                        size="sm"
+                      >
+                        {deleteDeliveryCompanyMutation.isPending ? (
+                          <Loader2 className="ml-1 h-3 w-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="ml-1 h-3 w-3" />
+                        )}
+                        حذف
+                      </Button>
+                    </div>
                     <div className="text-right">
                       <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white text-lg">
                         <Package className="h-4 w-4" />

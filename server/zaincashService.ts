@@ -12,7 +12,7 @@ const ZAINCASH_TEST_CONFIG = {
 
 // Subscription plan prices in IQD
 export const SUBSCRIPTION_PRICES = {
-  basic: 49000,      // 49k IQD
+  basic: 1000,       // 1k IQD (for testing)
   premium: 69000,    // 69k IQD  
   enterprise: 99000  // 99k IQD
 };
@@ -42,7 +42,7 @@ export class ZainCashService {
   private configCacheExpiry: number = 0;
   
   constructor(testMode: boolean = true) {
-    this.isTestMode = testMode;
+    this.isTestMode = true;
     // ZainCash test integration enabled - using real test credentials
     this.forceSimulation = false; // Disabled to use real ZainCash test API
   }
@@ -163,7 +163,7 @@ export class ZainCashService {
         
         // Create a simulated transaction response for development  
         const simulatedTransactionId = `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const baseUrl = process.env.DOMAIN ? `https://${process.env.DOMAIN}` : 'http://localhost:5000';
+        const baseUrl = 'https://sanadi.pro';
         const paymentUrl = `${baseUrl}/platform-registration?payment_simulation=true&transaction_id=${simulatedTransactionId}&order_id=${data.orderId}`;
         
         return {
@@ -235,6 +235,8 @@ export class ZainCashService {
 
       const result = await response.json();
       
+      console.log('ZainCash API Response:', JSON.stringify(result, null, 2));
+      
       if (result.id) {
         const paymentUrl = this.isTestMode
           ? `https://test.zaincash.iq/transaction/pay?id=${result.id}`
@@ -246,7 +248,11 @@ export class ZainCashService {
           paymentUrl: paymentUrl
         };
       } else {
-        throw new Error(result.err || 'Failed to create ZainCash transaction');
+        const errorMessage = typeof result.err === 'object' 
+          ? JSON.stringify(result.err) 
+          : result.err || 'Failed to create ZainCash transaction';
+        console.error('ZainCash API Error Details:', result.err);
+        throw new Error(errorMessage);
       }
 
     } catch (error) {

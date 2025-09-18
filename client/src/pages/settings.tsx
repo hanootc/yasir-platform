@@ -44,10 +44,10 @@ export default function Settings() {
   useEffect(() => {
     if (settings) {
       form.reset({
-        tiktokAppId: settings.tiktokAppId || "",
-        tiktokAppSecret: settings.tiktokAppSecret || "",
-        metaAppId: settings.metaAppId || "",
-        metaAppSecret: settings.metaAppSecret || "",
+        tiktokAppId: (settings as any).tiktokAppId || "",
+        tiktokAppSecret: (settings as any).tiktokAppSecret || "",
+        metaAppId: (settings as any).metaAppId || "",
+        metaAppSecret: (settings as any).metaAppSecret || "",
       });
     }
   }, [settings, form]);
@@ -58,8 +58,13 @@ export default function Settings() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+        credentials: 'include',
       });
-      if (!response.ok) throw new Error('فشل في حفظ الإعدادات');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Settings save error:', response.status, errorText);
+        throw new Error(`فشل في حفظ الإعدادات: ${response.status}`);
+      }
       return response.json();
     },
     onSuccess: () => {

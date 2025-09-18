@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCurrentSession } from "@/hooks/useSessionInfo";
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,7 @@ const menuItems = [
 ];
 
 export default function PlatformProducts() {
+  const { isEmployee, employeeSession, isLoading: sessionLoading } = useCurrentSession();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -52,15 +54,107 @@ export default function PlatformProducts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Get platform session from API
-  const { data: session, isLoading: sessionLoading } = useQuery<PlatformSession>({
+  // Landing page theme management
+  const getLandingPageTheme = (productId: string): 'light' | 'dark' => {
+    // البحث عن المنتج في البيانات المحملة
+    const product = Array.isArray(products) ? products.find((p: any) => p.id === productId) : null;
+    
+    // إذا كان المنتج موجود ولديه defaultTheme، استخدمه
+    if (product && product.defaultTheme) {
+      return product.defaultTheme as 'light' | 'dark';
+    }
+    
+    // وإلا، استخدم localStorage كـ fallback
+    const key = `landingPageTheme_${platformId}_${productId}`;
+    return localStorage.getItem(key) as 'light' | 'dark' || 'light';
+  };
+
+  const toggleLandingPageTheme = async (productId: string) => {
+    const currentTheme = getLandingPageTheme(productId);
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    
+    try {
+      // 1. حفظ الثيم في المنتج
+      const productResponse = await fetch(`/api/platforms/${platformId}/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultTheme: newTheme })
+      });
+      
+      // 2. البحث عن صفحات الهبوط المرتبطة بهذا المنتج وتحديث ثيمها أيضاً
+      try {
+        const landingPagesResponse = await fetch(`/api/platforms/${platformId}/products/${productId}/landing-pages`);
+        if (landingPagesResponse.ok) {
+          const landingPages = await landingPagesResponse.json();
+          
+          // تحديث ثيم جميع صفحات الهبوط المرتبطة
+          for (const landingPage of landingPages) {
+            await fetch(`/api/platforms/${platformId}/landing-pages/${landingPage.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ defaultTheme: newTheme })
+            });
+          }
+        }
+      } catch (landingError) {
+        console.warn('تحذير: فشل في تحديث ثيم صفحات الهبوط:', landingError);
+      }
+      
+      if (productResponse.ok) {
+        // حفظ في localStorage أيضاً للتوافق
+        const key = `landingPageTheme_${platformId}_${productId}`;
+        localStorage.setItem(key, newTheme);
+        
+        toast({
+          title: "تم تغيير النمط",
+          description: `تم تطبيق النمط ${newTheme === 'dark' ? 'الليلي' : 'النهاري'} للمنتج وصفحات الهبوط المرتبطة`,
+        });
+        
+        // تحديث البيانات في الـ cache
+        queryClient.invalidateQueries({ queryKey: [`/api/admin/platforms/${platformId}/products`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/landing-pages`] });
+        
+        // Force re-render to update the button icon
+        setSelectedProduct(null);
+        setTimeout(() => setSelectedProduct(null), 0);
+      } else {
+        throw new Error('فشل في حفظ الثيم');
+      }
+    } catch (error) {
+      console.error('❌ Failed to save theme:', error);
+      toast({
+        title: "خطأ",
+        description: "فشل في حفظ الثيم في قاعدة البيانات",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Get platform session data
+  const { data: platformSession } = useQuery<PlatformSession>({
     queryKey: ["/api/platform-session"],
     retry: false,
+    enabled: !isEmployee, // Only fetch if not employee
   });
+
+  // Extract platform ID from current session
+  const platformId = isEmployee && employeeSession?.success
+    ? employeeSession.employee.platformId 
+    : (platformSession as PlatformSession)?.platformId;
+
+  // Create unified session object
+  const session = isEmployee && employeeSession?.success 
+    ? {
+        platformId: employeeSession.employee.platformId,
+        platformName: 'سوكنا',
+        subdomain: 'souqnaiq',
+        userType: 'employee'
+      } as PlatformSession
+    : (platformSession as PlatformSession) || {} as PlatformSession;
 
   // Fetch products for this platform
   const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: [`/api/platforms/${session?.platformId}/products`],
+    queryKey: [`/api/admin/platforms/${session?.platformId}/products`],
     enabled: !!session?.platformId,
   });
 
@@ -392,9 +486,15 @@ export default function PlatformProducts() {
                               <img 
                                 src={product.imageUrls[0].startsWith('/objects/') 
                                   ? product.imageUrls[0].replace('/objects/', '/public-objects/') 
-                                  : product.imageUrls[0]} 
+                                  : product.imageUrls[0].startsWith('/uploads/') 
+                                    ? `https://sanadi.pro${product.imageUrls[0]}`
+                                    : product.imageUrls[0]} 
                                 alt={product.name}
                                 className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  console.error('Failed to load image:', product.imageUrls[0]);
+                                }}
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -462,6 +562,15 @@ export default function PlatformProducts() {
                           
                           {/* Actions */}
                           <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleLandingPageTheme(product.id)}
+                              className="border-theme-border text-theme-primary hover:bg-theme-gradient hover:text-white hover:scale-[1.02] transform transition-all duration-300"
+                              title="تبديل النمط الليلي/النهاري لصفحة الهبوط"
+                            >
+                              {getLandingPageTheme(product.id) === 'dark' ? '☀️' : '🌙'}
+                            </Button>
                             <Button
                               size="sm"
                               className="bg-theme-gradient text-white hover:scale-[1.02] transform transition-all duration-300"
@@ -546,11 +655,14 @@ export default function PlatformProducts() {
 
             {/* Product Variants Dialog */}
             <Dialog open={!!variantsProduct} onOpenChange={() => setVariantsProduct(null)}>
-              <DialogContent className="bg-black max-w-6xl h-[90vh] overflow-y-auto">
+              <DialogContent className="bg-black max-w-6xl h-[90vh] overflow-y-auto" aria-describedby="variants-dialog-description">
                 <DialogHeader>
                   <DialogTitle className="text-theme-primary text-xl">
                     إدارة متغيرات المنتج: {variantsProduct?.name}
                   </DialogTitle>
+                  <div id="variants-dialog-description" className="sr-only">
+                    نافذة لإدارة متغيرات المنتج مثل الألوان والأشكال والأحجام
+                  </div>
                 </DialogHeader>
                 {variantsProduct && (
                   <ProductVariantsTab 

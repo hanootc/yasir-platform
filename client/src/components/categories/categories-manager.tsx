@@ -40,7 +40,11 @@ interface Category {
   createdAt: string;
 }
 
-export function CategoriesManager() {
+interface CategoriesManagerProps {
+  platformId?: string;
+}
+
+export function CategoriesManager({ platformId }: CategoriesManagerProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -58,16 +62,36 @@ export function CategoriesManager() {
   const { toast } = useToast();
 
   const { data: categories, isLoading } = useQuery({
-    queryKey: ["/api/categories"],
+    queryKey: platformId ? [`/api/platforms/${platformId}/categories`] : ["/api/categories"],
+    queryFn: async () => {
+      if (!platformId) {
+        return [];
+      }
+      const url = `/api/platforms/${platformId}/categories`;
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    },
+    enabled: !!platformId,
   });
 
   // Create category mutation
   const createCategoryMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/categories", "POST", data);
+      if (!platformId) {
+        throw new Error("No platform selected");
+      }
+      // Use admin API endpoint for category creation
+      return apiRequest(`/api/categories`, "POST", { ...data, platformId });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/categories`] });
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories", { platformId }] });
       toast({
         title: "تم إنشاء التصنيف",
         description: "تم إنشاء التصنيف بنجاح",
@@ -83,10 +107,16 @@ export function CategoriesManager() {
   // Update category mutation
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return apiRequest(`/api/categories/${id}`, "PUT", data);
+      if (!platformId) {
+        throw new Error("No platform selected");
+      }
+      // Use admin API endpoint for category updates
+      return apiRequest(`/api/categories/${id}`, "PUT", { ...data, platformId });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/categories`] });
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories", { platformId }] });
       toast({
         title: "تم تحديث التصنيف",
         description: "تم تحديث التصنيف بنجاح",
@@ -103,10 +133,16 @@ export function CategoriesManager() {
   // Delete category mutation
   const deleteCategoryMutation = useMutation({
     mutationFn: async (categoryId: string) => {
+      if (!platformId) {
+        throw new Error("No platform selected");
+      }
+      // Use admin API endpoint for category deletion
       return apiRequest(`/api/categories/${categoryId}`, "DELETE");
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/categories`] });
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories", { platformId }] });
       toast({
         title: "تم حذف التصنيف",
         description: "تم حذف التصنيف بنجاح",
