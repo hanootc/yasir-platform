@@ -479,9 +479,9 @@ export default function PlatformProducts() {
                   <div className="space-y-3">
                     {filteredProducts.map((product: any) => (
                       <div key={product.id} className="bg-theme-primary-lighter theme-border rounded-lg theme-shadow p-4 hover:theme-shadow-hover transition-all duration-300">
-                        <div className="flex items-center gap-4 w-full">
+                        <div className="flex flex-col md:flex-row md:items-center gap-4 w-full">
                           {/* Product Image */}
-                          <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                          <div className="w-full md:w-16 h-32 md:h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 mx-auto md:mx-0 max-w-32 md:max-w-none">
                             {product.imageUrls && product.imageUrls.length > 0 ? (
                               <img 
                                 src={product.imageUrls[0].startsWith('/objects/') 
@@ -504,9 +504,9 @@ export default function PlatformProducts() {
                           </div>
                           
                           {/* Product Info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-1">
-                              <h3 className="text-lg font-semibold text-theme-primary truncate">{product.name}</h3>
+                          <div className="flex-1 min-w-0 text-center md:text-right">
+                            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-1">
+                              <h3 className="text-lg font-semibold text-theme-primary">{product.name}</h3>
                               <Badge 
                                 variant={product.isActive ? "default" : "secondary"} 
                                 className={`text-xs ${product.isActive 
@@ -522,7 +522,7 @@ export default function PlatformProducts() {
                             )}
                             <div className="space-y-2 mt-2">
                               {/* السعر الأساسي */}
-                              <div className="flex items-center gap-4 text-sm">
+                              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 md:gap-4 text-sm">
                                 <span className="text-theme-primary font-bold">{formatCurrency(product.price)}</span>
                                 <span className="text-theme-secondary">المخزون: {product.stock || 0}</span>
                                 {product.categoryId && Array.isArray(categories) && (
@@ -535,9 +535,9 @@ export default function PlatformProducts() {
                               
                               {/* عروض الأسعار الجديدة */}
                               {product.priceOffers && Array.isArray(product.priceOffers) && product.priceOffers.length > 0 && (
-                                <div className="flex items-center gap-2 text-xs">
+                                <div className="flex flex-col md:flex-row md:items-center gap-2 text-xs">
                                   <span className="text-theme-secondary">العروض:</span>
-                                  <div className="flex gap-1 flex-wrap">
+                                  <div className="flex gap-1 flex-wrap justify-center md:justify-start">
                                     {product.priceOffers.slice(0, 3).map((offer: any, index: number) => (
                                       <Badge 
                                         key={index}
@@ -561,7 +561,7 @@ export default function PlatformProducts() {
                           </div>
                           
                           {/* Actions */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 mt-4 md:mt-0">
                             <Button
                               size="sm"
                               variant="outline"
