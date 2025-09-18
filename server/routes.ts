@@ -61,6 +61,102 @@ import { db, exec } from "./db";
 import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
 import "./types";
 
+// Middleware to auto-create platform session from URL path
+const ensurePlatformSession = async (req: any, res: any, next: any) => {
+  console.log('🔍 ensurePlatformSession middleware called');
+  console.log('🔍 Request URL:', req.url);
+  console.log('🔍 Current session exists:', !!req.session);
+  console.log('🔍 Platform session exists:', !!(req.session as any)?.platform?.platformId);
+  
+  if ((req.session as any)?.platform?.platformId) {
+    console.log('✅ Platform session found:', (req.session as any).platform.platformId);
+    return next();
+  }
+  
+  console.log('❌ No platform session found, attempting to create one...');
+  
+  // Extract platform from URL path
+  let platformSubdomain = null;
+  
+  // Check for /platform/:subdomain pattern
+  const platformMatch = req.url.match(/^\/platform\/([^\/\?]+)/);
+  if (platformMatch) {
+    platformSubdomain = platformMatch[1];
+    console.log('🔍 Extracted platform from /platform/ path:', platformSubdomain);
+  }
+  
+  // Check for /api-platform/:subdomain pattern
+  const apiPlatformMatch = req.url.match(/^\/api-platform\/([^\/\?]+)/);
+  if (apiPlatformMatch) {
+    platformSubdomain = apiPlatformMatch[1];
+    console.log('🔍 Extracted platform from /api-platform/ path:', platformSubdomain);
+  }
+  
+  // Fallback: check subdomain for backward compatibility
+  if (!platformSubdomain) {
+    const host = req.get('host') || '';
+    const subdomain = host.split('.')[0];
+    
+    if (subdomain !== 'sanadi' && subdomain !== 'www' && !host.startsWith('localhost') && !host.startsWith('127.0.0.1')) {
+      platformSubdomain = subdomain;
+      console.log('🔍 Extracted platform from subdomain (fallback):', platformSubdomain);
+    }
+  }
+  
+  // No default platform - redirect to login if no subdomain
+  if (!platformSubdomain) {
+    console.log('🔍 No platform subdomain found, redirecting to login');
+    return res.redirect('https://sanadi.pro/platform-login');
+  }
+  
+  if (platformSubdomain) {
+    try {
+      console.log('🔍 Looking up platform:', platformSubdomain);
+      const platform = await storage.getPlatformBySubdomain(platformSubdomain);
+      console.log('🔍 Platform lookup result:', platform ? 'FOUND' : 'NOT FOUND');
+      if (platform) {
+        console.log('🔍 Platform details:', { id: platform.id, name: platform.platformName, subdomain: platform.subdomain });
+        
+        // Ensure session exists before setting platform
+        if (!req.session) {
+          console.log('❌ No session object available');
+          return res.status(401).json({ error: "Session not available" });
+        }
+        
+        (req.session as any).platform = {
+          platformId: platform.id,
+          platformName: platform.platformName,
+          subdomain: platform.subdomain,
+          businessType: platform.businessType,
+          logoUrl: platform.logoUrl,
+          contactEmail: platform.contactEmail || "",
+          contactPhone: platform.contactPhone || "",
+          whatsappNumber: platform.whatsappNumber || ""
+        };
+        
+        // Save session explicitly
+        req.session.save((err: any) => {
+          if (err) {
+            console.error('❌ Error saving session:', err);
+            return res.status(500).json({ error: "Session save error" });
+          }
+          console.log('✅ Platform session saved successfully');
+        });
+        
+        console.log('✅ Platform session created successfully');
+        return next();
+      } else {
+        console.log('❌ Platform not found:', platformSubdomain);
+      }
+    } catch (error) {
+      console.error('❌ Error in platform lookup:', error);
+    }
+  }
+  
+  console.log('❌ No valid platform found, continuing without platform session');
+  next();
+};
+
 // نظام cache بسيط للتحسين
 const platformCache = new Map<string, { data: any, timestamp: number }>();
 const CACHE_DURATION = 2 * 60 * 1000; // دقيقتان بالميلي ثانية
@@ -955,10 +1051,9 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Set employee password endpoint (admin only)
-  app.post("/api/employee/set-password", isAuthenticated, async (req, res) => {
+  app.post("/api/employee/set-password", ensurePlatformSession, async (req, res) => {
     try {
       const { employeeId, password } = req.body;
-      const userId = req.user?.claims?.sub;
 
       if (!employeeId || !password) {
         return res.status(400).json({ 
@@ -967,7 +1062,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Get user's platform
-      const platformId = await storage.getUserPlatform(userId);
+      const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
         return res.status(403).json({ error: "غير مصرح لك بالوصول" });
       }
@@ -1186,22 +1281,14 @@ export function registerRoutes(app: Express): Server {
   });
 
   // رفع فيديو مباشرة إلى TikTok
-  app.post("/api/upload/tiktok-video/direct", isAuthenticated, async (req: any, res) => {
+  app.post("/api/upload/tiktok-video/direct", ensurePlatformSession, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      if (!userId) {
-        return res.status(401).json({ error: "User not authenticated" });
-      }
-
-      // الحصول على بيانات المنصة
-      const DatabaseStorage = await import('./storage');
-      const dbStorage = new DatabaseStorage.DatabaseStorage();
-      const platformId = await dbStorage.getUserPlatform(userId);
+      const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
         return res.status(404).json({ error: "Platform not found for user" });
       }
       
-      const platform = await dbStorage.getPlatform(platformId);
+      const platform = await storage.getPlatform(platformId);
       if (!platform) {
         return res.status(404).json({ error: "Platform not found" });
       }
@@ -2248,101 +2335,6 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}
     }
   });
 
-  // Middleware to auto-create platform session from URL path
-  const ensurePlatformSession = async (req: any, res: any, next: any) => {
-    console.log('🔍 ensurePlatformSession middleware called');
-    console.log('🔍 Request URL:', req.url);
-    console.log('🔍 Current session exists:', !!req.session);
-    console.log('🔍 Platform session exists:', !!(req.session as any)?.platform?.platformId);
-    
-    if ((req.session as any)?.platform?.platformId) {
-      console.log('✅ Platform session found:', (req.session as any).platform.platformId);
-      return next();
-    }
-    
-    console.log('❌ No platform session found, attempting to create one...');
-    
-    // Extract platform from URL path
-    let platformSubdomain = null;
-    
-    // Check for /platform/:subdomain pattern
-    const platformMatch = req.url.match(/^\/platform\/([^\/\?]+)/);
-    if (platformMatch) {
-      platformSubdomain = platformMatch[1];
-      console.log('🔍 Extracted platform from /platform/ path:', platformSubdomain);
-    }
-    
-    // Check for /api-platform/:subdomain pattern
-    const apiPlatformMatch = req.url.match(/^\/api-platform\/([^\/\?]+)/);
-    if (apiPlatformMatch) {
-      platformSubdomain = apiPlatformMatch[1];
-      console.log('🔍 Extracted platform from /api-platform/ path:', platformSubdomain);
-    }
-    
-    // Fallback: check subdomain for backward compatibility
-    if (!platformSubdomain) {
-      const host = req.get('host') || '';
-      const subdomain = host.split('.')[0];
-      
-      if (subdomain !== 'sanadi' && subdomain !== 'www' && !host.startsWith('localhost') && !host.startsWith('127.0.0.1')) {
-        platformSubdomain = subdomain;
-        console.log('🔍 Extracted platform from subdomain (fallback):', platformSubdomain);
-      }
-    }
-    
-    // No default platform - redirect to login if no subdomain
-    if (!platformSubdomain) {
-      console.log('🔍 No platform subdomain found, redirecting to login');
-      return res.redirect('https://sanadi.pro/platform-login');
-    }
-    
-    if (platformSubdomain) {
-      try {
-        console.log('🔍 Looking up platform:', platformSubdomain);
-        const platform = await storage.getPlatformBySubdomain(platformSubdomain);
-        console.log('🔍 Platform lookup result:', platform ? 'FOUND' : 'NOT FOUND');
-        if (platform) {
-          console.log('🔍 Platform details:', { id: platform.id, name: platform.platformName, subdomain: platform.subdomain });
-          
-          // Ensure session exists before setting platform
-          if (!req.session) {
-            console.log('❌ No session object available');
-            return res.status(401).json({ error: "Session not available" });
-          }
-          
-          (req.session as any).platform = {
-            platformId: platform.id,
-            platformName: platform.platformName,
-            subdomain: platform.subdomain,
-            businessType: platform.businessType,
-            logoUrl: platform.logoUrl,
-            contactEmail: platform.contactEmail || "",
-            contactPhone: platform.contactPhone || "",
-            whatsappNumber: platform.whatsappNumber || ""
-          };
-          
-          // Save session explicitly
-          req.session.save((err: any) => {
-            if (err) {
-              console.error('❌ Error saving session:', err);
-              return res.status(500).json({ error: "Session save error" });
-            }
-            console.log('✅ Platform session saved successfully');
-          });
-          
-          console.log('✅ Platform session created successfully');
-          return next();
-        } else {
-          console.log('❌ Platform not found:', platformSubdomain);
-        }
-      } catch (error) {
-        console.error('❌ Error in platform lookup:', error);
-      }
-    }
-    
-    console.log('❌ No valid platform found, continuing without platform session');
-    next();
-  };
 
   // Platform Profile Update endpoint (المطلوب للبروفايل)
   app.patch('/api/platforms/:platformId/profile', ensurePlatformSession, async (req, res) => {
@@ -6008,7 +6000,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // Platform Ads API endpoints
-  app.post('/api/platform-ads/tiktok/auth-url', isAuthenticated, async (req: any, res) => {
+  app.post('/api/platform-ads/tiktok/auth-url', ensurePlatformSession, async (req: any, res) => {
     try {
       const settings = await storage.getSystemSettings();
       const appId = settings.tiktokAppId;
@@ -6017,9 +6009,7 @@ ${platform?.platformName || 'متجرنا'}`;
         return res.status(400).json({ error: 'TikTok App ID not configured' });
       }
 
-      // الحصول على platform ID من المستخدم المسجل
-      const userId = req.user.claims.sub;
-      const platformId = await storage.getUserPlatform(userId);
+      const platformId = (req.session as any).platform?.platformId;
       
       if (!platformId) {
         return res.status(404).json({ error: 'Platform not found for user' });
@@ -6363,10 +6353,9 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // فصل اتصال TikTok
-  app.post('/api/platform-ads/tiktok/disconnect', isAuthenticated, async (req: any, res) => {
+  app.post('/api/platform-ads/tiktok/disconnect', ensurePlatformSession, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const platformId = await storage.getUserPlatform(userId);
+      const platformId = (req.session as any).platform?.platformId;
       
       if (!platformId) {
         return res.status(404).json({ error: 'Platform not found for user' });
@@ -7219,13 +7208,12 @@ ${platform?.platformName || 'متجرنا'}`;
   // ==================== META CAMPAIGN CREATION APIs ====================
 
   // إنشاء حملة Meta كاملة
-  app.post('/api/meta/campaigns/complete', isAuthenticated, async (req: any, res) => {
+  app.post('/api/meta/campaigns/complete', ensurePlatformSession, async (req: any, res) => {
     console.log('🎯 META COMPLETE CAMPAIGN - إنشاء حملة Meta كاملة');
     console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
     
     try {
-      const userId = req.user.claims.sub;
-      const platformId = await storage.getUserPlatform(userId);
+      const platformId = (req.session as any).platform?.platformId;
       
       if (!platformId) {
         return res.status(404).json({ error: 'Platform not found for user' });
@@ -7289,14 +7277,9 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // رفع فيديو مباشرة إلى Meta
-  app.post("/api/upload/meta-video/direct", isAuthenticated, async (req: any, res) => {
+  app.post("/api/upload/meta-video/direct", ensurePlatformSession, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      if (!userId) {
-        return res.status(401).json({ error: "User not authenticated" });
-      }
-
-      const platformId = await storage.getUserPlatform(userId);
+      const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
         return res.status(404).json({ error: "Platform not found for user" });
       }
