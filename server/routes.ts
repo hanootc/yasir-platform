@@ -584,11 +584,106 @@ export function registerRoutes(app: Express): Server {
   // Public order retrieval route - For thank you pages (no authentication required)
   app.get("/api/orders/:orderId", async (req, res) => {
     try {
-      const order = await storage.getOrder(req.params.orderId);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
+      const orderId = req.params.orderId;
+      
+      console.log("=== Getting Order by ID with Product Details (Main Endpoint) ===");
+      console.log("Order ID:", orderId);
+      
+      // Try to get landing page order first
+      const landingPageOrder = await storage.getLandingPageOrderById(orderId);
+      if (landingPageOrder) {
+        console.log("Found landing page order:", landingPageOrder);
+        
+        // Get product details - try from order first, then from landing page
+        let productDetails = null;
+        let productId = landingPageOrder.productId || landingPageOrder.product_id; // Try order's productId first
+        
+        console.log("landingPageOrder.productId:", landingPageOrder.productId);
+        console.log("landingPageOrder.landingPageId:", landingPageOrder.landingPageId);
+        
+        // If no direct productId, try to get it from landing page
+        if (!productId && landingPageOrder.landingPageId) {
+          const landingPage = await storage.getLandingPage(landingPageOrder.landingPageId);
+          console.log("Found landing page:", landingPage);
+          if (landingPage && landingPage.productId) {
+            productId = landingPage.productId;
+            console.log("Got productId from landing page:", productId);
+          }
+        }
+        
+        // Now get product details if we have a productId
+        if (productId) {
+          console.log("Getting product details for productId:", productId);
+          console.log("Calling storage.getProduct with productId:", productId);
+          const product = await storage.getProduct(productId);
+          console.log("Found product:", product);
+          if (!product) {
+            console.log("❌ Product not found in database for ID:", productId);
+          } else {
+            console.log("✅ Product found successfully:", product.name);
+          }
+          if (product) {
+            // Get category name if product has category
+            let categoryName = 'منتجات';
+            if (product.categoryId) {
+              const category = await storage.getCategory(product.categoryId);
+              if (category) {
+                categoryName = category.name;
+              }
+            }
+            
+            productDetails = {
+              ...product,
+              categoryName
+            };
+            console.log("Product details with category found:", productDetails);
+          } else {
+            console.log("Product not found for productId:", productId);
+          }
+        } else {
+          console.log("No productId found in order or landing page");
+        }
+        
+        // Return order with product details
+        // Convert field names to camelCase for frontend compatibility
+        const orderWithCamelCase = {
+          ...landingPageOrder,
+          customerName: landingPageOrder.customer_name,
+          customerPhone: landingPageOrder.customer_phone,
+          customerEmail: landingPageOrder.customer_email,
+          customerAddress: landingPageOrder.customer_address,
+          customerGovernorate: landingPageOrder.customer_governorate,
+          orderNumber: landingPageOrder.order_number,
+          totalAmount: landingPageOrder.total_amount,
+          discountAmount: landingPageOrder.discount_amount,
+          deliveryFee: landingPageOrder.delivery_fee,
+          landingPageId: landingPageOrder.landing_page_id,
+          productId: landingPageOrder.product_id,
+          platformId: landingPageOrder.platform_id,
+          orderSource: landingPageOrder.order_source,
+          adCampaignId: landingPageOrder.ad_campaign_id,
+          adSetId: landingPageOrder.ad_set_id,
+          adId: landingPageOrder.ad_id,
+          createdAt: landingPageOrder.created_at,
+          updatedAt: landingPageOrder.updated_at,
+          productDetails
+        };
+        
+        console.log("Returning order with camelCase fields:", orderWithCamelCase);
+        
+        // Return order with product details
+        return res.json(orderWithCamelCase);
       }
-      res.json(order);
+      
+      // If not found, try regular orders
+      const regularOrder = await storage.getOrder(orderId);
+      if (regularOrder) {
+        console.log("Found regular order:", regularOrder);
+        return res.json(regularOrder);
+      }
+      
+      console.log("Order not found:", orderId);
+      return res.status(404).json({ message: "Order not found" });
     } catch (error) {
       console.error("Error fetching order:", error);
       res.status(500).json({ message: "Failed to fetch order" });
@@ -4715,42 +4810,81 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   app.get("/api/products/:id/sizes", async (req, res) => {
+
+
+
+
+
+
+
     try {
+
+
+
+
+
+
+
       const { id } = req.params;
+
+
+
+
+
+
+
       const sizes = await storage.getProductSizes(id);
+
+
+
+
+
+
+
       res.json(sizes);
+
+
+
+
+
+
+
     } catch (error) {
+
+
+
+
+
+
+
       console.error("Error fetching product sizes:", error);
+
+
+
+
+
+
+
       res.status(500).json({ message: "Failed to fetch product sizes" });
+
+
+
+
+
+
+
     }
+
+
+
+
+
+
+
   });
 
-  app.post("/api/products/:id/sizes", requirePlatformAuthWithFallback, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { sizeName, sizeValue, sizeDescription, sortOrder } = req.body;
-      const platformId = (req.session as any)?.platform?.platformId;
-      
-      console.log('🔄 Creating product size:', { productId: id, platformId, sizeName, sizeValue, sizeDescription, sortOrder });
-      
-      const size = await storage.createProductSize({
-        productId: id,
-        platformId,
-        sizeName: sizeName || "حجم جديد",
-        sizeValue: sizeValue || "M",
-        sizeDescription: sizeDescription || null,
-        priceAdjustment: "0",
-        stockQuantity: 0,
-        isActive: true,
-        sortOrder: sortOrder || 0
-      });
-      console.log('✅ Product size created:', size);
-      res.status(201).json(size);
-    } catch (error) {
-      console.error("Error creating product size:", error);
-      res.status(500).json({ message: "Failed to create product size" });
-    }
-  });
+
+
 
   app.get("/api/products/:id/variants", requirePlatformAuthWithFallback, async (req, res) => {
     try {
@@ -5212,31 +5346,54 @@ ${platform?.platformName || 'متجرنا'}`;
       if (landingPageOrder) {
         console.log("Found landing page order:", landingPageOrder);
         
-        // Get product details if landing page has a product
+        // Get product details - try from order first, then from landing page
         let productDetails = null;
-        if (landingPageOrder.landingPageId) {
-          // Get landing page details
+        let productId = landingPageOrder.productId || landingPageOrder.product_id; // Try order's productId first
+        
+        console.log("landingPageOrder.productId:", landingPageOrder.productId);
+        console.log("landingPageOrder.landingPageId:", landingPageOrder.landingPageId);
+        
+        // If no direct productId, try to get it from landing page
+        if (!productId && landingPageOrder.landingPageId) {
           const landingPage = await storage.getLandingPage(landingPageOrder.landingPageId);
+          console.log("Found landing page:", landingPage);
           if (landingPage && landingPage.productId) {
-            // Get product details
-            const product = await storage.getProduct(landingPage.productId);
-            if (product) {
-              // Get category name if product has category
-              let categoryName = 'منتجات';
-              if (product.categoryId) {
-                const category = await storage.getCategory(product.categoryId);
-                if (category) {
-                  categoryName = category.name;
-                }
-              }
-              
-              productDetails = {
-                ...product,
-                categoryName
-              };
-              console.log("Product details with category found:", productDetails);
-            }
+            productId = landingPage.productId;
+            console.log("Got productId from landing page:", productId);
           }
+        }
+        
+        // Now get product details if we have a productId
+        if (productId) {
+          console.log("Getting product details for productId:", productId);
+          console.log("Calling storage.getProduct with productId:", productId);
+          const product = await storage.getProduct(productId);
+          console.log("Found product:", product);
+          if (!product) {
+            console.log("❌ Product not found in database for ID:", productId);
+          } else {
+            console.log("✅ Product found successfully:", product.name);
+          }
+          if (product) {
+            // Get category name if product has category
+            let categoryName = 'منتجات';
+            if (product.categoryId) {
+              const category = await storage.getCategory(product.categoryId);
+              if (category) {
+                categoryName = category.name;
+              }
+            }
+            
+            productDetails = {
+              ...product,
+              categoryName
+            };
+            console.log("Product details with category found:", productDetails);
+          } else {
+            console.log("Product not found for productId:", productId);
+          }
+        } else {
+          console.log("No productId found in order or landing page");
         }
         
         // Return order with product details
@@ -7331,15 +7488,44 @@ ${platform?.platformName || 'متجرنا'}`;
       const { MetaMarketingAPI } = await import('./metaApi');
       const metaApi = new MetaMarketingAPI(platform.metaAccessToken, platform.metaAdAccountId);
 
-      // رفع الفيديو
-      const videoId = await metaApi.uploadVideo(videoFile.data, videoFile.name);
-
+      // رفع الفيديو واستخراج وحفظ thumbnail مباشرة
+      let videoId: string;
+      let thumbnailUrl: string | null = null;
+      
+      // رفع الفيديو عادي أولاً
+      videoId = await metaApi.uploadVideo(videoFile.data, videoFile.name);
       console.log('✅ تم رفع الفيديو بنجاح إلى Meta:', videoId);
+      
+      // استخراج وحفظ thumbnail مباشرة في الخادم
+      try {
+        console.log('🖼️ بدء استخراج وحفظ thumbnail من الفيديو...');
+        const thumbnailBuffer = await metaApi.extractVideoThumbnail(videoFile.data);
+        
+        // حفظ thumbnail في الخادم وإرجاع URL عام
+        const { LocalStorageService } = await import('./localStorage');
+        const localStorage = new LocalStorageService();
+        
+        // تنظيف اسم الملف
+        const cleanFileName = videoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 50);
+        const thumbnailFileName = `${Date.now()}_${cleanFileName}_thumbnail.jpg`;
+        
+        const thumbnailPath = await localStorage.saveFile(thumbnailBuffer, thumbnailFileName, 'general');
+        thumbnailUrl = `https://sanadi.pro${thumbnailPath}`;
+        
+        console.log('✅ تم حفظ thumbnail بنجاح:', thumbnailUrl);
+        
+      } catch (error) {
+        console.error('❌ فشل في استخراج/حفظ thumbnail:', error);
+        console.log('⏩ سيتم استخدام thumbnail افتراضي');
+      }
 
       res.json({
         success: true,
         videoId: videoId,
-        message: 'تم رفع الفيديو بنجاح إلى Meta',
+        thumbnailUrl: thumbnailUrl,
+        message: thumbnailUrl 
+          ? 'تم رفع الفيديو واستخراج thumbnail من الفيديو نفسه بنجاح!'
+          : 'تم رفع الفيديو بنجاح - سيتم استخدام thumbnail افتراضي',
         originalName: videoFile.name,
         size: videoFile.size
       });
@@ -12839,13 +13025,30 @@ ${platform?.platformName || 'متجرنا'}`;
   // Get Ad Platform Settings (Public - for pixel tracking)
   app.get("/api/platforms/:platformId/ad-platform-settings", async (req, res) => {
     try {
-      const { platformId } = req.params;
+      let { platformId } = req.params;
+      
+      // Try to get platform from session or subdomain if not found
+      let actualPlatformId = (req.session as any)?.platform?.platformId || platformId;
+      
+      // If no platform session, try to get from query parameter
+      if (!actualPlatformId || actualPlatformId === 'undefined') {
+        const qSub = (req.query?.subdomain as string | undefined)?.trim();
+        console.log('🎯 Query subdomain for getting ad settings:', qSub);
+        
+        if (qSub) {
+          const pf = await storage.getPlatformBySubdomain(qSub);
+          if (pf) {
+            actualPlatformId = pf.id;
+            console.log('🎯 Found platform by query subdomain for GET:', actualPlatformId);
+          }
+        }
+      }
       
       // جلب إعدادات المنصات الإعلانية من قاعدة البيانات
       const [settings] = await db
         .select()
         .from(adPlatformSettings)
-        .where(eq(adPlatformSettings.platformId, platformId))
+        .where(eq(adPlatformSettings.platformId, actualPlatformId))
         .limit(1);
       
       const publicSettings: {
@@ -12877,20 +13080,48 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // Update Ad Platform Settings
-  app.post("/api/platforms/:platformId/ad-platform-settings", isAuthenticated, async (req, res) => {
+  app.post("/api/platforms/:platformId/ad-platform-settings", requirePlatformAuthWithFallback, async (req, res) => {
     try {
-      const { platformId } = req.params;
+      let { platformId } = req.params;
       const settingsData = req.body;
+      
+      // Try to get platform from session or subdomain if not found
+      let actualPlatformId = (req.session as any)?.platform?.platformId || platformId;
+      
+      // If no platform session, try to get from query parameter
+      if (!actualPlatformId || actualPlatformId === 'undefined') {
+        const qSub = (req.query?.subdomain as string | undefined)?.trim();
+        console.log('🎯 Query subdomain for ad settings:', qSub);
+        
+        if (qSub) {
+          const pf = await storage.getPlatformBySubdomain(qSub);
+          if (pf) {
+            actualPlatformId = pf.id;
+            console.log('🎯 Found platform by query subdomain:', actualPlatformId);
+            
+            // Restore session
+            (req.session as any).platform = {
+              platformId: pf.id,
+              platformName: (pf as any).platformName || (pf as any).name || "",
+              subdomain: pf.subdomain,
+              businessType: (pf as any).businessType,
+              logoUrl: (pf as any).logoUrl || (pf as any).logo || ""
+            } as any;
+          }
+        }
+      }
+      
+      console.log('🎯 Saving ad platform settings for platform:', actualPlatformId);
 
       // Check if settings exist
-      const existingSettings = await storage.getAdPlatformSettings(platformId);
+      const existingSettings = await storage.getAdPlatformSettings(actualPlatformId);
       
       let result;
       if (existingSettings) {
-        result = await storage.updateAdPlatformSettings(platformId, settingsData);
+        result = await storage.updateAdPlatformSettings(actualPlatformId, settingsData);
       } else {
         result = await storage.createAdPlatformSettings({
-          platformId,
+          platformId: actualPlatformId,
           ...settingsData
         });
       }
@@ -12930,11 +13161,11 @@ ${platform?.platformName || 'متجرنا'}`;
         });
       }
 
-      // استخدام Facebook Access Token من المتغيرات البيئية
-      const facebookAccessToken = process.env.FACEBOOK_ACCESS_TOKEN;
+      // استخدام Facebook Access Token من إعدادات المنصة
+      const facebookAccessToken = adPlatformSettings.facebookAccessToken;
       if (!facebookAccessToken) {
         return res.status(400).json({ 
-          error: 'Facebook Access Token not configured in environment variables' 
+          error: 'Facebook Access Token not configured for this platform' 
         });
       }
 
@@ -16211,6 +16442,87 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+
+  // Get product offers
+  app.get("/api/products/:id/offers", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const product = await storage.getProduct(id);
+      
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      console.log(`Getting offers for product ${id}:`, {
+        priceOffers: product.priceOffers,
+        price: product.price,
+        twoItemPrice: product.twoItemPrice,
+        threeItemPrice: product.threeItemPrice
+      });
+      
+      // استخراج العروض من priceOffers (نفس الحقل المستخدم في إنشاء المنتج)
+      let offers = [];
+      
+      if (product.priceOffers && Array.isArray(product.priceOffers) && product.priceOffers.length > 0) {
+        // استخدام العروض المحفوظة من FlexibleOffersManager
+        offers = product.priceOffers.map((offer, index) => ({
+          id: `offer_${index + 1}`,
+          label: offer.label || `${offer.quantity} قطع`,
+          quantity: offer.quantity,
+          price: offer.price,
+          savings: 0, // يمكن حسابه لاحقاً
+          isDefault: offer.isDefault || false
+        }));
+      } else {
+        // إذا لم توجد عروض مرنة، استخدم الأسعار التقليدية كعروض افتراضية
+        if (product.price) {
+          offers.push({
+            id: "single",
+            label: "قطعة واحدة",
+            quantity: 1,
+            price: Number(product.price),
+            savings: 0,
+            isDefault: true
+          });
+        }
+        
+        if (product.twoItemPrice) {
+          const basePrice = Number(product.price) || 0;
+          const twoPrice = Number(product.twoItemPrice);
+          const savings = basePrice > 0 ? (basePrice * 2) - twoPrice : 0;
+          offers.push({
+            id: "two",
+            label: "قطعتين",
+            quantity: 2,
+            price: twoPrice,
+            savings: Math.max(0, savings),
+            isDefault: false
+          });
+        }
+        
+        if (product.threeItemPrice) {
+          const basePrice = Number(product.price) || 0;
+          const threePrice = Number(product.threeItemPrice);
+          const savings = basePrice > 0 ? (basePrice * 3) - threePrice : 0;
+          offers.push({
+            id: "three",
+            label: "3 قطع",
+            quantity: 3,
+            price: threePrice,
+            savings: Math.max(0, savings),
+            isDefault: false
+          });
+        }
+      }
+      
+      console.log(`Product ${id} final offers:`, offers);
+      res.json(offers);
+    } catch (error) {
+      console.error("Error fetching product offers:", error);
+      res.status(500).json({ message: "Failed to fetch product offers" });
+    }
+  });
   const httpServer = createServer(app);
   return httpServer;
 }
+

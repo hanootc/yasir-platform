@@ -8,6 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
+interface OfferType {
+  id: string;
+  label: string;
+  quantity: number;
+  price: number;
+  savings: number;
+}
+
 interface CompactOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -44,20 +52,37 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
 
   // دالة لحساب السعر بناءً على الكمية مع العروض
   const calculatePriceForQuantity = (quantity: number): number => {
-    // أسعار العروض الثابتة
-    if (quantity === 1) return 15000; // سعر القطعة الواحدة
-    if (quantity === 2) return 25000; // عرض قطعتين
-    if (quantity === 3) return 30000; // عرض 3 قطع
-    
-    // للكميات الأكبر من 3، نضيف سعر القطع الإضافية على عرض الـ3 قطع
-    if (quantity > 3) {
-      const basePrice = 30000; // سعر أول 3 قطع
-      const additionalPieces = quantity - 3;
-      const additionalPrice = additionalPieces * 15000; // سعر القطع الإضافية
-      return basePrice + additionalPrice;
+    // البحث عن العرض المطابق للكمية في العروض الحقيقية
+    const matchingOffer = availableOffers.find((offer: OfferType) => offer.quantity === quantity);
+    if (matchingOffer) {
+      return matchingOffer.price;
     }
     
-    // إذا كانت الكمية أقل من 1، عودة للسعر الأساسي
+    // إذا لم نجد عرض مطابق، نحسب السعر بناءً على أقرب عرض
+    const sortedOffers = [...availableOffers].sort((a, b) => a.quantity - b.quantity);
+    
+    // إذا كانت الكمية أقل من أصغر عرض
+    if (quantity < sortedOffers[0]?.quantity) {
+      return sortedOffers[0]?.price || 15000;
+    }
+    
+    // إذا كانت الكمية أكبر من أكبر عرض، نحسب السعر تناسبياً
+    const largestOffer = sortedOffers[sortedOffers.length - 1];
+    if (quantity > largestOffer?.quantity) {
+      const pricePerUnit = largestOffer.price / largestOffer.quantity;
+      return Math.round(quantity * pricePerUnit);
+    }
+    
+    // إذا كانت الكمية بين عرضين، نأخذ العرض الأقرب
+    for (let i = 0; i < sortedOffers.length - 1; i++) {
+      if (quantity >= sortedOffers[i].quantity && quantity <= sortedOffers[i + 1].quantity) {
+        const diff1 = quantity - sortedOffers[i].quantity;
+        const diff2 = sortedOffers[i + 1].quantity - quantity;
+        return diff1 <= diff2 ? sortedOffers[i].price : sortedOffers[i + 1].price;
+      }
+    }
+    
+    // إذا لم نجد شيء، نعود للسعر الافتراضي
     return 15000;
   };
 
@@ -97,12 +122,27 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
     enabled: !!productId && isOpen,
   });
 
-  // العروض المتاحة
-  const availableOffers = [
-    { id: "1", label: "قطعة واحدة", quantity: 1, price: 15000, savings: 0 },
-    { id: "2", label: "قطعتين", quantity: 2, price: 25000, savings: 5000 },
-    { id: "3", label: "3 قطع", quantity: 3, price: 30000, savings: 15000 },
-  ];
+  // جلب العروض الحقيقية للمنتج
+  const { data: productOffers } = useQuery({
+    queryKey: [`/api/products/${productId}/offers`],
+    queryFn: () => apiRequest(`/api/products/${productId}/offers`),
+    enabled: !!productId && isOpen,
+  });
+
+  // العروض المتاحة - استخدام العروض الحقيقية أو العروض الافتراضية
+  const availableOffers: OfferType[] = productOffers && productOffers.length > 0 
+    ? productOffers.map((offer: any) => ({
+        id: offer.id,
+        label: offer.name || `${offer.quantity} قطع`,
+        quantity: offer.quantity,
+        price: offer.price,
+        savings: offer.savings || 0
+      }))
+    : [
+        { id: "1", label: "قطعة واحدة", quantity: 1, price: 15000, savings: 0 },
+        { id: "2", label: "قطعتين", quantity: 2, price: 25000, savings: 5000 },
+        { id: "3", label: "3 قطع", quantity: 3, price: 30000, savings: 15000 },
+      ];
 
   useEffect(() => {
     if (order && isOpen) {
@@ -111,7 +151,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
       const totalOfferPrice = extractPrice(order.offer || "") || Number(order.totalAmount || order.total_amount || 0);
       
       // تحديد العرض المحدد بناءً على الكمية
-      const currentOffer = availableOffers.find(offer => offer.quantity === currentQuantity);
+      const currentOffer = availableOffers.find((offer: OfferType) => offer.quantity === currentQuantity);
       
       setFormData({
         customerName: order.customerName || order.customer_name || order.name || "",
@@ -168,7 +208,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
   });
 
   const handleSave = () => {
-    const selectedOfferData = availableOffers.find(offer => offer.id === formData.selectedOffer);
+    const selectedOfferData = availableOffers.find((offer: OfferType) => offer.id === formData.selectedOffer);
     const quantity = selectedOfferData?.quantity || 1;
     const offerLabel = selectedOfferData?.label || 'قطعة واحدة';
     
@@ -297,7 +337,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
               <Select 
                 value={formData.selectedOffer} 
                 onValueChange={(value) => {
-                  const selectedOffer = availableOffers.find(offer => offer.id === value);
+                  const selectedOffer = availableOffers.find((offer: OfferType) => offer.id === value);
                   if (selectedOffer) {
                     setFormData(prev => ({ 
                       ...prev, 
@@ -311,7 +351,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
                   <SelectValue placeholder="اختر العرض" />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600">
-                  {availableOffers.map((offer) => (
+                  {availableOffers.map((offer: OfferType) => (
                     <SelectItem key={offer.id} value={offer.id}>
                       <div className="flex justify-between items-center w-full">
                         <span>{offer.label}</span>

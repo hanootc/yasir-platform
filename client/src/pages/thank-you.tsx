@@ -75,7 +75,7 @@ export default function ThankYouPage() {
       
       // توجيه العميل إلى واتساب صاحب المنصة بعد التأكيد
       if ((platform as any)?.whatsappNumber) {
-        const message = `مرحباً، تم تأكيد طلبي رقم #${order?.orderNumber} بنجاح\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || 0).toLocaleString()} د.ع\n\nشكراً لكم`;
+        const message = `مرحباً، تم تأكيد طلبي رقم #${order?.orderNumber} بنجاح\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || "0").toLocaleString()} د.ع\n\nشكراً لكم`;
         
         // تنسيق رقم WhatsApp (إزالة الصفر وإضافة كود الدولة إذا لزم الأمر)
         let whatsappNumber = (platform as any).whatsappNumber;
@@ -114,7 +114,7 @@ export default function ThankYouPage() {
     onSuccess: () => {
       // توجيه العميل مباشرة إلى واتساب صاحب المنصة
       if ((platform as any)?.whatsappNumber) {
-        const message = `مرحباً، أرجو الاتصال بي بخصوص طلبي رقم #${order?.orderNumber}\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || 0).toLocaleString()} د.ع`;
+        const message = `مرحباً، أرجو الاتصال بي بخصوص طلبي رقم #${order?.orderNumber}\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || "0").toLocaleString()} د.ع`;
         
         // تنسيق رقم WhatsApp (إزالة الصفر وإضافة كود الدولة إذا لزم الأمر)
         let whatsappNumber = (platform as any).whatsappNumber;
@@ -219,7 +219,7 @@ export default function ThankYouPage() {
     console.log("💰 Order value (IQD):", orderValueIQD, "د.ع");
 
     // استخراج الاسم الأول والأخير من اسم العميل
-    const nameParts = order.customerName.split(' ');
+    const nameParts = (order.customerName || '').split(' ');
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -233,7 +233,7 @@ export default function ThankYouPage() {
         productName = 'جهاز ضغط معصمي';
       } else if (offerText.includes('منتج') || offerText.includes('قطع')) {
         // استخراج الجزء الأول من العرض كاسم منتج
-        const parts = order.offer.split(' - ');
+        const parts = (order.offer || '').split(' - ');
         productName = parts[0] || 'منتج';
       } else {
         productName = 'منتج';
@@ -355,7 +355,7 @@ export default function ThankYouPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-theme-primary via-theme-secondary to-theme-accent py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-green-400 via-blue-500 to-purple-600 py-8 px-4">
       {/* تتبع البكسلات لحدث الشراء المكتمل - فقط للطلبات الجديدة */}
       {order && trackPurchaseEvent() && order.status === 'pending' && !localStorage.getItem(`pixel_tracked_${orderId}`) && (
         <PixelTracker 
@@ -368,25 +368,28 @@ export default function ThankYouPage() {
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Header - رسالة النجاح الرئيسية */}
-        <Card className="border-0 shadow-2xl bg-white/90 backdrop-blur-sm overflow-hidden">
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-center">
-            <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-              <CheckCircle className="w-14 h-14 text-white" />
+        <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 p-8 text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-green-600/20 to-teal-600/20"></div>
+            <div className="relative z-10">
+              <div className="w-28 h-28 bg-white/30 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce shadow-lg">
+                <CheckCircle className="w-16 h-16 text-white drop-shadow-lg" />
+              </div>
+              <h1 className="text-5xl font-bold text-white mb-3 drop-shadow-lg">تم إرسال طلبك بنجاح!</h1>
+              <p className="text-green-100 text-xl font-medium">شكراً لثقتك بنا</p>
             </div>
-            <h1 className="text-4xl font-bold text-white mb-2">تم إرسال طلبك بنجاح!</h1>
-            <p className="text-green-100 text-lg">شكراً لثقتك بنا</p>
           </div>
           <CardContent className="p-8 text-center">
-            <p className="text-xl text-gray-700 mb-6 leading-relaxed">
+            <p className="text-xl text-black mb-6 leading-relaxed">
               مرحباً <span className="font-bold text-green-600">{order.customerName}</span>! 
               <br />تم استلام طلبك وسنتواصل معك خلال 24 ساعة لتأكيد الطلب وترتيب التوصيل.
             </p>
             
             {/* رقم الطلب مع إمكانية النسخ */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 mb-6 border border-blue-200">
-              <p className="text-sm text-gray-600 mb-2">رقم طلبك للمتابعة</p>
+            <div className="bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl p-6 mb-6 border-2 border-blue-300 shadow-lg">
+              <p className="text-sm text-black mb-2 font-semibold">رقم طلبك للمتابعة</p>
               <div className="flex items-center justify-center space-x-2 space-x-reverse">
-                <p className="text-3xl font-bold text-gray-800">#{order.orderNumber}</p>
+                <p className="text-3xl font-bold text-green-700">#{order.orderNumber}</p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -411,9 +414,9 @@ export default function ThankYouPage() {
         <div className="grid lg:grid-cols-2 gap-6">
           
           {/* معلومات العميل */}
-          <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-lg font-bold text-gray-800">
+          <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm">
+            <CardHeader className="pb-3 bg-gradient-to-r from-blue-100 to-indigo-100 border-b border-blue-200">
+              <CardTitle className="flex items-center text-xl font-bold text-blue-800">
                 <User className="ml-2 text-blue-600" />
                 معلومات العميل
               </CardTitle>
@@ -424,8 +427,8 @@ export default function ThankYouPage() {
                   <User className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-800">الاسم الكامل</p>
-                  <p className="text-gray-600">{order.customerName}</p>
+                  <p className="font-medium text-black">الاسم الكامل</p>
+                  <p className="text-black">{order.customerName}</p>
                 </div>
               </div>
               
@@ -434,8 +437,8 @@ export default function ThankYouPage() {
                   <Phone className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-800">رقم الهاتف</p>
-                  <p className="text-gray-600 font-mono">{order.customerPhone}</p>
+                  <p className="font-medium text-black">رقم الهاتف</p>
+                  <p className="text-black font-mono">{order.customerPhone}</p>
                 </div>
               </div>
               
@@ -445,8 +448,8 @@ export default function ThankYouPage() {
                     <Mail className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-800">البريد الإلكتروني</p>
-                    <p className="text-gray-600 text-sm">{order.customerEmail}</p>
+                    <p className="font-medium text-black">البريد الإلكتروني</p>
+                    <p className="text-black text-sm">{order.customerEmail}</p>
                   </div>
                 </div>
               )}
@@ -456,18 +459,18 @@ export default function ThankYouPage() {
                   <MapPin className="w-5 h-5 text-red-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-800">عنوان التوصيل</p>
-                  <p className="text-gray-600">{order.customerAddress}</p>
-                  <p className="text-gray-500 text-sm font-medium">{order.customerGovernorate}</p>
+                  <p className="font-medium text-black">عنوان التوصيل</p>
+                  <p className="text-black">{order.customerAddress}</p>
+                  <p className="text-black text-sm font-medium">{order.customerGovernorate}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* تفاصيل الطلب المالية */}
-          <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-lg font-bold text-gray-800">
+          <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm">
+            <CardHeader className="pb-3 bg-gradient-to-r from-green-100 to-emerald-100 border-b border-green-200">
+              <CardTitle className="flex items-center text-xl font-bold text-green-800">
                 <DollarSign className="ml-2 text-green-600" />
                 تفاصيل الفاتورة
               </CardTitle>
@@ -479,10 +482,19 @@ export default function ThankYouPage() {
                   <Package className="w-5 h-5 text-purple-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800">المنتج المطلوب</p>
-                  <p className="text-gray-600">{order.productDetails?.name || 'منتج غير محدد'}</p>
+                  <p className="font-medium text-black">المنتج المطلوب</p>
+                  <p className="text-black">{(() => {
+                    console.log('Order data for product name:', {
+                      orderId: order.id,
+                      landingPageId: order.landingPageId,
+                      productDetails: order.productDetails,
+                      offer: order.offer,
+                      fullOrder: order
+                    });
+                    return order.productDetails?.name || 'منتج غير محدد';
+                  })()}</p>
                   {order.offer && (
-                    <p className="text-gray-500 text-sm">العرض: {order.offer}</p>
+                    <p className="text-black text-sm">العرض: {order.offer}</p>
                   )}
                 </div>
               </div>
@@ -492,8 +504,8 @@ export default function ThankYouPage() {
                   <DollarSign className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800">المبلغ الفرعي</p>
-                  <p className="text-gray-600 font-mono">{formatCurrency(parseFloat(order.subtotal || order.totalAmount || order.total))}</p>
+                  <p className="font-medium text-black">المبلغ الفرعي</p>
+                  <p className="text-green-700 font-mono">{formatCurrency(parseFloat(order.subtotal || order.totalAmount || order.total))}</p>
                 </div>
               </div>
               
@@ -503,7 +515,7 @@ export default function ThankYouPage() {
                     <Star className="w-5 h-5 text-green-600" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-gray-800">خصم</p>
+                    <p className="font-medium text-black">خصم</p>
                     <p className="text-green-600 font-mono">-{formatCurrency(parseFloat(order.discountAmount))}</p>
                   </div>
                 </div>
@@ -516,7 +528,7 @@ export default function ThankYouPage() {
                   <DollarSign className="w-5 h-5 text-green-700" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-gray-800 text-lg">المبلغ الإجمالي</p>
+                  <p className="font-bold text-black text-lg">المبلغ الإجمالي</p>
                   <p className="text-green-700 font-bold text-xl font-mono">{formatCurrency(parseFloat(order.totalAmount || order.total))}</p>
                 </div>
               </div>
@@ -526,8 +538,8 @@ export default function ThankYouPage() {
                   <Calendar className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-800">تاريخ الطلب</p>
-                  <p className="text-gray-600 text-sm">{new Date(order.createdAt).toLocaleString('ar-IQ')}</p>
+                  <p className="font-medium text-black">تاريخ الطلب</p>
+                  <p className="text-black text-sm">{new Date(order.createdAt).toLocaleString('ar-IQ')}</p>
                 </div>
               </div>
             </CardContent>
@@ -536,9 +548,9 @@ export default function ThankYouPage() {
 
         {/* ملاحظات إضافية */}
         {order.notes && (
-          <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-lg font-bold text-gray-800">
+          <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm">
+            <CardHeader className="pb-3 bg-gradient-to-r from-purple-100 to-pink-100 border-b border-purple-200">
+              <CardTitle className="flex items-center text-xl font-bold text-purple-800">
                 <MessageCircle className="ml-2 text-purple-600" />
                 ملاحظات إضافية
               </CardTitle>
@@ -552,9 +564,9 @@ export default function ThankYouPage() {
         )}
 
         {/* الخطوات التالية */}
-        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center text-lg font-bold text-gray-800">
+        <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm">
+          <CardHeader className="pb-3 bg-gradient-to-r from-orange-100 to-yellow-100 border-b border-orange-200">
+            <CardTitle className="flex items-center text-xl font-bold text-orange-800">
               <Truck className="ml-2 text-orange-600" />
               الخطوات التالية
             </CardTitle>
@@ -564,32 +576,32 @@ export default function ThankYouPage() {
               <div className="flex items-start space-x-4 space-x-reverse">
                 <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold shrink-0">1</div>
                 <div>
-                  <p className="font-semibold text-gray-800 mb-1">مراجعة وتأكيد الطلب</p>
-                  <p className="text-gray-600 text-sm leading-relaxed">سيقوم فريقنا بمراجعة طلبك والتأكد من توفر المنتج خلال الساعات القليلة القادمة</p>
+                  <p className="font-semibold text-black mb-1">مراجعة وتأكيد الطلب</p>
+                  <p className="text-black text-sm leading-relaxed">سيقوم فريقنا بمراجعة طلبك والتأكد من توفر المنتج خلال الساعات القليلة القادمة</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-4 space-x-reverse">
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold shrink-0">2</div>
                 <div>
-                  <p className="font-semibold text-gray-800 mb-1">الاتصال للتأكيد</p>
-                  <p className="text-gray-600 text-sm leading-relaxed">سنتصل بك على رقم {order.customerPhone} خلال 24 ساعة لتأكيد تفاصيل الطلب والعنوان</p>
+                  <p className="font-semibold text-black mb-1">الاتصال للتأكيد</p>
+                  <p className="text-black text-sm leading-relaxed">سنتصل بك على رقم {order.customerPhone} خلال 24 ساعة لتأكيد تفاصيل الطلب والعنوان</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-4 space-x-reverse">
                 <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold shrink-0">3</div>
                 <div>
-                  <p className="font-semibold text-gray-800 mb-1">التوصيل</p>
-                  <p className="text-gray-600 text-sm leading-relaxed">سيتم توصيل طلبك إلى العنوان المحدد في {order.customerGovernorate} خلال 2-5 أيام عمل</p>
+                  <p className="font-semibold text-black mb-1">التوصيل</p>
+                  <p className="text-black text-sm leading-relaxed">سيتم توصيل طلبك إلى العنوان المحدد في {order.customerGovernorate} خلال 2-5 أيام عمل</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-4 space-x-reverse">
                 <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold shrink-0">4</div>
                 <div>
-                  <p className="font-semibold text-gray-800 mb-1">الدفع عند الاستلام</p>
-                  <p className="text-gray-600 text-sm leading-relaxed">ادفع مبلغ {formatCurrency(parseFloat(order.total))} عند استلام المنتج</p>
+                  <p className="font-semibold text-black mb-1">الدفع عند الاستلام</p>
+                  <p className="text-black text-sm leading-relaxed">ادفع مبلغ <span className="text-green-700 font-bold">{formatCurrency(parseFloat(order.total))}</span> عند استلام المنتج</p>
                 </div>
               </div>
             </div>
@@ -599,7 +611,7 @@ export default function ThankYouPage() {
 
 
         {/* أزرار الإجراءات */}
-        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm">
+        <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm">
           <CardContent className="p-6">
             <div className="grid md:grid-cols-2 gap-4">
               <Button 

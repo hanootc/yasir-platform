@@ -1037,6 +1037,147 @@ export default function LandingPageView() {
     }
   }, [landingPage, product]);
 
+  // تعيين favicon المخصص للمنصة أولاً
+  useEffect(() => {
+    if (platformData && platformData.logoUrl) {
+      // حذف جميع favicon الموجودة أولاً
+      const existingFavicons = document.querySelectorAll('link[rel*="icon"]');
+      existingFavicons.forEach(favicon => favicon.remove());
+      
+      // تحويل رابط الشعار إلى رابط عام
+      const logoUrl = platformData.logoUrl.startsWith('/objects/') 
+        ? platformData.logoUrl.replace('/objects/', '/public-objects/') 
+        : platformData.logoUrl;
+      
+      const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${window.location.origin}${logoUrl}`;
+      
+      // إضافة timestamp لتجنب التخزين المؤقت
+      const timestamp = new Date().getTime();
+      const faviconUrl = `${fullLogoUrl}?v=${timestamp}`;
+      
+      // إنشاء favicon جديد
+      const favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      favicon.type = 'image/x-icon';
+      favicon.href = faviconUrl;
+      document.head.appendChild(favicon);
+      
+      // إضافة shortcut icon
+      const shortcutIcon = document.createElement('link');
+      shortcutIcon.rel = 'shortcut icon';
+      shortcutIcon.type = 'image/x-icon';
+      shortcutIcon.href = faviconUrl;
+      document.head.appendChild(shortcutIcon);
+      
+      // إضافة أحجام مختلفة
+      const sizes = ['16x16', '32x32', '48x48', '64x64'];
+      sizes.forEach(size => {
+        const sizedIcon = document.createElement('link');
+        sizedIcon.rel = 'icon';
+        sizedIcon.type = 'image/png';
+        sizedIcon.sizes = size;
+        sizedIcon.href = faviconUrl;
+        document.head.appendChild(sizedIcon);
+      });
+      
+      // Apple touch icon
+      const appleTouchIcon = document.createElement('link');
+      appleTouchIcon.rel = 'apple-touch-icon';
+      appleTouchIcon.href = faviconUrl;
+      document.head.appendChild(appleTouchIcon);
+      
+      console.log('🎨 Custom favicon set with cache busting:', faviconUrl);
+      console.log('🏪 Platform:', platformData.platformName);
+    }
+  }, [platformData]);
+
+  // تعيين title الصفحة بناءً على بيانات المنتج والمنصة (بعد الـ favicon)
+  useEffect(() => {
+    if (product && platformData) {
+      // الحصول على السعر المناسب
+      let displayPrice = product.price;
+      
+      // إذا كانت هناك عروض، استخدم السعر من العرض الافتراضي
+      if (product.priceOffers && Array.isArray(product.priceOffers) && product.priceOffers.length > 0) {
+        const defaultOffer = product.priceOffers.find((offer: any) => offer.isDefault) || product.priceOffers[0];
+        displayPrice = defaultOffer.price;
+      }
+      
+      // تنسيق السعر
+      const formattedPrice = formatCurrency(displayPrice);
+      
+      // تكوين العنوان: اسم المنتج - السعر | اسم المنصة
+      const pageTitle = `${product.name} - ${formattedPrice} | ${platformData.platformName || 'متجرنا'}`;
+      
+      // تعيين title الصفحة
+      document.title = pageTitle;
+      
+      console.log('📄 Page title set:', pageTitle);
+    } else if (product) {
+      // إذا كان هناك منتج فقط بدون بيانات المنصة
+      const displayPrice = product.price;
+      const formattedPrice = formatCurrency(displayPrice);
+      const pageTitle = `${product.name} - ${formattedPrice}`;
+      document.title = pageTitle;
+    }
+  }, [product, platformData]);
+
+  // تعيين meta tags للصفحة
+  useEffect(() => {
+    if (product && platformData) {
+      // الحصول على السعر المناسب
+      let displayPrice = product.price;
+      if (product.priceOffers && Array.isArray(product.priceOffers) && product.priceOffers.length > 0) {
+        const defaultOffer = product.priceOffers.find((offer: any) => offer.isDefault) || product.priceOffers[0];
+        displayPrice = defaultOffer.price;
+      }
+      
+      const formattedPrice = formatCurrency(displayPrice);
+      
+      // تعيين أو تحديث meta description
+      let metaDescription = document.querySelector('meta[name="description"]') as HTMLMetaElement;
+      if (!metaDescription) {
+        metaDescription = document.createElement('meta');
+        metaDescription.name = 'description';
+        document.head.appendChild(metaDescription);
+      }
+      
+      const description = `${product.name} بسعر ${formattedPrice} من ${platformData.platformName}. ${product.description || 'منتج عالي الجودة مع خدمة ممتازة.'}`;
+      metaDescription.content = description.substring(0, 160); // حد الـ 160 حرف لـ SEO
+      
+      // تعيين Open Graph tags
+      let ogTitle = document.querySelector('meta[property="og:title"]') as HTMLMetaElement;
+      if (!ogTitle) {
+        ogTitle = document.createElement('meta');
+        ogTitle.setAttribute('property', 'og:title');
+        document.head.appendChild(ogTitle);
+      }
+      ogTitle.content = `${product.name} - ${formattedPrice}`;
+      
+      let ogDescription = document.querySelector('meta[property="og:description"]') as HTMLMetaElement;
+      if (!ogDescription) {
+        ogDescription = document.createElement('meta');
+        ogDescription.setAttribute('property', 'og:description');
+        document.head.appendChild(ogDescription);
+      }
+      ogDescription.content = description.substring(0, 160);
+      
+      // إضافة صورة المنتج إلى Open Graph إذا كانت متوفرة
+      if (product.imageUrls && product.imageUrls.length > 0) {
+        let ogImage = document.querySelector('meta[property="og:image"]') as HTMLMetaElement;
+        if (!ogImage) {
+          ogImage = document.createElement('meta');
+          ogImage.setAttribute('property', 'og:image');
+          document.head.appendChild(ogImage);
+        }
+        const productImage = convertToPublicUrls(product.imageUrls)[0];
+        ogImage.content = productImage.startsWith('http') ? productImage : `${window.location.origin}${productImage}`;
+      }
+      
+      console.log('🏷️ Meta tags updated for SEO');
+    }
+  }, [product, platformData]);
+
   // دالة لتغيير الثيم وحفظه في قاعدة البيانات
   const toggleTheme = async () => {
     const newTheme = isDarkMode ? 'light' : 'dark';
