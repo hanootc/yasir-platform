@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { usePlatformSession } from "@/hooks/use-platform-session";
 import PlatformSidebar from "@/components/PlatformSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Category {
   id: string;
@@ -43,8 +44,14 @@ export default function PlatformCategories() {
   const { session, isLoading: sessionLoading } = usePlatformSession();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setSidebarCollapsed(isMobile);
+  }, [isMobile]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState({
@@ -209,7 +216,7 @@ export default function PlatformCategories() {
       />
 
       {/* Main content */}
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:mr-16' : 'lg:mr-64'}`}>
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'}`}>
         {/* Page Title Section */}
         <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
           <div className="text-right flex items-center justify-between">

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlatformSidebar } from "@/components/PlatformSidebar";
+import PlatformSidebar from "@/components/PlatformSidebar";
 import { useLocation } from "wouter";
 import { useSessionInfo } from "@/hooks/useSessionInfo";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -30,8 +30,13 @@ interface AccountsData {
 export function MyAccounts() {
   const [location] = useLocation();
   const { platformSession, isLoading } = useSessionInfo();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
+  
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setSidebarCollapsed(isMobile);
+  }, [isMobile]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -257,7 +262,7 @@ export function MyAccounts() {
       />
       
       <div className={`flex-1 flex flex-col transition-all duration-300 relative z-10 ${
-        !sidebarCollapsed ? (isMobile ? 'ml-0' : 'mr-64') : (isMobile ? 'mr-0' : 'mr-16')
+        sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'
       }`}>
         {/* Page Title Section */}
         <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
@@ -270,7 +275,7 @@ export function MyAccounts() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="md:hidden bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
+                className="lg:hidden bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
               >
                 <i className="fas fa-bars h-4 w-4"></i>
               </Button>

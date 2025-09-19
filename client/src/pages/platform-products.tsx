@@ -310,7 +310,7 @@ export default function PlatformProducts() {
       />
 
       {/* Main content */}
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:mr-16' : 'lg:mr-64'}`}>
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'}`}>
         {/* Page Title Section */}
         <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
           <div className="text-right flex items-center justify-between">

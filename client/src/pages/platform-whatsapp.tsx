@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlatformSidebar } from "@/components/PlatformSidebar";
+import PlatformSidebar from "@/components/PlatformSidebar";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -500,9 +500,9 @@ export default function PlatformWhatsApp() {
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
       
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'md:mr-16' : 'md:mr-64'}`}>
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'}`}>
         {/* Page Title Section */}
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
+        <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 md:px-8 py-4">
           <div className="text-right flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ColorThemeSelector />
@@ -512,7 +512,7 @@ export default function PlatformWhatsApp() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="md:hidden bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
+                className="lg:hidden bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
               >
                 <i className="fas fa-bars h-4 w-4"></i>
               </Button>
@@ -525,7 +525,7 @@ export default function PlatformWhatsApp() {
         </div>
         
         {/* Content */}
-        <div className="p-4 lg:p-8">
+        <div className="p-4 md:p-6 lg:p-8">
           {whatsappSession?.isConnected ? (
             // واجهة الواتساب المتصلة
             <div className="h-[calc(100vh-120px)] lg:h-[calc(100vh-140px)]">
@@ -1078,7 +1078,7 @@ export default function PlatformWhatsApp() {
                     </CardHeader>
                     <CardContent className="p-0">
                       {chats && chats.length > 0 ? (
-                        <div className="max-h-[calc(100vh-250px)] lg:max-h-[500px] overflow-y-auto">
+                        <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
                           {chats.map((chat: any) => (
                             <div
                               key={chat.id}
@@ -1086,7 +1086,7 @@ export default function PlatformWhatsApp() {
                                 setSelectedChat(chat.id);
                                 setShowChatList(false);
                               }}
-                              className={`p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                              className={`p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                                 selectedChat === chat.id ? 'bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 border-r-2 border-r-purple-500' : ''
                               } selection:bg-purple-100 dark:selection:bg-purple-900/50 selection:text-purple-900 dark:selection:text-purple-100`}
                             >

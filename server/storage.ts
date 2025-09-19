@@ -1172,6 +1172,8 @@ export class DatabaseStorage implements IStorage {
           stock: products.stock,
           lowStockThreshold: products.lowStockThreshold,
           sku: products.sku,
+          slug: products.slug,
+          defaultTheme: products.defaultTheme,
           defaultLandingTemplate: products.defaultLandingTemplate,
           createdBy: products.createdBy,
           createdAt: products.createdAt,
@@ -1206,6 +1208,8 @@ export class DatabaseStorage implements IStorage {
         stock: products.stock,
         lowStockThreshold: products.lowStockThreshold,
         sku: products.sku,
+        slug: products.slug,
+        defaultTheme: products.defaultTheme,
         defaultLandingTemplate: products.defaultLandingTemplate,
         createdBy: products.createdBy,
         createdAt: products.createdAt,
@@ -1264,8 +1268,11 @@ export class DatabaseStorage implements IStorage {
       // الحصول على أحجام المنتج وإضافة صورها (إن وجدت)
       const productSizes = await this.getProductSizes(id);
       for (const size of productSizes) {
-        if (size.sizeImageUrl) {
-          filesToDelete.push(size.sizeImageUrl);
+        // Note: sizeImageUrl property doesn't exist in current schema
+        // This code is kept for future compatibility
+        const sizeImageUrl = (size as any).sizeImageUrl;
+        if (sizeImageUrl) {
+          filesToDelete.push(sizeImageUrl);
         }
       }
 

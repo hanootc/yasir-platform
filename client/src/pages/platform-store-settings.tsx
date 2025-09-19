@@ -102,6 +102,11 @@ export default function PlatformStoreSettings() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setSidebarCollapsed(isMobile);
+  }, [isMobile]);
+
   // Get platform session data instead of auth user
   const { platformSession } = useCurrentSession();
 
@@ -236,13 +241,22 @@ export default function PlatformStoreSettings() {
       />
 
       {/* Main content */}
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:mr-16' : 'lg:mr-64'}`}>
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'}`}>
         {/* Header */}
         <div className="theme-border bg-theme-primary-lighter px-8 py-4">
           <div className="text-right flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ThemeToggle />
               <ColorThemeSelector />
+              <ThemeToggle />
+              {/* Mobile Menu Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="md:hidden bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
+              >
+                <i className="fas fa-bars h-4 w-4"></i>
+              </Button>
             </div>
             <div>
               <h1 className="text-2xl font-bold text-theme-primary">إعدادات المتجر</h1>

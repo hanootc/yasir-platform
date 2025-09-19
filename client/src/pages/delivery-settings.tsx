@@ -46,6 +46,12 @@ export default function DeliverySettings() {
   const isMobile = useIsMobile();
   const [location] = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
+  
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setSidebarCollapsed(isMobile);
+  }, [isMobile]);
+  
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -263,7 +269,7 @@ export default function DeliverySettings() {
       />
       
       <div className={`flex-1 flex flex-col transition-all duration-300 relative z-10 ${
-        !sidebarCollapsed ? (isMobile ? 'ml-0' : 'mr-64') : (isMobile ? 'mr-0' : 'mr-16')
+        sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'
       }`}>
         {/* Page Title Section */}
         <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
@@ -657,7 +663,7 @@ export default function DeliverySettings() {
                   {/* زر التفعيل خارج البطاقة */}
                   <div className="flex items-center justify-between bg-white/80 dark:bg-gray-800/80 backdrop-blur border border-gray-200/50 dark:border-gray-700/50 rounded-lg p-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full ${deliverySettings.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'}`}></div>
                       <span className="font-medium text-gray-900 dark:text-white">
                         حالة الخدمة: {deliverySettings.isActive ? 'مفعلة' : 'معطلة'}
                       </span>

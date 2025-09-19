@@ -130,7 +130,7 @@ export default function PlatformAdsMeta() {
       />
       
       <div className={`flex-1 flex flex-col transition-all duration-300 relative z-10 ${
-        !sidebarCollapsed ? (isMobile ? 'ml-0' : 'mr-64') : (isMobile ? 'mr-0' : 'mr-16')
+        sidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'
       }`}>
         {/* Page Title Section */}
         <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 sm:px-8 py-4">

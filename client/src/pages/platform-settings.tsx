@@ -39,6 +39,27 @@ import googleAdsCustomerImg from "@assets/image_1755186700995.png";
 import googleAdsAccessImg from "@assets/image_1755189566401.png";
 import googleRefreshImg from "@assets/image_1755252636921.png";
 
+// Interfaces
+interface PlatformSession {
+  platformId: string;
+  platformName: string;
+  subdomain: string;
+  userType: string;
+}
+
+interface AdPlatformSettings {
+  facebookPixelId?: string;
+  facebookAccessToken?: string;
+  tiktokPixelId?: string;
+  tiktokAccessToken?: string;
+  snapchatPixelId?: string;
+  snapchatAccessToken?: string;
+  googleAnalyticsId?: string;
+  googleAdsCustomerId?: string;
+  googleAdsAccessToken?: string;
+  googleAdsRefreshToken?: string;
+}
+
 // Schema for ad platform settings
 const adPlatformSettingsSchema = z.object({
   // Facebook/Meta settings
@@ -77,13 +98,13 @@ export default function PlatformSettings() {
   const { data: session } = useQuery({
     queryKey: ["/api/platform-session"],
     retry: false,
-  });
+  }) as { data: PlatformSession | undefined };
 
   // Get ad platform settings
   const { data: adPlatformSettings, isLoading } = useQuery({
     queryKey: [`/api/platforms/${session?.platformId}/ad-platform-settings`],
     enabled: !!session?.platformId,
-  });
+  }) as { data: AdPlatformSettings | undefined, isLoading: boolean };
 
   // Form setup
   const form = useForm<AdPlatformSettingsFormData>({
@@ -123,7 +144,8 @@ export default function PlatformSettings() {
   // Update settings mutation
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: AdPlatformSettingsFormData) => {
-      return apiRequest(`/api/platforms/${session?.platformId}/ad-platform-settings`, "POST", data);
+      const subdomain = session?.subdomain || window.location.hostname.split('.')[0];
+      return apiRequest(`/api/platforms/${session?.platformId}/ad-platform-settings?subdomain=${subdomain}`, "POST", data);
     },
     onSuccess: () => {
       toast({
@@ -169,7 +191,7 @@ export default function PlatformSettings() {
   return (
     <div className="min-h-screen bg-theme-primary-lighter flex relative" dir="rtl">
       <PlatformSidebar 
-        session={session} 
+        session={session as PlatformSession} 
         currentPath="/platform-settings" 
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}

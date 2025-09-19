@@ -190,7 +190,7 @@ export class MetaMarketingAPI {
   // رفع فيديو إلى Meta
 
   // استخراج الإطار الأول من الفيديو كصورة مصغرة
-  private async extractVideoThumbnail(videoBuffer: Buffer): Promise<Buffer> {
+  async extractVideoThumbnail(videoBuffer: Buffer): Promise<Buffer> {
     const ffmpeg = (await import('fluent-ffmpeg')).default;
     const path = await import('path');
     const fs = await import('fs');
@@ -252,8 +252,69 @@ export class MetaMarketingAPI {
     }
   }
 
+  // رفع فيديو مع thumbnail مخصص في عملية واحدة
+  async uploadVideoWithThumbnail(videoBuffer: Buffer, thumbnailBuffer: Buffer, fileName: string): Promise<string> {
+    console.log('📹 رفع فيديو مع thumbnail مخصص إلى Meta...');
+    
+    try {
+      const FormData = (await import('form-data')).default;
+      const formData = new FormData();
+      
+      formData.append('access_token', this.accessToken);
+      formData.append('source', videoBuffer, {
+        filename: fileName,
+        contentType: 'video/mp4'
+      });
+      
+      // إضافة thumbnail مخصص - هذه هي الطريقة الصحيحة!
+      formData.append('thumb', thumbnailBuffer, {
+        filename: `${fileName}_thumbnail.jpg`,
+        contentType: 'image/jpeg'
+      });
+
+      console.log('🔄 جاري رفع الفيديو مع thumbnail إلى Meta...');
+      console.log('📊 حجم الفيديو:', Math.round(videoBuffer.length / (1024 * 1024) * 100) / 100, 'MB');
+      console.log('🖼️ حجم thumbnail:', Math.round(thumbnailBuffer.length / 1024), 'KB');
+      console.log('🔗 رابط رفع الفيديو:', `${this.baseUrl}/act_${this.adAccountId}/advideos`);
+
+      const fetch = (await import('node-fetch')).default;
+      const response = await fetch(
+        `${this.baseUrl}/act_${this.adAccountId}/advideos`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ خطأ HTTP:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json() as any;
+      console.log('📦 استجابة Meta API:', JSON.stringify(result, null, 2));
+
+      if (result.error) {
+        throw new Error(result.error.message || 'خطأ غير معروف من Meta API');
+      }
+
+      if (result.id) {
+        console.log('✅ تم رفع الفيديو مع thumbnail مخصص بنجاح، معرف الفيديو:', result.id);
+        return result.id;
+      }
+
+      throw new Error('لم يتم العثور على معرف الفيديو في الاستجابة');
+
+    } catch (error) {
+      console.error('⚠️ فشل رفع الفيديو مع thumbnail إلى Meta:', (error as Error).message);
+      throw new Error(`فشل رفع الفيديو مع thumbnail إلى Meta: ${(error as Error).message}`);
+    }
+  }
+
+  // رفع فيديو عادي (بدون thumbnail)
   async uploadVideo(videoBuffer: Buffer, fileName: string): Promise<string> {
-    console.log('📹 رفع فيديو إلى Meta...');
+    console.log('📹 رفع فيديو عادي إلى Meta...');
     
     try {
       const FormData = (await import('form-data')).default;
@@ -301,6 +362,99 @@ export class MetaMarketingAPI {
     } catch (error) {
       console.error('⚠️ فشل رفع الفيديو إلى Meta:', (error as Error).message);
       throw new Error(`فشل رفع الفيديو إلى Meta: ${(error as Error).message}`);
+    }
+  }
+
+  // جلب thumbnails المتاحة للفيديو من Meta
+  async getVideoThumbnails(videoId: string): Promise<string | null> {
+    console.log('🖼️ جلب thumbnails للفيديو:', videoId);
+    
+    try {
+      const fetch = (await import('node-fetch')).default;
+      const response = await fetch(
+        `${this.baseUrl}/${videoId}/thumbnails?fields=uri,is_preferred,width,height&access_token=${this.accessToken}`,
+        {
+          method: 'GET',
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ خطأ في جلب thumbnails:', response.status, errorText);
+        return null;
+      }
+
+      const result = await response.json() as any;
+      console.log('📦 thumbnails متاحة:', JSON.stringify(result, null, 2));
+
+      if (result.data && result.data.length > 0) {
+        // ابحث عن preferred thumbnail أولاً
+        const preferredThumbnail = result.data.find((thumb: any) => thumb.is_preferred);
+        if (preferredThumbnail && preferredThumbnail.uri) {
+          console.log('✅ تم العثور على preferred thumbnail:', preferredThumbnail.uri);
+          return preferredThumbnail.uri;
+        }
+        
+        // إذا لم يوجد preferred، استخدم أول thumbnail متاح
+        const firstThumbnail = result.data[0];
+        if (firstThumbnail && firstThumbnail.uri) {
+          console.log('✅ تم العثور على أول thumbnail متاح:', firstThumbnail.uri);
+          return firstThumbnail.uri;
+        }
+      }
+
+      console.log('⚠️ لم يتم العثور على أي thumbnails');
+      return null;
+
+    } catch (error) {
+      console.error('⚠️ فشل جلب thumbnails:', (error as Error).message);
+      return null;
+    }
+  }
+
+  // رفع thumbnail مخصص للفيديو
+  async uploadVideoThumbnail(videoId: string, thumbnailBuffer: Buffer, fileName: string): Promise<boolean> {
+    console.log('🖼️ رفع thumbnail مخصص للفيديو:', videoId);
+    
+    try {
+      const FormData = (await import('form-data')).default;
+      const formData = new FormData();
+      
+      formData.append('access_token', this.accessToken);
+      formData.append('is_preferred', 'true');
+      formData.append('source', thumbnailBuffer, {
+        filename: fileName,
+        contentType: 'image/jpeg'
+      });
+
+      const fetch = (await import('node-fetch')).default;
+      const response = await fetch(
+        `${this.baseUrl}/${videoId}/thumbnails`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ خطأ في رفع thumbnail:', response.status, errorText);
+        return false;
+      }
+
+      const result = await response.json() as any;
+      console.log('📦 استجابة thumbnail:', JSON.stringify(result, null, 2));
+
+      if (result.success) {
+        console.log('✅ تم رفع thumbnail بنجاح للفيديو');
+        return true;
+      }
+
+      return false;
+
+    } catch (error) {
+      console.error('⚠️ فشل رفع thumbnail:', (error as Error).message);
+      return false;
     }
   }
 
@@ -524,6 +678,8 @@ export class MetaMarketingAPI {
     // Media
     videoUrl?: string;
     imageUrls?: string[];
+    imageHash?: string;
+    thumbnailUrl?: string;
     
     // Tracking
     pixelId?: string;
@@ -534,10 +690,19 @@ export class MetaMarketingAPI {
     targeting?: any;
     productId?: string;
     
+    // Placements configuration
+    placements?: any;
+    
     // وجهات الرسائل (للحملات الرسائل فقط)
     messageDestinations?: string[];
   }) {
     console.log('🚀 إنشاء حملة Meta كاملة:', data.campaignName);
+    console.log('🖼️ بيانات الوسائط:', {
+      videoUrl: data.videoUrl,
+      thumbnailUrl: data.thumbnailUrl,
+      imageUrls: data.imageUrls,
+      imageHash: data.imageHash
+    });
 
     try {
       // 1. إنشاء الحملة
@@ -663,22 +828,17 @@ export class MetaMarketingAPI {
         
         // إذا كان videoUrl معرف فيديو (رقمي) فاستخدمه مباشرة، وإلا قم بتحميله ورفعه
         if (/^\d+$/.test(data.videoUrl)) {
-          console.log('🆔 معرف فيديو موجود مسبقاً');
+          console.log('🆔 معرف فيديو Meta موجود مسبقاً - استخدام مباشر');
           videoId = data.videoUrl; // معرف فيديو موجود مسبقاً
-          
-          // تحميل الفيديو من Meta لاستخراج الصورة المصغرة
-          try {
-            console.log('📥 بدء تحميل الفيديو من Meta...');
-            videoBuffer = await this.downloadVideoById(videoId);
-            console.log('✅ تم تحميل الفيديو بنجاح من Meta');
-          } catch (error) {
-            console.warn('⚠️ لا يمكن تحميل الفيديو من Meta لاستخراج الصورة المصغرة:', error);
-          }
-        } else {
+          // لا نحتاج لتحميل أو رفع الفيديو مرة أخرى
+        } else if (data.videoUrl.startsWith('http')) {
           console.log('🔗 رابط فيديو جديد، جاري التحميل والرفع...');
           // تحميل ورفع الفيديو من URL
           videoBuffer = await this.downloadMediaFromUrl(data.videoUrl);
           videoId = await this.uploadVideo(videoBuffer, `${data.adName}.mp4`);
+        } else {
+          console.warn('⚠️ نوع videoUrl غير معروف:', data.videoUrl);
+          videoId = data.videoUrl; // استخدام كما هو
         }
 
         // استخراج صورة مصغرة من الفيديو إذا كان متوفراً
@@ -702,6 +862,12 @@ export class MetaMarketingAPI {
         }
       }
 
+      // استخدام imageHash من البيانات إذا كان متوفراً (من رفع الفيديو المباشر)
+      if (!imageHash && data.imageHash) {
+        console.log('🖼️ استخدام صورة غلاف من رفع الفيديو المباشر:', data.imageHash);
+        imageHash = data.imageHash;
+      }
+
       if (data.imageUrls && data.imageUrls.length > 0) {
         // رفع أول صورة
         const imageBuffer = await this.downloadMediaFromUrl(data.imageUrls[0]);
@@ -721,6 +887,7 @@ export class MetaMarketingAPI {
         landingPageUrl: data.landingPageUrl,
         videoId,
         imageHash,
+        thumbnailUrl: data.thumbnailUrl,
         adFormat: data.adFormat,
         displayName: data.displayName,
         messageDestinations: data.messageDestinations
@@ -784,6 +951,7 @@ export class MetaMarketingAPI {
     landingPageUrl?: string;
     videoId?: string;
     imageHash?: string;
+    thumbnailUrl?: string;
     adFormat: string;
     displayName: string;
     messageDestinations?: string[];
@@ -807,10 +975,11 @@ export class MetaMarketingAPI {
         if (instagramActorId) {
           console.log('🎯 تم العثور على Instagram Actor ID:', instagramActorId);
         } else {
-          console.log('❌ لم يتم العثور على Instagram Actor ID للصفحة');
+          console.log('⚠️ لا يوجد Instagram business account مربوط - سيتم النشر على Facebook فقط');
         }
       } catch (error) {
-        console.warn('⚠️ خطأ في جلب Instagram Actor ID:', error);
+        console.error('⚠️ خطأ في جلب Instagram Actor ID - سيتم تجاهله والمتابعة:', error);
+        instagramActorId = null;
       }
     } else {
       console.log('ℹ️ تخطي Instagram Actor ID - لا توجد صفحة محددة');
@@ -843,22 +1012,22 @@ export class MetaMarketingAPI {
 
     // إضافة الوسائط حسب النوع
     if (data.adFormat === 'SINGLE_VIDEO' && data.videoId) {
+      // فحص وجود thumbnail URL للفيديو
+      if (!data.thumbnailUrl) {
+        throw new Error('يجب وجود thumbnail URL للفيديو - لا نقبل صور افتراضية!');
+      }
       creative.object_story_spec.video_data = {
         video_id: data.videoId,
         message: data.adText, // النص الأساسي
         title: data.displayName, // العنوان
         link_description: data.adDescription || data.adText, // الوصف المنفصل أو النص الأساسي كبديل
         call_to_action: creative.object_story_spec.link_data.call_to_action,
-        // إضافة thumbnail - مطلوب من Meta API
-        ...(data.imageHash 
-          ? { image_hash: data.imageHash } 
-          : { image_url: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?w=1200&h=628&fit=crop" }
-        )
+        // استخدام thumbnail URL الحقيقي من الفيديو فقط - لا صور افتراضية!
+        ...(data.thumbnailUrl ? { image_url: data.thumbnailUrl } : {}),
+        // Instagram actor ID إذا كان متوفراً
+        ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {})
       };
-      // نسخ Instagram actor ID إلى video_data لجميع إعلانات الفيديو
-      if (instagramActorId) {
-        creative.object_story_spec.video_data.instagram_actor_id = instagramActorId;
-      }
+      console.log('✅ تم إعداد video_data - الفيديو مرفوع مع thumbnail مخصص من الفيديو نفسه');
       delete creative.object_story_spec.link_data;
     } else if (data.adFormat === 'SINGLE_IMAGE' && data.imageHash) {
       creative.object_story_spec.link_data.image_hash = data.imageHash;
@@ -996,10 +1165,15 @@ export class MetaMarketingAPI {
       let downloadUrl = mediaUrl;
       
       if (mediaUrl.includes('storage.googleapis.com')) {
-        const { Storage } = await import('@google-cloud/storage');
-        const storage = new Storage();
+        // const { Storage } = await import('@google-cloud/storage');
+        // const storage = new Storage();
+        console.warn('Google Cloud Storage support disabled - using direct URL');
         
-        // استخراج اسم الحاوية والملف من الـ URL
+        // Google Cloud Storage support disabled
+        // Using direct URL instead
+        console.log('⚠️ Google Cloud Storage URL detected but support is disabled - using direct URL');
+        // If you need GCS support, uncomment the code below and install @google-cloud/storage
+        /*
         const urlParts = mediaUrl.split('/');
         const bucketName = urlParts[3];
         const fileName = urlParts.slice(4).join('/');
@@ -1007,14 +1181,13 @@ export class MetaMarketingAPI {
         const bucket = storage.bucket(bucketName);
         const file = bucket.file(fileName);
         
-        // إنشاء URL موقع مؤقت صالح لساعة واحدة
         const [signedUrl] = await file.getSignedUrl({
           action: 'read',
           expires: Date.now() + 60 * 60 * 1000,
         });
         
         downloadUrl = signedUrl;
-        console.log('✅ تم إنشاء URL موقع للتحميل');
+        */
       }
       
       const fetch = (await import('node-fetch')).default;

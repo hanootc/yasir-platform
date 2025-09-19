@@ -1273,7 +1273,7 @@ export default function PlatformAdsMetaManagement() {
               </CardContent>
             </Card>
           ) : (
-            <>
+            <div>
               {/* Payment Required Warning - Only show when selected account needs payment */}
               {selectedAccount && (adAccounts as any)?.accounts && (() => {
                 const accounts = (adAccounts as any).accounts;
@@ -1802,24 +1802,7 @@ export default function PlatformAdsMetaManagement() {
                                 
                                 <div>
                                   <Form {...completeCampaignForm}>
-                                    <form onSubmit={completeCampaignForm.handleSubmit((data) => {
-                                      // التحقق من اختيار الحساب الإعلاني
-                                      if (!selectedAccount) {
-                                        toast({
-                                          title: "خطأ",
-                                          description: "يرجى اختيار الحساب الإعلاني أولاً",
-                                          variant: "destructive",
-                                        });
-                                        return;
-                                      }
-
-                                      const dataToSend = {
-                                        ...data,
-                                        adAccountId: selectedAccount
-                                      };
-                                      
-                                      createCompleteCampaignMutation.mutate(dataToSend);
-                                    })} className="compact-form">
+                                    <div className="compact-form">
                                       
                                       {/* قسم اختيار المنتج */}
                                       <div className="form-section bg-theme-primary-light border theme-border rounded-lg mb-4">
@@ -3459,9 +3442,28 @@ export default function PlatformAdsMetaManagement() {
                                           إلغاء
                                         </Button>
                                         <Button
-                                          type="submit"
+                                          type="button"
                                           disabled={createCompleteCampaignMutation.isPending || !selectedAccount}
                                           className="bg-theme-gradient hover:opacity-90 text-white theme-shadow min-w-[120px]"
+                                          onClick={() => {
+                                            // التحقق من اختيار الحساب الإعلاني
+                                            if (!selectedAccount) {
+                                              toast({
+                                                title: "خطأ",
+                                                description: "يرجى اختيار الحساب الإعلاني أولاً",
+                                                variant: "destructive",
+                                              });
+                                              return;
+                                            }
+
+                                            const data = completeCampaignForm.getValues();
+                                            const dataToSend = {
+                                              ...data,
+                                              adAccountId: selectedAccount
+                                            };
+                                            
+                                            createCompleteCampaignMutation.mutate(dataToSend);
+                                          }}
                                         >
                                           {createCompleteCampaignMutation.isPending ? (
                                             <div className="flex items-center">
@@ -3473,12 +3475,11 @@ export default function PlatformAdsMetaManagement() {
                                           )}
                                         </Button>
                                       </div>
-                                    </form>
+                                    </div>
                                   </Form>
                                 </div>
                               </DialogContent>
                             </Dialog>
-                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -4612,7 +4613,7 @@ export default function PlatformAdsMetaManagement() {
                   </TabsContent>
                 </Tabs>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

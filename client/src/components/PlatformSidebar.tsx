@@ -358,7 +358,7 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
       {/* Mobile backdrop - only show when sidebar is open on mobile */}
       {!isCollapsed && (
         <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
           onClick={onToggle}
         />
       )}
@@ -366,8 +366,8 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
       {/* Sidebar */}
       <div className={`fixed right-0 top-0 h-full bg-white dark:bg-gray-900 shadow-lg transition-transform duration-300 overflow-y-auto custom-scrollbar ${
         isCollapsed 
-          ? 'translate-x-full md:translate-x-0 md:w-16 z-30' 
-          : 'translate-x-0 w-80 md:w-64 z-50'
+          ? 'translate-x-full lg:translate-x-0 lg:w-16 z-30' 
+          : 'translate-x-0 w-80 lg:w-64 z-50'
       }`}>
         
         {/* Toggle Button for Desktop */}
@@ -376,7 +376,7 @@ export default function PlatformSidebar({ session, currentPath, isCollapsed = fa
             variant="ghost"
             size="sm"
             onClick={onToggle}
-            className="absolute top-2 left-2 z-10 hidden md:flex bg-gray-50 hover:bg-gray-100"
+            className="absolute top-2 left-2 z-10 hidden lg:flex bg-gray-50 hover:bg-gray-100"
           >
             {isCollapsed ? <Menu className="h-4 w-4" /> : <X className="h-4 w-4" />}
           </Button>
