@@ -7433,6 +7433,151 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // إنشاء حملة Meta كاملة مع عدة إعلانات
+  app.post('/api/meta/campaigns/complete-multiple', ensurePlatformSession, async (req: any, res) => {
+    console.log('🎯 META MULTIPLE ADS CAMPAIGN - إنشاء حملة Meta مع عدة إعلانات');
+    console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
+    
+    try {
+      const platformId = (req.session as any).platform?.platformId;
+      
+      if (!platformId) {
+        return res.status(404).json({ error: 'Platform not found for user' });
+      }
+
+      const platform = await storage.getPlatform(platformId);
+      if (!platform || !platform.metaAccessToken || !platform.metaAdAccountId) {
+        return res.status(400).json({ error: 'Meta connection not found or incomplete' });
+      }
+
+      // فحص صلاحية التوكن
+      if (platform.metaTokenExpiresAt && new Date() >= new Date(platform.metaTokenExpiresAt)) {
+        return res.status(401).json({ error: 'Meta token expired' });
+      }
+
+      console.log('📝 معالجة بيانات الحملة مع عدة فيديوهات...');
+      
+      const { videos, ...campaignData } = req.body;
+      
+      if (!videos || !Array.isArray(videos) || videos.length === 0) {
+        return res.status(400).json({ error: 'يجب توفير فيديو واحد على الأقل' });
+      }
+
+      console.log(`🎬 عدد الفيديوهات المطلوب إنشاء إعلانات لها: ${videos.length}`);
+
+      // إنشاء Meta API instance باستخدام الحساب المختار
+      const { MetaMarketingAPI } = await import('./metaApi');
+      const selectedAdAccountId = campaignData.adAccountId;
+      console.log('🏦 استخدام الحساب الإعلاني المختار:', selectedAdAccountId);
+      const metaApi = new MetaMarketingAPI(platform.metaAccessToken, selectedAdAccountId);
+
+      // إنشاء الحملة والمجموعة الإعلانية أولاً
+      console.log('🚀 إنشاء الحملة والمجموعة الإعلانية...');
+      
+      const campaignResult = await metaApi.createCampaign({
+        name: campaignData.campaignName,
+        objective: campaignData.objective,
+        status: 'ACTIVE',
+        budget_mode: campaignData.campaignBudgetMode || 'UNLIMITED'
+      });
+
+      console.log('✅ تم إنشاء الحملة:', campaignResult.id);
+
+      const adSetResult = await metaApi.createAdSet({
+        name: `${campaignData.campaignName} - مجموعة إعلانية`,
+        campaign_id: campaignResult.id,
+        targeting: campaignData.targeting,
+        billing_event: campaignData.billingEvent,
+        bid_amount: campaignData.bidAmount,
+        daily_budget: campaignData.dailyBudget,
+        status: 'ACTIVE',
+        start_time: campaignData.startDate,
+        end_time: campaignData.endDate,
+        optimization_goal: campaignData.optimizationGoal
+      });
+
+      console.log('✅ تم إنشاء المجموعة الإعلانية:', adSetResult.id);
+
+      // إنشاء إعلان لكل فيديو
+      const createdAds = [];
+      
+      for (let i = 0; i < videos.length; i++) {
+        const video = videos[i];
+        console.log(`📱 إنشاء الإعلان ${i + 1}/${videos.length} للفيديو: ${video.fileName}`);
+
+        try {
+          const adResult = await metaApi.createAd({
+            name: `${campaignData.campaignName} - إعلان ${i + 1}`,
+            adset_id: adSetResult.id,
+            creative: {
+              name: `${campaignData.campaignName} - كريتيف ${i + 1}`,
+              object_story_spec: {
+                page_id: campaignData.pageId,
+                video_data: {
+                  video_id: video.videoId,
+                  image_url: video.thumbnailUrl,
+                  call_to_action: {
+                    type: campaignData.callToAction || 'LEARN_MORE',
+                    value: {
+                      link: campaignData.landingPageUrl
+                    }
+                  }
+                }
+              }
+            },
+            status: 'ACTIVE'
+          });
+
+          createdAds.push({
+            adId: adResult.id,
+            videoId: video.videoId,
+            fileName: video.fileName,
+            adName: `${campaignData.campaignName} - إعلان ${i + 1}`
+          });
+
+          console.log(`✅ تم إنشاء الإعلان ${i + 1}: ${adResult.id}`);
+          
+        } catch (adError) {
+          console.error(`❌ فشل في إنشاء الإعلان ${i + 1}:`, adError);
+          // استمر في إنشاء باقي الإعلانات حتى لو فشل واحد
+        }
+      }
+
+      const result = {
+        campaign: {
+          id: campaignResult.id,
+          name: campaignData.campaignName
+        },
+        adSet: {
+          id: adSetResult.id,
+          name: `${campaignData.campaignName} - مجموعة إعلانية`
+        },
+        ads: createdAds,
+        summary: {
+          totalVideos: videos.length,
+          successfulAds: createdAds.length,
+          failedAds: videos.length - createdAds.length
+        }
+      };
+
+      console.log('🎉 تم إنشاء الحملة مع عدة إعلانات بنجاح!');
+      console.log(`📊 النتائج: ${createdAds.length}/${videos.length} إعلانات تم إنشاؤها بنجاح`);
+      
+      res.json({
+        success: true,
+        message: `تم إنشاء الحملة مع ${createdAds.length} إعلان بنجاح`,
+        result
+      });
+
+    } catch (error) {
+      console.error('❌ خطأ في إنشاء حملة Meta مع عدة إعلانات:', error);
+      res.status(500).json({
+        error: 'فشل في إنشاء الحملة مع عدة إعلانات',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // رفع فيديو مباشرة إلى Meta
   app.post("/api/upload/meta-video/direct", ensurePlatformSession, async (req: any, res) => {
     try {

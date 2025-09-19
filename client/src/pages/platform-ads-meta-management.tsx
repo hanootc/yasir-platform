@@ -37,6 +37,7 @@ import {
   AlertCircle,
   Upload,
   CheckCircle,
+  Info,
   ChevronDown,
   ChevronUp,
   X,
@@ -118,9 +119,14 @@ export default function PlatformAdsMetaManagement() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
-  // State for sidebar toggle
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // State for sidebar toggle  
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobile);
   const [activeTab, setActiveTab] = useState("campaigns");
+  
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setIsSidebarCollapsed(isMobile);
+  }, [isMobile]);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [campaignStatus, setCampaignStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -168,6 +174,16 @@ export default function PlatformAdsMetaManagement() {
   
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  
+  // State لتخزين عدة فيديوهات
+  const [uploadedVideos, setUploadedVideos] = useState<Array<{
+    id: string;
+    videoId: string;
+    fileName: string;
+    thumbnailUrl?: string;
+    size: number;
+    duration?: number;
+  }>>([]);
 
   // دالة للحصول على التوقيت المحلي لبغداد
   const getBaghdadTime = () => {
@@ -236,6 +252,8 @@ export default function PlatformAdsMetaManagement() {
       // Media files
       videoUrl: "",
       imageUrls: [],
+      imageHash: "",
+      thumbnailUrl: "",
       
       // Pixel tracking
       pixelId: "",
@@ -331,7 +349,6 @@ export default function PlatformAdsMetaManagement() {
   // Create complete campaign mutation
   const createCompleteCampaignMutation = useMutation({
     mutationFn: async (data: CompleteMetaCampaign) => {
-      console.log('🎯 إرسال بيانات إنشاء حملة Meta الكاملة:', data);
       
       // حذف landingPageUrl من حملات الرسائل
       const cleanData = { ...data };
@@ -340,26 +357,51 @@ export default function PlatformAdsMetaManagement() {
         delete cleanData.pixelId;
         delete cleanData.customEventType;
       }
-      
-      console.log('🔧 البيانات النظيفة المرسلة:', cleanData);
-      
-      const response = await fetch('/api/meta/campaigns/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(cleanData),
-      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || errorData.details || 'فشل في إنشاء الحملة');
+      // إذا كان هناك عدة فيديوهات، أنشئ عدة إعلانات
+      if (uploadedVideos.length > 0) {
+        const campaignData = {
+          ...cleanData,
+          videos: uploadedVideos.map(video => ({
+            videoId: video.videoId,
+            fileName: video.fileName,
+            thumbnailUrl: video.thumbnailUrl
+          }))
+        };
+
+        const response = await fetch('/api/meta/campaigns/complete-multiple', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(campaignData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.details || 'فشل في إنشاء الحملة مع عدة إعلانات');
+        }
+
+        return response.json();
+      } else {
+        // الطريقة العادية لإعلان واحد
+        const response = await fetch('/api/meta/campaigns/complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(cleanData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.details || 'فشل في إنشاء الحملة');
+        }
+
+        return response.json();
       }
-
-      return response.json();
     },
     onSuccess: (data) => {
-      console.log('✅ تم إنشاء حملة Meta الكاملة بنجاح!', data);
       
       // عرض رسالة نجاح بالثيم
       toast({
@@ -465,54 +507,115 @@ export default function PlatformAdsMetaManagement() {
     }
   };
 
-  // Video upload handler
-  const handleVideoUpload = async (file: File, field: any) => {
-    setUploading(true);
-    try {
-      // رفع الفيديو مباشرة إلى Meta
-      const formData = new FormData();
-      formData.append('video', file);
+  // دالة رفع فيديو واحد
+  const uploadSingleVideo = async (file: File): Promise<{
+    videoId: string;
+    fileName: string;
+    thumbnailUrl?: string;
+    size: number;
+    duration?: number;
+  }> => {
+    const formData = new FormData();
+    formData.append('video', file);
 
-      console.log('📤 رفع فيديو مباشرة إلى Meta...', file.name);
+    const response = await fetch('/api/upload/meta-video/direct', {
+      method: 'POST',
+      body: formData,
+    });
 
-      const response = await fetch('/api/upload/meta-video/direct', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        
-        // معالجة خاصة لخطأ المصادقة
-        if (response.status === 401) {
-          throw new Error('يجب تسجيل الدخول أولاً للمتابعة.');
-        }
-        
-        // معالجة خاصة لعدم وجود إعدادات Meta
-        if (response.status === 400 && errorData.error === "Meta integration not configured") {
-          throw new Error('لم يتم ربط حساب Meta بعد. يجب ربط الحساب أولاً من إعدادات المنصات الإعلانية.');
-        }
-        
-        throw new Error(errorData.details || errorData.error || 'فشل في رفع الفيديو إلى Meta');
-      }
-
-      const result = await response.json();
-      console.log('✅ تم رفع الفيديو مباشرة إلى Meta:', result.videoId);
-
-      // حفظ معرف الفيديو في الحقل
-      field.onChange(result.videoId);
+    if (!response.ok) {
+      const errorData = await response.json();
       
-      toast({
-        title: "✅ تم رفع الفيديو",
-        description: `تم رفع الفيديو "${result.originalName || file.name}" إلى Meta بنجاح`,
-        variant: "success",
-      });
+      if (response.status === 401) {
+        throw new Error('يجب تسجيل الدخول أولاً للمتابعة.');
+      }
+      
+      if (response.status === 400 && errorData.error === "Meta integration not configured") {
+        throw new Error('لم يتم ربط حساب Meta بعد. يجب ربط الحساب أولاً من إعدادات المنصات الإعلانية.');
+      }
+      
+      throw new Error(errorData.details || errorData.error || 'فشل في رفع الفيديو إلى Meta');
+    }
 
+    const result = await response.json();
+    return {
+      videoId: result.videoId,
+      fileName: result.originalName || file.name,
+      thumbnailUrl: result.thumbnailUrl,
+      size: file.size,
+      duration: result.duration
+    };
+  };
+
+  // دالة رفع عدة فيديوهات
+  const handleMultipleVideoUpload = async (files: FileList) => {
+    setUploading(true);
+    const newVideos: typeof uploadedVideos = [];
+    
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // التحقق من نوع الملف
+        if (!file.type.startsWith('video/')) {
+          toast({
+            title: "❌ نوع ملف غير صحيح",
+            description: `الملف "${file.name}" ليس فيديو`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        // التحقق من حجم الملف (أقل من 100MB)
+        if (file.size > 100 * 1024 * 1024) {
+          toast({
+            title: "❌ حجم الملف كبير جداً",
+            description: `الملف "${file.name}" يجب أن يكون أقل من 100MB`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        try {
+          const uploadedVideo = await uploadSingleVideo(file);
+          const videoData = {
+            id: `video-${Date.now()}-${i}`,
+            ...uploadedVideo
+          };
+          
+          newVideos.push(videoData);
+          
+          toast({
+            title: "✅ تم رفع الفيديو",
+            description: `تم رفع "${uploadedVideo.fileName}" بنجاح (${i + 1}/${files.length})`,
+            variant: "success",
+          });
+          
+        } catch (error: any) {
+          toast({
+            title: "❌ خطأ في رفع الفيديو",
+            description: `فشل رفع "${file.name}": ${error.message}`,
+            variant: "destructive",
+          });
+        }
+      }
+      
+      // إضافة الفيديوهات الجديدة للقائمة
+      setUploadedVideos(prev => [...prev, ...newVideos]);
+      
+      if (newVideos.length > 0) {
+        toast({
+          title: "🎉 اكتمل الرفع",
+          description: `تم رفع ${newVideos.length} فيديو من أصل ${files.length}`,
+          variant: "success",
+        });
+      }
+      
     } catch (error: any) {
-      console.error('❌ خطأ في رفع الفيديو إلى Meta:', error);
+      console.error('❌ خطأ في رفع الفيديوهات:', error);
       toast({
-        title: "❌ فشل في رفع الفيديو",
-        description: error.message || "حدث خطأ أثناء رفع الفيديو",
+        title: "❌ خطأ عام في الرفع",
+        description: error.message || "حدث خطأ أثناء رفع الفيديوهات",
         variant: "destructive",
       });
     } finally {
@@ -520,10 +623,14 @@ export default function PlatformAdsMetaManagement() {
     }
   };
 
+  // دالة حذف فيديو من القائمة
+  const removeVideo = (videoId: string) => {
+    setUploadedVideos(prev => prev.filter(video => video.id !== videoId));
+  };
+
   // Mutation for toggling campaign status
   const toggleCampaignStatusMutation = useMutation({
     mutationFn: async ({ campaignId, status }: { campaignId: string; status: string }) => {
-      console.log(`Toggling Meta campaign ${campaignId} to ${status}`);
       const response = await fetch(`/api/platform-ads/meta/campaigns/${campaignId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -535,7 +642,6 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || "فشل في تحديث حالة الحملة");
       }
       const result = await response.json();
-      console.log("Meta campaign status update result:", result);
       return result;
     },
     onSuccess: () => {
@@ -563,7 +669,6 @@ export default function PlatformAdsMetaManagement() {
   // Mutation for toggling ad set status
   const toggleAdSetStatusMutation = useMutation({
     mutationFn: async ({ adSetId, status }: { adSetId: string; status: string }) => {
-      console.log(`Toggling Meta ad set ${adSetId} to ${status}`);
       const response = await fetch(`/api/platform-ads/meta/adgroups/${adSetId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -575,7 +680,6 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || "فشل في تحديث حالة المجموعة الإعلانية");
       }
       const result = await response.json();
-      console.log("Meta ad set status update result:", result);
       return result;
     },
     onSuccess: (data) => {
@@ -604,7 +708,6 @@ export default function PlatformAdsMetaManagement() {
   // Mutation for toggling ad status
   const toggleAdStatusMutation = useMutation({
     mutationFn: async ({ adId, status }: { adId: string; status: string }) => {
-      console.log(`Toggling Meta ad ${adId} to ${status}`);
       const response = await fetch(`/api/platform-ads/meta/ads/${adId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -616,7 +719,6 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || "Failed to update ad status");
       }
       const result = await response.json();
-      console.log("Meta ad status update result:", result);
       return result;
     },
     onSuccess: (data) => {
@@ -685,7 +787,6 @@ export default function PlatformAdsMetaManagement() {
       const response = await fetch('/api/platform-ads/meta/pages');
       if (!response.ok) throw new Error('Failed to fetch pages');
       const data = await response.json();
-      console.log('📄 بيانات الصفحات:', data);
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -710,8 +811,6 @@ export default function PlatformAdsMetaManagement() {
           pageId: firstPage.id
         });
         
-        console.log('🎯 تم تحديد البكسل الافتراضي:', firstPixel.name, firstPixel.id);
-        console.log('📄 تم تحديد الصفحة الافتراضية:', firstPage.name, firstPage.id);
       }
     }
   }, [pixels, pages, completeCampaignForm]);
@@ -749,7 +848,6 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('Meta Ad Sets response:', data);
       return data;
     },
     staleTime: 30000,
@@ -832,7 +930,6 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('Meta Ads response:', data);
       return data;
     },
     staleTime: 30000,
@@ -1120,7 +1217,7 @@ export default function PlatformAdsMetaManagement() {
       />
 
       {/* Main Content */}
-      <div className={`flex-1 transition-all duration-300 ${isSidebarCollapsed ? 'mr-16' : 'mr-64'} ${isMobile ? 'mr-0' : ''}`}>
+      <div className={`flex-1 transition-all duration-300 ${isSidebarCollapsed ? 'mr-0 lg:mr-16' : 'mr-0 lg:mr-64'}`}>
         {/* Page Title Section */}
         <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-8 py-4">
           <div className="text-right flex items-center justify-between">
@@ -1309,7 +1406,6 @@ export default function PlatformAdsMetaManagement() {
                       
                       {(adAccounts as any)?.accounts && (() => {
                         const accounts = (adAccounts as any).accounts;
-                        console.log('🔍 تحليل الحسابات:', accounts.slice(0, 2)); // للفحص
                         
                         const activeAccounts = accounts.filter((acc: any) => acc.account_status === 1);
                         const needsPayment = accounts.filter((acc: any) => 
@@ -1351,15 +1447,6 @@ export default function PlatformAdsMetaManagement() {
                         }, 0);
                         const totalSpentInDollars = (totalSpentActive / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                         
-                        console.log('📊 العدادات:', { 
-                          active: activeAccounts.length, 
-                          needsPayment: needsPayment.length, 
-                          restricted: restricted.length, 
-                          needsSetup: needsSetup.length, 
-                          totalOwed: totalOwedInDollars, 
-                          totalSpentActive: totalSpentInDollars,
-                          totalSpentNeedsPayment: totalSpentNeedsPaymentInDollars
-                        });
                         
                         return (
                           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
@@ -1690,10 +1777,6 @@ export default function PlatformAdsMetaManagement() {
                                   }
                                 });
                                 
-                                console.log('🎯 تم إعداد المودال مع القيم الافتراضية:');
-                                console.log('📄 الصفحة:', firstPage?.name, firstPage?.id);
-                                console.log('🎯 البكسل:', firstPixel?.name, firstPixel?.id);
-                                console.log('🌍 الاستهداف: العراق');
                               }
                               setCreateCampaignOpen(open);
                             }}>
@@ -1719,9 +1802,7 @@ export default function PlatformAdsMetaManagement() {
                                 
                                 <div>
                                   <Form {...completeCampaignForm}>
-                                    <form onSubmit={(e) => {
-                                      e.preventDefault();
-                                      
+                                    <form onSubmit={completeCampaignForm.handleSubmit((data) => {
                                       // التحقق من اختيار الحساب الإعلاني
                                       if (!selectedAccount) {
                                         toast({
@@ -1732,15 +1813,13 @@ export default function PlatformAdsMetaManagement() {
                                         return;
                                       }
 
-                                      // الحصول على بيانات النموذج مع إضافة adAccountId
-                                      const formData = completeCampaignForm.getValues();
                                       const dataToSend = {
-                                        ...formData,
+                                        ...data,
                                         adAccountId: selectedAccount
                                       };
                                       
                                       createCompleteCampaignMutation.mutate(dataToSend);
-                                    }} className="compact-form">
+                                    })} className="compact-form">
                                       
                                       {/* قسم اختيار المنتج */}
                                       <div className="form-section bg-theme-primary-light border theme-border rounded-lg mb-4">
@@ -2742,9 +2821,7 @@ export default function PlatformAdsMetaManagement() {
                                                                 ].map((position) => (
                                                                   <label
                                                                     key={position.value}
-                                                                    className={`flex flex-col cursor-pointer hover:bg-gray-800/50 p-2 rounded ${
-                                                                      position.warning ? 'bg-orange-900/20 border border-orange-700/30' : ''
-                                                                    }`}
+                                                                    className="flex flex-col cursor-pointer hover:bg-gray-800/50 p-2 rounded"
                                                                   >
                                                                     <div className="flex items-center space-x-2">
                                                                       <input
@@ -2760,12 +2837,12 @@ export default function PlatformAdsMetaManagement() {
                                                                           }
                                                                         }}
                                                                       />
-                                                                      <span className={`font-medium ${position.warning ? 'text-orange-300' : 'text-gray-200'}`}>
+                                                                      <span className="font-medium text-gray-200">
                                                                         {position.label}
                                                                       </span>
                                                                     </div>
-                                                                    <span className={`text-xs mr-6 ${position.warning ? 'text-orange-400' : 'text-gray-400'}`}>
-                                                                      {position.desc} {position.warning && '⚠️ قد يظهر في Threads'}
+                                                                    <span className="text-xs mr-6 text-gray-400">
+                                                                      {position.desc}
                                                                     </span>
                                                                   </label>
                                                                 ))}
@@ -3247,66 +3324,129 @@ export default function PlatformAdsMetaManagement() {
                                               </div>
                                             )}
                                             
-                                            {/* Video Upload */}
-                                            <FormField
-                                              control={completeCampaignForm.control}
-                                              name="videoUrl"
-                                              render={({ field }) => (
-                                                <FormItem>
-                                                  <FormLabel className="text-theme-primary">فيديو الإعلان</FormLabel>
-                                                  <FormControl>
-                                                    <div className="space-y-2">
-                                                      <input
-                                                        ref={videoInputRef}
-                                                        type="file"
-                                                        accept="video/*"
-                                                        className="hidden"
-                                                        onChange={(e) => {
-                                                          const file = e.target.files?.[0];
-                                                          if (file) {
-                                                            handleVideoUpload(file, field);
-                                                          }
-                                                        }}
-                                                      />
-                                                      
-                                                      <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        onClick={() => videoInputRef.current?.click()}
-                                                        disabled={uploading}
-                                                        className="w-full theme-border hover:bg-theme-primary-light"
-                                                      >
-                                                        {uploading ? (
-                                                          <div className="flex items-center">
-                                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-theme-primary ml-2"></div>
-                                                            جاري الرفع...
-                                                          </div>
-                                                        ) : (
-                                                          <div className="flex items-center">
-                                                            <Upload className="h-4 w-4 ml-2" />
-                                                            اختر فيديو
-                                                          </div>
-                                                        )}
-                                                      </Button>
-                                                      
-                                                      {field.value && (
-                                                        <div className="text-sm text-green-600 dark:text-green-400 flex items-center">
-                                                          <CheckCircle className="h-4 w-4 ml-1" />
-                                                          تم رفع الفيديو بنجاح: {field.value}
-                                                        </div>
-                                                      )}
+                                            {/* Multiple Videos Upload */}
+                                            <div className="space-y-4">
+                                              <div className="flex items-center justify-between">
+                                                <FormLabel className="text-theme-primary text-lg font-semibold">
+                                                  🎬 فيديوهات الإعلانات ({uploadedVideos.length})
+                                                </FormLabel>
+                                                <Badge variant="outline" className="text-xs">
+                                                  {uploadedVideos.length === 0 ? 'لا توجد فيديوهات' : 
+                                                   uploadedVideos.length === 1 ? 'إعلان واحد' : 
+                                                   `${uploadedVideos.length} إعلانات`}
+                                                </Badge>
+                                              </div>
+                                              
+                                              <input
+                                                ref={videoInputRef}
+                                                type="file"
+                                                accept="video/*"
+                                                multiple
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                  const files = e.target.files;
+                                                  if (files && files.length > 0) {
+                                                    handleMultipleVideoUpload(files);
+                                                  }
+                                                }}
+                                              />
+                                              
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={() => videoInputRef.current?.click()}
+                                                disabled={uploading}
+                                                className="w-full theme-border hover:bg-theme-primary-light h-12"
+                                              >
+                                                {uploading ? (
+                                                  <div className="flex items-center">
+                                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-theme-primary ml-2"></div>
+                                                    جاري رفع الفيديوهات...
+                                                  </div>
+                                                ) : (
+                                                  <div className="flex items-center">
+                                                    <Upload className="h-5 w-5 ml-2" />
+                                                    <div className="text-right">
+                                                      <div className="font-medium">اختر فيديوهات متعددة</div>
+                                                      <div className="text-xs opacity-70">يمكنك اختيار عدة فيديوهات لإنشاء عدة إعلانات</div>
                                                     </div>
-                                                  </FormControl>
-                                                  <FormDescription>
-                                                    دعم للفيديوهات: MP4, MOV, AVI - حد أقصى 4GB
-                                                  </FormDescription>
-                                                  <FormMessage />
-                                                </FormItem>
+                                                  </div>
+                                                )}
+                                              </Button>
+                                              
+                                              {/* عرض الفيديوهات المرفوعة */}
+                                              {uploadedVideos.length > 0 && (
+                                                <div className="space-y-3">
+                                                  <div className="text-sm font-medium text-theme-primary">الفيديوهات المرفوعة:</div>
+                                                  <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+                                                    {uploadedVideos.map((video, index) => (
+                                                      <div key={video.id} className="relative group">
+                                                        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border theme-border">
+                                                          <div className="flex items-start justify-between mb-2">
+                                                            <div className="flex-1 min-w-0">
+                                                              <div className="text-sm font-medium text-theme-primary truncate">
+                                                                إعلان {index + 1}
+                                                              </div>
+                                                              <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                                                                {video.fileName}
+                                                              </div>
+                                                            </div>
+                                                            <Button
+                                                              type="button"
+                                                              variant="ghost"
+                                                              size="sm"
+                                                              onClick={() => removeVideo(video.id)}
+                                                              className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            >
+                                                              <X className="h-3 w-3" />
+                                                            </Button>
+                                                          </div>
+                                                          
+                                                          {/* Thumbnail preview */}
+                                                          {video.thumbnailUrl ? (
+                                                            <div className="aspect-video bg-black rounded overflow-hidden mb-2">
+                                                              <img 
+                                                                src={video.thumbnailUrl} 
+                                                                alt={`معاينة ${video.fileName}`}
+                                                                className="w-full h-full object-cover"
+                                                              />
+                                                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                                                <div className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center">
+                                                                  <Play className="h-4 w-4 text-gray-800 ml-0.5" />
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                          ) : (
+                                                            <div className="aspect-video bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center mb-2">
+                                                              <Video className="h-8 w-8 text-gray-400" />
+                                                            </div>
+                                                          )}
+                                                          
+                                                          <div className="flex items-center justify-between text-xs text-gray-500">
+                                                            <span>{(video.size / (1024 * 1024)).toFixed(1)} MB</span>
+                                                            {video.duration && (
+                                                              <span>{Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}</span>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                  
+                                                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                                                    <div className="flex items-start">
+                                                      <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 ml-2 flex-shrink-0" />
+                                                      <div className="text-sm text-blue-800 dark:text-blue-200">
+                                                        <div className="font-medium mb-1">سيتم إنشاء {uploadedVideos.length} إعلان</div>
+                                                        <div className="text-xs opacity-90">
+                                                          جميع الإعلانات ستكون في نفس المجموعة الإعلانية مع نفس الاستهداف والميزانية
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
                                               )}
-                                            />
-                                          </div>
-                                        )}
-                                      </div>
+                                            </div>
                                       
                                       {/* أزرار الإجراءات */}
                                       <div className="flex justify-between mt-6">
