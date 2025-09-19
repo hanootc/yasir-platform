@@ -84,12 +84,10 @@ export function LandingPageTemplateRenderer({ templateId, isPreview = true }: La
         return renderFeatureHighlight();
       case "countdown_urgency":
         return renderCountdownUrgency();
-      case "video_intro":
-        return renderVideoIntro();
-      case "comparison_table":
-        return renderComparisonTable();
-      case "benefit_driven":
-        return renderBenefitDriven();
+      case "colorful_vibrant":
+        return renderColorfulGradient();
+      case "tiktok_style":
+        return renderModernMinimal();
       case "story_telling":
         return renderStoryTelling();
       case "colorful_gradient":

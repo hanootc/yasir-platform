@@ -63,11 +63,8 @@ const templates = [
   { value: "testimonial_focus", label: "الشهادات" },
   { value: "feature_highlight", label: "المميزات" },
   { value: "countdown_urgency", label: "الاستعجال" },
-  { value: "video_intro", label: "التفاعلي" },
-  { value: "comparison_table", label: "المقارن" },
-  { value: "benefits_grid", label: "الفوائد" },
-  { value: "story_driven", label: "القصة" },
   { value: "colorful_vibrant", label: "الملوّن" },
+  { value: "tiktok_style", label: "تيك توك" },
 ];
 
 export default function EditLandingPageModal({

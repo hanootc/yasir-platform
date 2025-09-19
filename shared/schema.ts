@@ -233,11 +233,8 @@ export const landingPageTemplateEnum = pgEnum("landing_page_template", [
   "testimonial_focus",
   "feature_highlight",
   "countdown_urgency",
-  "video_intro",
-  "comparison_table",
-  "benefits_grid",
-  "story_driven",
   "colorful_vibrant",
+  "tiktok_style",
 ]);
 
 // Product categories
@@ -642,10 +639,8 @@ export type LandingPageTemplate =
   | "testimonial_focus"
   | "feature_highlight"
   | "countdown_urgency"
-  | "video_intro"
-  | "comparison_table"
-  | "benefits_grid"
-  | "story_driven";
+  | "colorful_vibrant"
+  | "tiktok_style";
 
 export const insertActivitySchema = createInsertSchema(activities).omit({
   id: true,
@@ -1436,6 +1431,8 @@ export const completeMetaCampaignSchema = z.object({
   // Media files
   videoUrl: z.string().optional(),
   imageUrls: z.array(z.string()).optional(),
+  imageHash: z.string().optional(),
+  thumbnailUrl: z.string().optional(),
   
   // Pixel tracking (required for CONVERSIONS)
   pixelId: z.string().optional(),

@@ -312,10 +312,6 @@ export default function PlatformLandingPages() {
                       <SelectItem value="testimonial_focus">الشهادات</SelectItem>
                       <SelectItem value="feature_highlight">المميزات</SelectItem>
                       <SelectItem value="countdown_urgency">الاستعجال</SelectItem>
-                      <SelectItem value="video_intro">التفاعلي</SelectItem>
-                      <SelectItem value="comparison_table">المقارن</SelectItem>
-                      <SelectItem value="benefits_grid">الفوائد</SelectItem>
-                      <SelectItem value="story_driven">القصة</SelectItem>
                       <SelectItem value="colorful_vibrant">الملوّن</SelectItem>
                     </SelectContent>
                   </Select>

@@ -83,6 +83,7 @@ export function TemplatePreviewCard({ templateId, name, colorScheme, onPreview }
                 </div>
               </div>
               <div className="h-2 bg-green-300 rounded w-full"></div>
+              <div className="h-2 bg-green-300 rounded w-full"></div>
               <div className="absolute bottom-2 left-2 right-2 h-6 bg-green-600 rounded"></div>
             </div>
           </div>

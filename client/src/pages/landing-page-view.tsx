@@ -46,20 +46,76 @@ function convertToPublicUrls(urls: string[]): string[] {
   });
 }
 
+// دالة لاستخراج الكمية من النص
+function extractQuantityFromText(text: string): number {
+  if (!text) return 1;
+  
+  const lowerText = text.toLowerCase();
+  
+  // البحث عن الأرقام العربية والإنجليزية
+  const arabicNumbers: { [key: string]: number } = {
+    'واحد': 1, 'واحدة': 1, 'قطعة': 1,
+    'اثنين': 2, 'اثنان': 2, 'قطعتين': 2, 'قطعتان': 2,
+    'ثلاث': 3, 'ثلاثة': 3, 'ثلاث قطع': 3,
+    'أربع': 4, 'أربعة': 4, 'أربع قطع': 4,
+    'خمس': 5, 'خمسة': 5, 'خمس قطع': 5,
+    'ست': 6, 'ستة': 6, 'ست قطع': 6,
+    'سبع': 7, 'سبعة': 7, 'سبع قطع': 7,
+    'ثمان': 8, 'ثمانية': 8, 'ثمان قطع': 8,
+    'تسع': 9, 'تسعة': 9, 'تسع قطع': 9,
+    'عشر': 10, 'عشرة': 10, 'عشر قطع': 10
+  };
+  
+  // البحث عن الكلمات المفتاحية
+  for (const [word, number] of Object.entries(arabicNumbers)) {
+    if (lowerText.includes(word)) {
+      return number;
+    }
+  }
+  
+  // البحث عن الأرقام الإنجليزية
+  const numberMatch = text.match(/(\d+)/);
+  if (numberMatch) {
+    return parseInt(numberMatch[1]);
+  }
+  
+  return 1;
+}
+
 // دالة لحساب العروض المتاحة للمنتج
 function getAvailableOffers(product: any) {
   if (!product) return [];
   
   // استخدام نظام العروض الجديد priceOffers إذا كان متوفراً
   if (product.priceOffers && Array.isArray(product.priceOffers) && product.priceOffers.length > 0) {
-    return product.priceOffers.map((offer: any, index: number) => ({
-      id: `offer-${index}`,
-      label: offer.label,
-      price: parseFloat(offer.price),
-      quantity: offer.quantity,
-      savings: 0,
-      isDefault: offer.isDefault || false
-    })).filter((offer: any) => offer.price > 0);
+    return product.priceOffers.map((offer: any, index: number) => {
+      // استخراج الكمية من النص إذا لم تكن محددة بشكل صحيح
+      let quantity = offer.quantity || 1;
+      
+      // البحث عن الكمية في النص
+      const label = offer.label || '';
+      const quantityFromText = extractQuantityFromText(label);
+      
+      console.log(`🔢 Extracting quantity for "${label}":`, {
+        originalQuantity: offer.quantity,
+        quantityFromText,
+        finalQuantity: quantityFromText > quantity ? quantityFromText : quantity
+      });
+      
+      // استخدام الكمية المستخرجة من النص إذا كانت أكبر من الكمية المحفوظة
+      if (quantityFromText > quantity) {
+        quantity = quantityFromText;
+      }
+      
+      return {
+        id: `offer-${index + 1}`, // تبدأ من offer-1 بدلاً من offer-0
+        label: offer.label,
+        price: parseFloat(offer.price),
+        quantity: quantity,
+        savings: 0,
+        isDefault: offer.isDefault || false
+      };
+    }).filter((offer: any) => offer.price > 0);
   }
   
   // النظام القديم كـ fallback
@@ -257,10 +313,6 @@ function ImageSlider({ images, productName, template }: { images: string[], prod
         'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
         'https://images.unsplash.com/photo-1563013544-824ae1b704d3?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
       ],
-      video_intro: [
-        'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
-      ]
     };
     return defaultImages[templateId as keyof typeof defaultImages] || defaultImages.modern_minimal;
   };
@@ -677,6 +729,46 @@ export default function LandingPageView() {
       body:not(.dark) .landing-page-form [data-radix-select-content] {
         background-color: white !important;
         border-color: #757575 !important;
+      }
+      
+      /* ألوان خاصة لقالب TikTok */
+      .tiktok-description-red,
+      .tiktok-description-red * {
+        color: #ef4444 !important;
+        -webkit-text-fill-color: #ef4444 !important;
+      }
+      
+      .tiktok-price-green,
+      .tiktok-price-green * {
+        color: #10b981 !important;
+        -webkit-text-fill-color: #10b981 !important;
+      }
+      
+      .tiktok-arrow-red,
+      .tiktok-arrow-red * {
+        color: #ef4444 !important;
+        -webkit-text-fill-color: #ef4444 !important;
+      }
+      
+      .tiktok-savings-green,
+      .tiktok-savings-green * {
+        color: #10b981 !important;
+        -webkit-text-fill-color: #10b981 !important;
+      }
+      
+      .tiktok-check-blue,
+      .tiktok-check-blue * {
+        color: #60a5fa !important;
+        -webkit-text-fill-color: #60a5fa !important;
+      }
+      
+      /* ضمان بقاء نص زر الإرسال أبيض */
+      .tiktok-style .bg-red-600,
+      .tiktok-style .bg-red-600 *,
+      .tiktok-style button[type="submit"],
+      .tiktok-style button[type="submit"] * {
+        color: white !important;
+        -webkit-text-fill-color: white !important;
       }
       
       /* ضمان ظهور القوائم فوق العناصر الأخرى */
@@ -1281,16 +1373,103 @@ export default function LandingPageView() {
 
   // Get selected offer quantity
   const getSelectedOfferQuantity = () => {
-    const selectedOfferData = form.watch('offer');
-    if (!selectedOfferData) return 1;
+    // إضافة console.log لمعرفة القالب المستخدم
+    console.log("🎨 Current Template Info:", {
+      template: landingPage?.template,
+      formStyle: landingPage?.formStyle,
+      landingPageData: landingPage
+    });
     
-    // Parse quantity from offer string (e.g., "3 قطع بـ 150 جنيه")
-    const quantityMatch = selectedOfferData.match(/(\d+)\s*قطع/);
-    if (quantityMatch) {
-      return parseInt(quantityMatch[1], 10);
+    // أولاً: تحقق من وجود form.watch('offer') للفورم البسيط
+    const selectedOfferData = form.watch('offer');
+    
+    // إذا كان هناك عرض مختار في الفورم، استخدمه (له الأولوية)
+    if (selectedOfferData) {
+      console.log("📊 Using form.watch offer:", selectedOfferData);
+      console.log("📊 Available offers:", availableOffers);
+      console.log("📊 Landing page template:", landingPage?.template);
+      console.log("📊 Using form.watch logic for simple form");
+      
+      // البحث عن العرض بناءً على النص - تحسين البحث
+      let offerData = availableOffers.find((offer: any) => 
+        selectedOfferData.includes(offer.label)
+      );
+      
+      // استخراج الكمية من النص مباشرة (سواء وُجد العرض أم لا)
+      console.log("📊 Analyzing text for quantity keywords...");
+      
+      if (selectedOfferData.includes('قطعة واحدة') || (selectedOfferData.includes('قطعة') && !selectedOfferData.includes('قطعتان') && !selectedOfferData.includes('قطعتين'))) {
+        console.log("📊 Found 'قطعة واحدة' in text, returning 1");
+        return 1;
+      } else if (selectedOfferData.includes('قطعتان') || selectedOfferData.includes('قطعتين')) {
+        console.log("📊 Found 'قطعتان' in text, returning 2");
+        return 2;
+      } else if (selectedOfferData.includes('ثلاث قطع') || selectedOfferData.includes('ثلاثة قطع')) {
+        console.log("📊 Found 'ثلاث قطع' in text, returning 3");
+        return 3;
+      } else if (selectedOfferData.includes('أربع قطع') || selectedOfferData.includes('أربعة قطع')) {
+        console.log("📊 Found 'أربع قطع' in text, returning 4");
+        return 4;
+      } else if (selectedOfferData.includes('خمس قطع') || selectedOfferData.includes('خمسة قطع')) {
+        console.log("📊 Found 'خمس قطع' in text, returning 5");
+        return 5;
+      } else if (selectedOfferData.includes('ست قطع') || selectedOfferData.includes('ستة قطع')) {
+        console.log("📊 Found 'ست قطع' in text, returning 6");
+        return 6;
+      } else if (selectedOfferData.includes('سبع قطع') || selectedOfferData.includes('سبعة قطع')) {
+        console.log("📊 Found 'سبع قطع' in text, returning 7");
+        return 7;
+      } else if (selectedOfferData.includes('ثمان قطع') || selectedOfferData.includes('ثمانية قطع')) {
+        console.log("📊 Found 'ثمان قطع' in text, returning 8");
+        return 8;
+      } else if (selectedOfferData.includes('تسع قطع') || selectedOfferData.includes('تسعة قطع')) {
+        console.log("📊 Found 'تسع قطع' in text, returning 9");
+        return 9;
+      } else if (selectedOfferData.includes('عشر قطع') || selectedOfferData.includes('عشرة قطع')) {
+        console.log("📊 Found 'عشر قطع' in text, returning 10");
+        return 10;
+      }
+      
+      // البحث عن الأرقام في النص (تجاهل الأرقام الكبيرة مثل الأسعار)
+      const numberMatch = selectedOfferData.match(/(\d+)/);
+      if (numberMatch) {
+        const extractedQuantity = parseInt(numberMatch[1]);
+        // تجاهل الأرقام الكبيرة (الأسعار) - فقط الكميات الصغيرة
+        if (extractedQuantity <= 10) {
+          console.log("📊 Extracted quantity from number:", extractedQuantity);
+          return extractedQuantity;
+        } else {
+          console.log("📊 Ignoring large number (price):", extractedQuantity);
+        }
+      }
+      
+      // إذا لم نجد أي شيء، نستخدم البيانات من العرض إن وُجد
+      if (offerData) {
+        const quantity = offerData.quantity || 1;
+        console.log("📊 Using offer data quantity:", quantity);
+        return quantity;
+      }
+      
+      console.log("📊 Fallback to 1");
+      return 1;
     }
     
-    // Default to 1 if no quantity found
+    // ثانياً: للقوالب التي تستخدم selectedOffer (مثل TikTok)
+    if (selectedOffer) {
+      const offerData = availableOffers.find((offer: any) => offer.id === selectedOffer);
+      const quantity = offerData?.quantity || 1;
+      console.log("📊 getSelectedOfferQuantity (TikTok):", {
+        selectedOffer,
+        offerData,
+        quantity,
+        availableOffers,
+        template: landingPage?.template
+      });
+      return quantity;
+    }
+    
+    // إذا لم يكن هناك أي عرض مختار، ارجع 1
+    console.log("📊 No offer selected, returning 1");
     return 1;
   };
 
@@ -1319,32 +1498,64 @@ export default function LandingPageView() {
     const maxSelections = getSelectedOfferQuantity();
     const currentSelections = selectedColorIds;
     
+    console.log("🎨 Color Selection DEBUG:", {
+      colorId,
+      maxSelections,
+      currentSelections: currentSelections.length,
+      selectedOffer,
+      availableOffers,
+      formWatchOffer: form.watch('offer'),
+      landingPageTemplate: landingPage?.template,
+      willUseFormWatch: !selectedOffer || landingPage?.template === 'default'
+    });
+    
     if (currentSelections.includes(colorId)) {
       // Remove selection
       setSelectedColorIds(currentSelections.filter(id => id !== colorId));
+      setVariantErrors([]);
     } else {
       // Add selection if under limit
       if (currentSelections.length < maxSelections) {
         setSelectedColorIds([...currentSelections, colorId]);
+        setVariantErrors([]);
+      } else {
+        // Show error message when limit is reached
+        const currentOffer = availableOffers.find((offer: any) => offer.id === selectedOffer);
+        const errorMessage = `لقد اخترت العرض "${currentOffer?.label || 'الحالي'}" الذي يسمح باختيار ${maxSelections} لون فقط. يرجى تغيير العرض لاختيار المزيد من الألوان.`;
+        setVariantErrors([errorMessage]);
+        console.log("❌ Cannot add more colors. Limit reached:", maxSelections);
       }
     }
-    setVariantErrors([]);
   };
 
   const handleShapeSelection = (shapeId: string) => {
     const maxSelections = getSelectedOfferQuantity();
     const currentSelections = selectedShapeIds;
     
+    console.log("🔷 Shape Selection DEBUG:", {
+      shapeId,
+      maxSelections,
+      currentSelections,
+      isAlreadySelected: currentSelections.includes(shapeId)
+    });
+    
     if (currentSelections.includes(shapeId)) {
       // Remove selection
       setSelectedShapeIds(currentSelections.filter(id => id !== shapeId));
+      setVariantErrors([]);
     } else {
       // Add selection if under limit
       if (currentSelections.length < maxSelections) {
+        console.log("✅ Adding shape to selection:", shapeId);
         setSelectedShapeIds([...currentSelections, shapeId]);
+        setVariantErrors([]);
+      } else {
+        // Show error message when limit is reached
+        const currentOffer = availableOffers.find((offer: any) => offer.id === selectedOffer);
+        const errorMessage = `لقد اخترت العرض "${currentOffer?.label || 'الحالي'}" الذي يسمح باختيار ${maxSelections} شكل فقط. يرجى تغيير العرض لاختيار المزيد من الأشكال.`;
+        setVariantErrors([errorMessage]);
       }
     }
-    setVariantErrors([]);
   };
 
   const handleSizeSelection = (sizeId: string) => {
@@ -1354,13 +1565,19 @@ export default function LandingPageView() {
     if (currentSelections.includes(sizeId)) {
       // Remove selection
       setSelectedSizeIds(currentSelections.filter(id => id !== sizeId));
+      setVariantErrors([]);
     } else {
       // Add selection if under limit
       if (currentSelections.length < maxSelections) {
         setSelectedSizeIds([...currentSelections, sizeId]);
+        setVariantErrors([]);
+      } else {
+        // Show error message when limit is reached
+        const currentOffer = availableOffers.find((offer: any) => offer.id === selectedOffer);
+        const errorMessage = `لقد اخترت العرض "${currentOffer?.label || 'الحالي'}" الذي يسمح باختيار ${maxSelections} حجم فقط. يرجى تغيير العرض لاختيار المزيد من الأحجام.`;
+        setVariantErrors([errorMessage]);
       }
     }
-    setVariantErrors([]);
   };
 
   // حساب العروض المتاحة
@@ -1371,13 +1588,42 @@ export default function LandingPageView() {
     console.log('🔍 Product loaded:', product);
     console.log('🔍 Product priceOffers:', product?.priceOffers);
     console.log('🔍 Available offers:', availableOffers);
+    
+    // فحص تفصيلي للعروض
+    if (availableOffers && availableOffers.length > 0) {
+      availableOffers.forEach((offer: any, index: number) => {
+        console.log(`🔍 Offer ${index + 1}:`, {
+          id: offer.id,
+          label: offer.label,
+          quantity: offer.quantity,
+          price: offer.price,
+          originalData: product?.priceOffers?.[index]
+        });
+      });
+    }
   }, [product, availableOffers]);
 
   // تعيين العرض الافتراضي عند تحميل المنتج
   useEffect(() => {
-    if (availableOffers.length > 0 && !form.getValues('offer')) {
+    if (availableOffers.length > 0) {
       const defaultOffer = availableOffers.find((offer: any) => offer.isDefault) || availableOffers[0];
-      form.setValue('offer', `${defaultOffer.label} - ${formatCurrency(defaultOffer.price)}`);
+      
+      console.log("🔄 Setting default offer:", {
+        defaultOffer,
+        currentSelectedOffer: selectedOffer,
+        availableOffers
+      });
+      
+      // للقوالب التي تستخدم selectedOffer (مثل TikTok)
+      if (!selectedOffer) {
+        console.log("✅ Setting selectedOffer to:", defaultOffer.id);
+        setSelectedOffer(defaultOffer.id);
+      }
+      
+      // للقوالب الأخرى
+      if (!form.getValues('offer')) {
+        form.setValue('offer', `${defaultOffer.label} - ${formatCurrency(defaultOffer.price)}`);
+      }
     }
   }, [availableOffers, form]);
 
@@ -1387,12 +1633,27 @@ export default function LandingPageView() {
       try {
         console.log("🚀 بدء إرسال الطلب من landing-page-view");
         console.log("📝 بيانات النموذج:", data);
+        console.log("🔍 selectedOffer:", selectedOffer);
+        console.log("🔍 availableOffers:", availableOffers);
         
-        // حساب الكمية من العرض المختار
-        const selectedOffer = availableOffers.find((offer: any) => 
-          data.offer.includes(offer.label)
-        );
-        const quantity = selectedOffer?.quantity || 1;
+        // حساب الكمية والسعر من العرض المختار
+        let selectedOfferData;
+        let quantity = 1;
+        let offerPrice = 0;
+        
+        // للقوالب التي تستخدم selectedOffer (مثل TikTok)
+        if (selectedOffer) {
+          selectedOfferData = availableOffers.find((offer: any) => offer.id === selectedOffer);
+          quantity = selectedOfferData?.quantity || 1;
+          offerPrice = selectedOfferData?.price || 0;
+        } else {
+          // للقوالب الأخرى
+          selectedOfferData = availableOffers.find((offer: any) => 
+            data.offer.includes(offer.label)
+          );
+          quantity = selectedOfferData?.quantity || 1;
+          offerPrice = selectedOfferData?.price || 0;
+        }
         
         // Validate variant selections before submitting
         const validationErrors = validateVariantSelections();
@@ -1406,10 +1667,16 @@ export default function LandingPageView() {
           landingPageId: landingPage?.id,
           productId: landingPage?.productId,
           quantity: quantity, // إضافة الكمية المحسوبة
+          price: offerPrice, // إضافة السعر
+          offer: selectedOfferData ? `${selectedOfferData.label} - ${formatCurrency(selectedOfferData.price)}` : data.offer, // تنسيق العرض
           // إضافة معلومات المتغيرات المختارة
           selectedColorIds: selectedColorIds,
           selectedShapeIds: selectedShapeIds,
           selectedSizeIds: selectedSizeIds,
+          // إضافة تفاصيل إضافية للتشخيص
+          colorCount: selectedColorIds.length,
+          shapeCount: selectedShapeIds.length,
+          sizeCount: selectedSizeIds.length
         };
         
         // Debug: طباعة بيانات المتغيرات المرسلة
@@ -1502,32 +1769,11 @@ export default function LandingPageView() {
           button: `${baseButtonClasses} bg-yellow-400 text-black hover:bg-yellow-300 font-black animate-bounce`
         };
       
-      case "video_intro":
+      case "tiktok_style":
         return {
-          container: "bg-white rounded-lg border border-blue-400/30 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto text-gray-900",
-          field: `${baseFieldClasses} bg-white border-blue-300 text-gray-900 placeholder-gray-500 focus:ring-blue-400 focus:border-blue-400`,
-          button: `${baseButtonClasses} bg-blue-600 hover:bg-blue-700`
-        };
-      
-      case "comparison_table":
-        return {
-          container: "bg-white rounded-lg shadow-lg border-t-4 border-green-500 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto",
-          field: `${baseFieldClasses} border-gray-300 focus:ring-green-500 focus:border-green-500`,
-          button: `${baseButtonClasses} bg-green-600 hover:bg-green-700 font-bold`
-        };
-      
-      case "benefits_grid":
-        return {
-          container: "bg-white rounded-lg shadow-lg border border-purple-200 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto",
-          field: `${baseFieldClasses} border-purple-200 focus:ring-purple-500 focus:border-purple-500`,
-          button: `${baseButtonClasses} bg-purple-600 hover:bg-purple-700`
-        };
-      
-      case "story_driven":
-        return {
-          container: "bg-white rounded-lg shadow-lg border-l-4 border-amber-500 p-8 w-full max-w-md max-h-[90vh] overflow-y-auto",
-          field: `${baseFieldClasses} border-amber-200 focus:ring-amber-500 focus:border-amber-500`,
-          button: `${baseButtonClasses} bg-amber-600 hover:bg-amber-700`
+          container: `${isDarkMode ? 'bg-black/95 text-white border-gray-700' : 'bg-white/95 text-gray-900 border-gray-200'} backdrop-blur-md rounded-xl border p-6 w-full max-w-md max-h-[90vh] overflow-y-auto`,
+          field: `${baseFieldClasses} ${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:ring-red-500 focus:border-red-500`,
+          button: `${baseButtonClasses} bg-red-600 hover:bg-red-700 font-bold text-lg shadow-lg transform hover:scale-105`
         };
       
       default:
@@ -2349,6 +2595,525 @@ export default function LandingPageView() {
                 </a>
               </div>
             </div>
+            </div>
+          </div>
+        );
+
+      case "tiktok_style":
+        return (
+          <div className={`min-h-screen tiktok-style ${isDarkMode ? 'bg-black text-white' : 'bg-white text-gray-900'}`}>
+            {/* Header */}
+            <div className={`${isDarkMode ? 'bg-black border-gray-800' : 'bg-white border-gray-200'} border-b sticky top-0 z-40`}>
+              <div className="max-w-md mx-auto px-4 py-3">
+                <div className="flex items-center justify-between">
+                  {/* النجوم في الجهة اليمنى */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-yellow-400 ml-1">4.9</span>
+                    <div className="flex text-yellow-400">
+                      {[...Array(5)].map((_, i) => (
+                        <i key={i} className="fas fa-star text-xs"></i>
+                      ))}
+                    </div>
+                  </div>
+                  {/* الشعار والاسم في الجهة اليسرى */}
+                  <div className="flex items-center gap-2">
+                    {platformData?.logoUrl ? (
+                      <img
+                        src={platformData.logoUrl.startsWith('/objects/') ? 
+                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
+                          platformData.logoUrl
+                        }
+                        alt="شعار المتجر"
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
+                        <i className="fas fa-store text-white text-sm"></i>
+                      </div>
+                    )}
+                    <div className="text-right">
+                      <div className="flex items-center gap-1 justify-end">
+                        <h1 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{platformData?.platformName || "متجرنا"}</h1>
+                        <i 
+                          className="fas fa-check-circle text-xs tiktok-check-blue" 
+                          style={{
+                            color: '#60a5fa !important',
+                            WebkitTextFillColor: '#60a5fa !important'
+                          }}
+                        ></i>
+                      </div>
+                      <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>ثقة . أمان . جودة</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="max-w-md mx-auto px-4 py-4">
+              {/* Product Image Slider */}
+              <div className="mb-4">
+                <div className={`relative aspect-square ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'} rounded-lg overflow-hidden`}>
+                  {/* الصورة الحالية */}
+                  <img
+                    src={convertToPublicUrls((product as any)?.imageUrls || [])[selectedImageIndex] || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80'}
+                    alt={`${productName} ${selectedImageIndex + 1}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
+                    }}
+                  />
+                  
+                  {/* مؤشر الصور */}
+                  {convertToPublicUrls((product as any)?.imageUrls || []).length > 1 && (
+                    <div className="absolute top-3 right-3 bg-black/60 rounded-full px-2 py-1">
+                      <span className="text-white text-xs">
+                        {selectedImageIndex + 1} / {convertToPublicUrls((product as any)?.imageUrls || []).length}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* أسهم التنقل */}
+                  {convertToPublicUrls((product as any)?.imageUrls || []).length > 1 && (
+                    <>
+                      {/* السهم الأيسر */}
+                      <button 
+                        onClick={() => {
+                          const images = convertToPublicUrls((product as any)?.imageUrls || []);
+                          setSelectedImageIndex(selectedImageIndex > 0 ? selectedImageIndex - 1 : images.length - 1);
+                        }}
+                        className="absolute left-3 top-1/2 transform -translate-y-1/2 bg-black/60 hover:bg-black/80 rounded-full p-2 transition-colors"
+                      >
+                        <i className="fas fa-chevron-left text-white text-sm"></i>
+                      </button>
+                      
+                      {/* السهم الأيمن */}
+                      <button 
+                        onClick={() => {
+                          const images = convertToPublicUrls((product as any)?.imageUrls || []);
+                          setSelectedImageIndex(selectedImageIndex < images.length - 1 ? selectedImageIndex + 1 : 0);
+                        }}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-black/60 hover:bg-black/80 rounded-full p-2 transition-colors"
+                      >
+                        <i className="fas fa-chevron-right text-white text-sm"></i>
+                      </button>
+                    </>
+                  )}
+                </div>
+                
+                {/* نقاط التنقل السفلية */}
+                {convertToPublicUrls((product as any)?.imageUrls || []).length > 1 && (
+                  <div className="flex justify-center mt-3 gap-2">
+                    {convertToPublicUrls((product as any)?.imageUrls || []).map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedImageIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-colors ${
+                          selectedImageIndex === index 
+                            ? 'bg-red-500' 
+                            : 'bg-gray-600 hover:bg-gray-500'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Product Title */}
+              <h2 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>{productName}</h2>
+
+              {/* Product Description */}
+              {productDescription && (
+                <p 
+                  className="text-sm mb-4 leading-relaxed font-medium tiktok-description-red" 
+                  style={{
+                    color: '#ef4444 !important',
+                    WebkitTextFillColor: '#ef4444 !important',
+                    textShadow: 'none !important'
+                  }}
+                >
+                  {productDescription}
+                </p>
+              )}
+
+              {/* Offers and Form */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <i className="fas fa-clock text-yellow-400"></i>
+                  <span className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>أرسل طلبك الآن للاستفادة من العرض</span>
+                </div>
+                
+                {/* Order Form with TikTok Style */}
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
+                    {/* Offers Section */}
+                    <div className="space-y-3">
+                      {availableOffers.map((offer: any) => (
+                        <label key={offer.id} className={`flex items-center gap-3 p-3 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} rounded-lg border cursor-pointer hover:border-red-500 transition-colors`}>
+                          <div className="relative">
+                            <input
+                              type="radio"
+                              name="offer"
+                              value={offer.id}
+                              checked={selectedOffer === offer.id}
+                              onChange={(e) => {
+                                console.log("🔄 Offer changed:", {
+                                  newOfferId: e.target.value,
+                                  availableOffers,
+                                  selectedOfferData: availableOffers.find((o: any) => o.id === e.target.value)
+                                });
+                                setSelectedOffer(e.target.value);
+                                const selectedOfferData = availableOffers.find((o: any) => o.id === e.target.value);
+                                if (selectedOfferData) {
+                                  form.setValue('offer', e.target.value);
+                                  // إعادة تعيين الاختيارات عند تغيير العرض
+                                  setSelectedColorIds([]);
+                                  setSelectedShapeIds([]);
+                                  setSelectedSizeIds([]);
+                                  console.log("✅ Offer changed to:", selectedOfferData.label, "Quantity:", selectedOfferData.quantity);
+                                }
+                              }}
+                              className="sr-only"
+                            />
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                              selectedOffer === offer.id 
+                                ? 'border-red-500 bg-red-500' 
+                                : 'border-gray-500'
+                            }`}>
+                              {selectedOffer === offer.id && (
+                                <div className="w-2 h-2 bg-white rounded-full"></div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className={`${isDarkMode ? 'text-white' : 'text-gray-900'} font-medium`}>{offer.label}</span>
+                              <div className="text-left flex items-center gap-3">
+                                <span 
+                                  className="font-bold text-lg tiktok-price-green" 
+                                  style={{
+                                    color: '#10b981 !important',
+                                    WebkitTextFillColor: '#10b981 !important',
+                                    textShadow: 'none !important'
+                                  }}
+                                >
+                                  {formatCurrency(offer.price)}
+                                </span>
+                                <i 
+                                  className="fas fa-arrow-left tiktok-arrow-red" 
+                                  style={{
+                                    color: '#ef4444 !important',
+                                    WebkitTextFillColor: '#ef4444 !important'
+                                  }}
+                                ></i>
+                                {offer.savings > 0 && (
+                                  <div 
+                                    className="text-xs tiktok-savings-green" 
+                                    style={{
+                                      color: '#10b981 !important',
+                                      WebkitTextFillColor: '#10b981 !important',
+                                      textShadow: 'none !important'
+                                    }}
+                                  >
+                                    وفر {formatCurrency(offer.savings)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Customer Name */}
+                    <FormField
+                      control={form.control}
+                      name="customerName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="الاسم الكامل"
+                              className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500`}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Customer Phone */}
+                    <FormField
+                      control={form.control}
+                      name="customerPhone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="رقم الهاتف"
+                              type="tel"
+                              className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500`}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Colors */}
+                    {productColors && productColors.length > 0 && (
+                      <div>
+                        <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                          الألوان المتاحة ({selectedColorIds.length}/{(() => {
+                            const qty = getSelectedOfferQuantity();
+                            console.log("🎨 Color label - selectedOffer:", selectedOffer, "quantity:", qty);
+                            return qty;
+                          })()}) - المتوفر: {productColors.length}
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {productColors.map((color: any) => {
+                            const isSelected = selectedColorIds.includes(color.id);
+                            const isDisabled = !isSelected && selectedColorIds.length >= getSelectedOfferQuantity();
+                            
+                            return (
+                              <button
+                                key={color.id}
+                                type="button"
+                                onClick={() => handleColorSelection(color.id)}
+                                disabled={isDisabled}
+                                className={`p-2 rounded-lg border text-sm relative transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-red-500 bg-red-500/20 text-red-400'
+                                    : isDisabled
+                                      ? isDarkMode 
+                                        ? 'border-gray-700 bg-gray-900 text-gray-600 cursor-not-allowed opacity-50'
+                                        : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                      : isDarkMode 
+                                        ? 'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500'
+                                        : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-gray-400'
+                                }`}
+                              >
+                                {color.colorName || color.name}
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                                    <span className="text-xs text-white">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shapes */}
+                    {productShapes && productShapes.length > 0 && (
+                      <div>
+                        <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                          الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productShapes.length}
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {productShapes.map((shape: any) => {
+                            const isSelected = selectedShapeIds.includes(shape.id);
+                            const isDisabled = !isSelected && selectedShapeIds.length >= getSelectedOfferQuantity();
+                            
+                            return (
+                              <button
+                                key={shape.id}
+                                type="button"
+                                onClick={() => handleShapeSelection(shape.id)}
+                                disabled={isDisabled}
+                                className={`p-2 rounded-lg border text-sm relative transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-red-500 bg-red-500/20 text-red-400'
+                                    : isDisabled
+                                      ? isDarkMode 
+                                        ? 'border-gray-700 bg-gray-900 text-gray-600 cursor-not-allowed opacity-50'
+                                        : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                      : isDarkMode 
+                                        ? 'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500'
+                                        : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-gray-400'
+                                }`}
+                              >
+                                {shape.shapeName || shape.name}
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                                    <span className="text-xs text-white">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sizes */}
+                    {productSizes && productSizes.length > 0 && (
+                      <div>
+                        <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                          الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productSizes.length}
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {productSizes.map((size: any) => {
+                            const isSelected = selectedSizeIds.includes(size.id);
+                            const isDisabled = !isSelected && selectedSizeIds.length >= getSelectedOfferQuantity();
+                            
+                            return (
+                              <button
+                                key={size.id}
+                                type="button"
+                                onClick={() => handleSizeSelection(size.id)}
+                                disabled={isDisabled}
+                                className={`p-2 rounded-lg border text-sm relative transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-red-500 bg-red-500/20 text-red-400'
+                                    : isDisabled
+                                      ? isDarkMode 
+                                        ? 'border-gray-700 bg-gray-900 text-gray-600 cursor-not-allowed opacity-50'
+                                        : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                      : isDarkMode 
+                                        ? 'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500'
+                                        : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-gray-400'
+                                }`}
+                              >
+                                {size.sizeName || size.name}
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                                    <span className="text-xs text-white">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Variant Errors */}
+                    {variantErrors.length > 0 && (
+                      <div className={`${isDarkMode ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border rounded-lg p-4 mb-4`}>
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            <i className="fas fa-exclamation-triangle text-red-500 text-lg"></i>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className={`font-medium ${isDarkMode ? 'text-red-400' : 'text-red-800'} mb-1`}>
+                              تنبيه: تجاوز الحد المسموح
+                            </h4>
+                            {variantErrors.map((error, index) => (
+                              <p key={index} className={`${isDarkMode ? 'text-red-300' : 'text-red-700'} text-sm leading-relaxed`}>
+                                {error}
+                              </p>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setVariantErrors([])}
+                            className={`flex-shrink-0 ${isDarkMode ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-500'} transition-colors`}
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Governorate */}
+                    <FormField
+                      control={form.control}
+                      name="customerGovernorate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'} focus:border-red-500`}>
+                                <SelectValue placeholder="اختر المحافظة" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className={`${isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'} max-h-60 overflow-y-auto`}>
+                              <div className="grid grid-cols-3 gap-1 p-2">
+                                {iraqGovernorates.map((gov) => (
+                                  <SelectItem 
+                                    key={gov} 
+                                    value={gov}
+                                    className={`${isDarkMode ? 'text-white' : 'text-gray-900'} hover:bg-red-600 focus:bg-red-600 cursor-pointer rounded p-2 text-xs text-center`}
+                                  >
+                                    {gov}
+                                  </SelectItem>
+                                ))}
+                              </div>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Address */}
+                    <FormField
+                      control={form.control}
+                      name="customerAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="العنوان التفصيلي"
+                              className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500`}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Notes */}
+                    <FormField
+                      control={form.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Textarea
+                              placeholder="ملاحظات إضافية (اختياري)"
+                              className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500 resize-none`}
+                              rows={3}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-red-400" />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Submit Button */}
+                    <Button
+                      type="submit"
+                      disabled={submitOrderMutation.isPending}
+                      className="w-full py-4 bg-red-600 hover:bg-red-700 font-bold text-lg rounded-lg transition-all duration-300 transform hover:scale-105"
+                      style={{
+                        color: 'white !important'
+                      }}
+                    >
+                      {submitOrderMutation.isPending ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <i className="fas fa-spinner fa-spin"></i>
+                          جاري الإرسال...
+                        </div>
+                      ) : (
+                        'إرسال الطلب'
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-6 text-center">
+                <p className="text-xs text-gray-500">
+                  جميع الحقوق محفوظة © 2024 {platformData?.platformName || "متجرنا"}
+                </p>
+              </div>
             </div>
           </div>
         );
@@ -3395,31 +4160,63 @@ export default function LandingPageView() {
                           {/* الأحجام المتاحة */}
                           {productSizes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <SelectValue placeholder="اختر الحجم" />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {productSizes.map((size: any) => (
-                                    <SelectItem key={size.id} value={size.sizeName}>
-                                      <div className="flex items-center gap-2">
-                                        {size.sizeImageUrl && (
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                                الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productSizes.length}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {productSizes.map((size: any) => {
+                                  const isSelected = selectedSizeIds.includes(size.id);
+                                  const isDisabled = !isSelected && selectedSizeIds.length >= getSelectedOfferQuantity();
+                                  
+                                  return (
+                                    <button 
+                                      key={size.id} 
+                                      type="button"
+                                      disabled={isDisabled}
+                                      className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                        isSelected
+                                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                          : isDisabled
+                                            ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                            : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:shadow-sm'
+                                      }`}
+                                      title={size.sizeName}
+                                      onClick={() => handleSizeSelection(size.id)}
+                                    >
+                                      {size.sizeImageUrl ? (
+                                        <div className="flex items-center gap-2">
                                           <img 
                                             src={size.sizeImageUrl.startsWith('/objects/') ? 
                                               size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
                                               size.sizeImageUrl
                                             }
                                             alt={size.sizeName}
-                                            className="w-6 h-6 object-cover rounded"
+                                            className="w-6 h-6 object-cover rounded border"
                                           />
-                                        )}
-                                        <span>{size.sizeName}</span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                          <div className="flex flex-col">
+                                            <span className="text-sm font-medium">{size.sizeName}</span>
+                                            {size.sizeValue && (
+                                              <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{size.sizeName}</span>
+                                          {size.sizeValue && (
+                                            <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                          <span className="text-xs text-white">✓</span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -3995,31 +4792,63 @@ export default function LandingPageView() {
                           {/* الأحجام المتاحة */}
                           {productSizes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <SelectValue placeholder="اختر الحجم" />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {productSizes.map((size: any) => (
-                                    <SelectItem key={size.id} value={size.sizeName}>
-                                      <div className="flex items-center gap-2">
-                                        {size.sizeImageUrl && (
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                                الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productSizes.length}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {productSizes.map((size: any) => {
+                                  const isSelected = selectedSizeIds.includes(size.id);
+                                  const isDisabled = !isSelected && selectedSizeIds.length >= getSelectedOfferQuantity();
+                                  
+                                  return (
+                                    <button 
+                                      key={size.id} 
+                                      type="button"
+                                      disabled={isDisabled}
+                                      className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                        isSelected
+                                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                          : isDisabled
+                                            ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                            : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:shadow-sm'
+                                      }`}
+                                      title={size.sizeName}
+                                      onClick={() => handleSizeSelection(size.id)}
+                                    >
+                                      {size.sizeImageUrl ? (
+                                        <div className="flex items-center gap-2">
                                           <img 
                                             src={size.sizeImageUrl.startsWith('/objects/') ? 
                                               size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
                                               size.sizeImageUrl
                                             }
                                             alt={size.sizeName}
-                                            className="w-6 h-6 object-cover rounded"
+                                            className="w-6 h-6 object-cover rounded border"
                                           />
-                                        )}
-                                        <span>{size.sizeName}</span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                          <div className="flex flex-col">
+                                            <span className="text-sm font-medium">{size.sizeName}</span>
+                                            {size.sizeValue && (
+                                              <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{size.sizeName}</span>
+                                          {size.sizeValue && (
+                                            <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                          <span className="text-xs text-white">✓</span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -4455,31 +5284,63 @@ export default function LandingPageView() {
                           {/* الأحجام المتاحة */}
                           {productSizes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <SelectValue placeholder="اختر الحجم" />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {productSizes.map((size: any) => (
-                                    <SelectItem key={size.id} value={size.sizeName}>
-                                      <div className="flex items-center gap-2">
-                                        {size.sizeImageUrl && (
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                                الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productSizes.length}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {productSizes.map((size: any) => {
+                                  const isSelected = selectedSizeIds.includes(size.id);
+                                  const isDisabled = !isSelected && selectedSizeIds.length >= getSelectedOfferQuantity();
+                                  
+                                  return (
+                                    <button 
+                                      key={size.id} 
+                                      type="button"
+                                      disabled={isDisabled}
+                                      className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                        isSelected
+                                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                          : isDisabled
+                                            ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                            : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:shadow-sm'
+                                      }`}
+                                      title={size.sizeName}
+                                      onClick={() => handleSizeSelection(size.id)}
+                                    >
+                                      {size.sizeImageUrl ? (
+                                        <div className="flex items-center gap-2">
                                           <img 
                                             src={size.sizeImageUrl.startsWith('/objects/') ? 
                                               size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
                                               size.sizeImageUrl
                                             }
                                             alt={size.sizeName}
-                                            className="w-6 h-6 object-cover rounded"
+                                            className="w-6 h-6 object-cover rounded border"
                                           />
-                                        )}
-                                        <span>{size.sizeName}</span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                          <div className="flex flex-col">
+                                            <span className="text-sm font-medium">{size.sizeName}</span>
+                                            {size.sizeValue && (
+                                              <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{size.sizeName}</span>
+                                          {size.sizeValue && (
+                                            <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                          <span className="text-xs text-white">✓</span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -4755,7 +5616,7 @@ export default function LandingPageView() {
               {/* Order Form Section */}
               <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
                 <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3 text-red-600">🚀 احجز مكانك الآن</h3>
+                  <h3 className="text-lg font-bold text-red-600">🚀 احجز مكانك الآن</h3>
                   
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
@@ -4931,31 +5792,63 @@ export default function LandingPageView() {
                           {/* الأحجام المتاحة */}
                           {productSizes.length > 0 && (
                             <div>
-                              <div className="text-sm font-medium text-gray-700 mb-2">الأحجام المتاحة</div>
-                              <Select onValueChange={handleSizeSelection} value={selectedSizeIds.length > 0 ? selectedSizeIds[0] : ""}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <SelectValue placeholder="اختر الحجم" />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {productSizes.map((size: any) => (
-                                    <SelectItem key={size.id} value={size.sizeName}>
-                                      <div className="flex items-center gap-2">
-                                        {size.sizeImageUrl && (
+                              <div className="text-sm font-medium text-gray-700 mb-2">
+                                الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productSizes.length}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {productSizes.map((size: any) => {
+                                  const isSelected = selectedSizeIds.includes(size.id);
+                                  const isDisabled = !isSelected && selectedSizeIds.length >= getSelectedOfferQuantity();
+                                  
+                                  return (
+                                    <button 
+                                      key={size.id} 
+                                      type="button"
+                                      disabled={isDisabled}
+                                      className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                        isSelected
+                                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                          : isDisabled
+                                            ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                            : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:shadow-sm'
+                                      }`}
+                                      title={size.sizeName}
+                                      onClick={() => handleSizeSelection(size.id)}
+                                    >
+                                      {size.sizeImageUrl ? (
+                                        <div className="flex items-center gap-2">
                                           <img 
                                             src={size.sizeImageUrl.startsWith('/objects/') ? 
                                               size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
                                               size.sizeImageUrl
                                             }
                                             alt={size.sizeName}
-                                            className="w-6 h-6 object-cover rounded"
+                                            className="w-6 h-6 object-cover rounded border"
                                           />
-                                        )}
-                                        <span>{size.sizeName}</span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                          <div className="flex flex-col">
+                                            <span className="text-sm font-medium">{size.sizeName}</span>
+                                            {size.sizeValue && (
+                                              <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{size.sizeName}</span>
+                                          {size.sizeValue && (
+                                            <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                          <span className="text-xs text-white">✓</span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -5125,1401 +6018,8 @@ export default function LandingPageView() {
           </div>
         );
 
-      case "video_intro":
-        return (
-          <div className="min-h-screen bg-gray-50">
-            {/* Header Compact */}
-            <div className="bg-white shadow-sm border-b">
-              <div className="container mx-auto px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="bg-purple-100 px-2 py-1 rounded-full">
-                    <span className="text-purple-800 text-xs font-semibold">🎬 فيديو تعريفي</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-10 h-10 object-cover rounded-lg border"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-pink-500 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-play text-white text-sm"></i>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <h1 className="text-lg font-bold text-gray-900">{platformData?.platformName || "متجرنا"}</h1>
-                      <p className="text-xs text-purple-600">شاهد وتعلم • اختبر بنفسك</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Product & Video Section */}
-            <div className="px-3 py-4">
-              <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
-                <div className="text-center mb-4">
-                  <h2 className="text-lg font-bold text-gray-900 mb-2">
-                    {productName} <span className="text-base font-normal text-red-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
-                  </h2>
-                </div>
-                
-                <div className="mb-4">
-                  <ImageSlider 
-                    images={convertToPublicUrls((product as any)?.imageUrls || [])} 
-                    productName={productName}
-                    template={landingPage.template}
-                  />
-                </div>
-                
-                <p className="text-gray-600 text-sm text-center leading-relaxed">{productDescription || "شاهد الفيديو لتتعرف على المنتج"}</p>
-              </div>
 
-              {/* Video Placeholder */}
-              <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 mb-4">
-                <div className="bg-white/90 backdrop-blur-sm rounded-lg p-8 text-center shadow-lg text-gray-900">
-                  <i className="fas fa-play-circle text-white text-4xl mb-3"></i>
-                  <h3 className="text-white text-lg font-bold mb-2">شاهد الفيديو التعريفي</h3>
-                  <p className="text-white text-sm opacity-90">تعرف على فوائد ومميزات المنتج</p>
-                </div>
-              </div>
-
-              {/* Benefits */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="bg-white rounded-lg p-3 text-center shadow-sm border">
-                  <i className="fas fa-check-circle text-green-600 text-lg mb-2"></i>
-                  <p className="text-xs font-semibold text-gray-700">سهل الاستخدام</p>
-                  <p className="text-xs text-gray-500">بسيط وعملي</p>
-                </div>
-                <div className="bg-white rounded-lg p-3 text-center shadow-sm border">
-                  <i className="fas fa-rocket text-blue-600 text-lg mb-2"></i>
-                  <p className="text-xs font-semibold text-gray-700">نتائج مذهلة</p>
-                  <p className="text-xs text-gray-500">تأثير إيجابي</p>
-                </div>
-                <div className="bg-white rounded-lg p-3 text-center shadow-sm border">
-                  <i className="fas fa-star text-yellow-400 text-lg mb-2"></i>
-                  <p className="text-xs font-semibold text-gray-700">جودة عالية</p>
-                  <p className="text-xs text-gray-500">أفضل المواد</p>
-                </div>
-              </div>
-
-              {/* Order Form Section - Same unified form */}
-              <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
-                <div className="mb-4">
-                  <div className="text-center mb-3">
-                    <h3 className="text-sm font-medium flex items-center justify-center gap-2">
-                      <i className="fas fa-pen text-xs"></i>
-                      املأ بياناتك للطلب
-                    </h3>
-                  </div>
-                  
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
-                      {/* Standard form fields like other templates */}
-                      <FormField
-                        control={form.control}
-                        name="customerName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>الاسم *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerPhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>رقم الهاتف *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="offer"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>العرض *</FormLabel>
-                            <FormControl>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <div className="flex items-center">
-                                    <Package className="ml-2 h-4 w-4 text-gray-400" />
-                                    <SelectValue placeholder="اختر العرض" />
-                                  </div>
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer: any) => (
-                                      <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
-                                        <div className="flex justify-between items-start w-full gap-4">
-                                          <div className="flex flex-col flex-1">
-                                            <span className="font-medium">{offer.label}</span>
-                                            {offer.savings > 0 && (
-                                              <span className="text-sm text-red-500">توفير {formatCurrency(offer.savings)}</span>
-                                            )}
-                                          </div>
-                                          <span className="text-purple-600 font-bold">{formatCurrency(offer.price)}</span>
-                                        </div>
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value={`قطعة واحدة - ${formatCurrency(parseFloat(product?.price || 0))}`}>
-                                      قطعة واحدة - {formatCurrency(parseFloat(product?.price || 0))}
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerGovernorate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>المحافظة *</FormLabel>
-                            <FormControl>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <div className="flex items-center">
-                                    <MapPin className="ml-2 h-4 w-4 text-gray-400" />
-                                    <SelectValue placeholder="اختر المحافظة" />
-                                  </div>
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
-                                  {iraqGovernorates.map((gov) => (
-                                    <SelectItem key={gov} value={gov}>
-                                      {gov}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerAddress"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>العنوان *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
-                                <Textarea 
-                                  placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
-                                  rows={1}
-                                  {...field}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>ملاحظات إضافية</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
-                                <Textarea 
-                                  placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
-                                  rows={1}
-                                  {...field}
-                                  value={field.value || ""}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="flex gap-3 pt-2">
-                        <Button
-                          type="submit"
-                          disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-purple-600 hover:bg-purple-700 h-12 text-base font-bold"
-                        >
-                          {submitOrderMutation.isPending ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
-                              جارٍ الإرسال...
-                            </>
-                          ) : (
-                            "إرسال الطلب"
-                          )}
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="bg-gradient-to-r from-purple-700 to-purple-800 text-white rounded-lg mx-2 my-3 p-4">
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-8 h-8 object-cover rounded border"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-pink-500 rounded flex items-center justify-center">
-                        <i className="fas fa-play text-white text-sm"></i>
-                      </div>
-                    )}
-                    <h3 className="text-sm font-bold">{platformData?.platformName || "متجرنا"}</h3>
-                  </div>
-                  <p className="text-gray-400 text-xs mb-3">
-                    جميع الحقوق محفوظة © 2024 | تم التطوير بواسطة sanadi.pro
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Fixed Bottom Order Button for Mobile */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-3 md:hidden z-50">
-              <Button 
-                onClick={() => {
-                  const orderForm = document.getElementById('order-form');
-                }}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 text-base font-bold rounded-lg"
-              >
-                🎬 اطلب الآن • {formatCurrency(parseFloat(productPrice || '0'))}
-              </Button>
-            </div>
-
-            {/* Add bottom padding to prevent content overlap and privacy policy button */}
-            <div className="pb-20 md:pb-8">
-              {/* Privacy Policy Button */}
-              <div className="flex justify-center mt-8 mb-4">
-                <a 
-                  href="/privacy-policy" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
-                >
-                  سياسة الخصوصية
-                </a>
-              </div>
-            </div>
-          </div>
-        );
-
-      case "comparison_table":
-        return (
-          <div className="min-h-screen bg-gray-50">
-            {/* Header Compact */}
-            <div className="bg-white shadow-sm border-b">
-              <div className="container mx-auto px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="bg-blue-100 px-2 py-1 rounded-full">
-                    <span className="text-blue-800 text-xs font-semibold">⚖️ مقارنة المنتجات</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-10 h-10 object-cover rounded-lg border"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-balance-scale text-white text-sm"></i>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <h1 className="text-lg font-bold text-gray-900">{platformData?.platformName || "متجرنا"}</h1>
-                      <p className="text-xs text-blue-600">مقارنة شاملة • أفضل اختيار</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Product & Comparison Section */}
-            <div className="px-3 py-4">
-              <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
-                <div className="text-center mb-4">
-                  <h2 className="text-lg font-bold text-gray-900 mb-2">
-                    {productName} <span className="text-base font-normal text-blue-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
-                  </h2>
-                </div>
-                
-                <div className="mb-4">
-                  <ImageSlider 
-                    images={convertToPublicUrls((product as any)?.imageUrls || [])} 
-                    productName={productName}
-                    template={landingPage.template}
-                  />
-                </div>
-                
-                <p className="text-gray-600 text-sm text-center leading-relaxed">{productDescription || "المنتج الأفضل في السوق"}</p>
-              </div>
-
-              {/* Comparison Table */}
-              <div className="bg-white rounded-lg shadow-sm border overflow-hidden mb-4">
-                <div className="grid grid-cols-3 gap-0 text-xs">
-                  {/* Headers */}
-                  <div className="bg-gray-100 p-2 font-bold text-center border-b">المميزات</div>
-                  <div className="bg-red-100 p-2 font-bold text-center border-b">المنافسون</div>
-                  <div className="bg-green-100 p-2 font-bold text-center border-b">منتجنا</div>
-                  
-                  {/* Rows */}
-                  <div className="p-2 border-b border-r">الجودة</div>
-                  <div className="p-2 border-b border-r text-center text-red-600">★★★☆☆</div>
-                  <div className="p-2 border-b text-center text-green-600">★★★★★</div>
-                  
-                  <div className="p-2 border-b border-r bg-gray-50">السعر</div>
-                  <div className="p-2 border-b border-r bg-gray-50 text-center text-red-600">مرتفع</div>
-                  <div className="p-2 border-b bg-gray-50 text-center text-green-600">معقول</div>
-                  
-                  <div className="p-2 border-b border-r">الضمان</div>
-                  <div className="p-2 border-b border-r text-center text-red-600">3 أشهر</div>
-                  <div className="p-2 border-b text-center text-green-600">سنة كاملة</div>
-                  
-                  <div className="p-2 border-r bg-gray-50">التوصيل</div>
-                  <div className="p-2 border-r bg-gray-50 text-center text-red-600">بفرق</div>
-                  <div className="p-2 bg-gray-50 text-center text-green-600">مجاني</div>
-                </div>
-              </div>
-
-              {/* Order Form Section */}
-              <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3 text-blue-600">🏆 اختر الأفضل</h3>
-                  
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
-                      {/* Standard unified form fields */}
-                      <FormField
-                        control={form.control}
-                        name="customerName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>الاسم *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerPhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>رقم الهاتف *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="offer"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>العرض *</FormLabel>
-                            <FormControl>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <div className="flex items-center">
-                                    <Package className="ml-2 h-4 w-4 text-gray-400" />
-                                    <SelectValue placeholder="اختر العرض" />
-                                  </div>
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer: any) => (
-                                      <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
-                                        <div className="flex justify-between items-start w-full gap-4">
-                                          <div className="flex flex-col flex-1">
-                                            <span className="font-medium">{offer.label}</span>
-                                            {offer.savings > 0 && (
-                                              <span className="text-sm text-red-500">توفير {formatCurrency(offer.savings)}</span>
-                                            )}
-                                          </div>
-                                          <span className="text-blue-600 font-bold">{formatCurrency(offer.price)}</span>
-                                        </div>
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value={`قطعة واحدة - ${formatCurrency(parseFloat(product?.price || 0))}`}>
-                                      قطعة واحدة - {formatCurrency(parseFloat(product?.price || 0))}
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerGovernorate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>المحافظة *</FormLabel>
-                            <FormControl>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <div className="flex items-center">
-                                    <MapPin className="ml-2 h-4 w-4 text-gray-400" />
-                                    <SelectValue placeholder="اختر المحافظة" />
-                                  </div>
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
-                                  {iraqGovernorates.map((gov) => (
-                                    <SelectItem key={gov} value={gov}>
-                                      {gov}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerAddress"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>العنوان *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
-                                <Textarea 
-                                  placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
-                                  rows={1}
-                                  {...field}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>ملاحظات إضافية</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
-                                <Textarea 
-                                  placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
-                                  rows={1}
-                                  {...field}
-                                  value={field.value || ""}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="flex gap-3 pt-2">
-                        <Button
-                          type="submit"
-                          disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 h-12 text-base font-bold"
-                        >
-                          {submitOrderMutation.isPending ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
-                              جارٍ الإرسال...
-                            </>
-                          ) : (
-                            "⚖️ اختر الأفضل الآن"
-                          )}
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </div>
-              </div>
-
-              {/* Additional Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mx-2 my-3">
-                <div className="text-center">
-                  <h3 className="text-sm font-bold text-blue-800 mb-2">⭐ لماذا نحن الأفضل؟</h3>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-1">
-                      <i className="fas fa-check text-green-600"></i>
-                      <span className="text-blue-800">جودة فائقة</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <i className="fas fa-check text-green-600"></i>
-                      <span className="text-blue-800">سعر مناسب</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <i className="fas fa-check text-green-600"></i>
-                      <span className="text-blue-800">ضمان طويل</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <i className="fas fa-check text-green-600"></i>
-                      <span className="text-blue-800">توصيل مجاني</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="bg-gradient-to-r from-purple-700 to-purple-800 text-white rounded-lg mx-2 my-3 p-4">
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-8 h-8 object-cover rounded border"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-cyan-500 rounded flex items-center justify-center">
-                        <i className="fas fa-balance-scale text-white text-sm"></i>
-                      </div>
-                    )}
-                    <h3 className="text-sm font-bold">{platformData?.platformName || "متجرنا"}</h3>
-                  </div>
-                  <p className="text-gray-400 text-xs mb-3">
-                    جميع الحقوق محفوظة © 2024 | تم التطوير بواسطة sanadi.pro
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Fixed Bottom Order Button for Mobile */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-3 md:hidden z-50">
-              <Button 
-                onClick={() => {
-                  const orderForm = document.getElementById('order-form');
-                }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-bold rounded-lg"
-              >
-                ⚖️ اختر الأفضل • {formatCurrency(parseFloat(productPrice || '0'))}
-              </Button>
-            </div>
-
-            {/* Add bottom padding to prevent content overlap and privacy policy button */}
-            <div className="pb-20 md:pb-8">
-              {/* Privacy Policy Button */}
-              <div className="flex justify-center mt-8 mb-4">
-                <a 
-                  href="/privacy-policy" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
-                >
-                  سياسة الخصوصية
-                </a>
-              </div>
-            </div>
-          </div>
-        );
-
-      case "benefits_grid":
-        return (
-          <div className="min-h-screen bg-orange-50">
-            {/* Header Compact */}
-            <div className="bg-white shadow-sm border-b">
-              <div className="container mx-auto px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="bg-orange-100 px-2 py-1 rounded-full">
-                    <span className="text-orange-800 text-xs font-semibold">💰 مزايا متعددة</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-10 h-10 object-cover rounded-lg border"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-gradient-to-br from-theme-400 to-theme-500 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-gem text-white text-sm"></i>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <h1 className="text-lg font-bold text-gray-900">{platformData?.platformName || "متجرنا"}</h1>
-                      <p className="text-xs text-orange-600">فوائد لا تُعد • قيمة حقيقية</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Product & Benefits Section */}
-            <div className="px-3 py-4">
-              <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
-                <div className="text-center mb-4">
-                  <h2 className="text-lg font-bold text-gray-900 mb-2">
-                    {productName} <span className="text-base font-normal text-orange-600">بـ {formatNumber(parseFloat(productPrice || '0'))} <span className="text-xs">د.ع</span></span>
-                  </h2>
-                </div>
-                
-                <div className="mb-4">
-                  <ImageSlider 
-                    images={convertToPublicUrls((product as any)?.imageUrls || [])} 
-                    productName={productName}
-                    template={landingPage.template}
-                  />
-                </div>
-                
-                <p className="text-gray-600 text-sm text-center leading-relaxed">{productDescription || "منتج بفوائد ومزايا متعددة"}</p>
-              </div>
-
-              {/* Benefits Grid */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className="bg-white rounded-lg p-3 shadow-sm border">
-                  <i className="fas fa-money-bill-wave text-purple-600 text-lg mb-2 block text-center"></i>
-                  <h3 className="text-xs font-bold text-center mb-1">توفير المال</h3>
-                  <p className="text-xs text-gray-600 text-center">وفر 70% من التكاليف</p>
-                </div>
-                
-                <div className="bg-white rounded-lg p-3 shadow-sm border">
-                  <i className="fas fa-clock text-blue-600 text-lg mb-2 block text-center"></i>
-                  <h3 className="text-xs font-bold text-center mb-1">توفير الوقت</h3>
-                  <p className="text-xs text-gray-600 text-center">حلول ذكية وسريعة</p>
-                </div>
-                
-                <div className="bg-white rounded-lg p-3 shadow-sm border">
-                  <i className="fas fa-heart text-green-600 text-lg mb-2 block text-center"></i>
-                  <h3 className="text-xs font-bold text-center mb-1">راحة البال</h3>
-                  <p className="text-xs text-gray-600 text-center">حلول مضمونة</p>
-                </div>
-                
-                <div className="bg-white rounded-lg p-3 shadow-sm border">
-                  <i className="fas fa-trophy text-yellow-600 text-lg mb-2 block text-center"></i>
-                  <h3 className="text-xs font-bold text-center mb-1">نتائج مضمونة</h3>
-                  <p className="text-xs text-gray-600 text-center">أهداف محققة</p>
-                </div>
-                
-                <div className="bg-white rounded-lg p-3 shadow-sm border">
-                  <i className="fas fa-users text-red-600 text-lg mb-2 block text-center"></i>
-                  <h3 className="text-xs font-bold text-center mb-1">دعم فني</h3>
-                  <p className="text-xs text-gray-600 text-center">خبراء متاحون 24/7</p>
-                </div>
-                
-                <div className="bg-white rounded-lg p-3 shadow-sm border">
-                  <i className="fas fa-shield-alt text-indigo-600 text-lg mb-2 block text-center"></i>
-                  <h3 className="text-xs font-bold text-center mb-1">أمان تام</h3>
-                  <p className="text-xs text-gray-600 text-center">حماية شاملة</p>
-                </div>
-              </div>
-
-              {/* Order Form Section */}
-              <div className="bg-white mx-2 rounded-lg shadow-sm border p-4" id="order-form">
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold mb-3 text-orange-600">💎 استفد من المزايا</h3>
-                  
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => submitOrderMutation.mutate(data))} className="space-y-4">
-                      {/* Standard unified form fields */}
-                      <FormField
-                        control={form.control}
-                        name="customerName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>الاسم *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="ادخل اسمك الكامل" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerPhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>رقم الهاتف *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="offer"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>العرض *</FormLabel>
-                            <FormControl>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <div className="flex items-center">
-                                    <Package className="ml-2 h-4 w-4 text-gray-400" />
-                                    <SelectValue placeholder="اختر العرض" />
-                                  </div>
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px] overflow-auto z-50" position="popper" sideOffset={4}>
-                                  {availableOffers.length > 0 ? (
-                                    availableOffers.map((offer: any) => (
-                                      <SelectItem key={offer.id} value={`${offer.label} - ${formatCurrency(offer.price)}`}>
-                                        <div className="flex justify-between items-start w-full gap-4">
-                                          <div className="flex flex-col flex-1">
-                                            <span className="font-medium">{offer.label}</span>
-                                            {offer.savings > 0 && (
-                                              <span className="text-sm text-red-500">توفير {formatCurrency(offer.savings)}</span>
-                                            )}
-                                          </div>
-                                          <span className="text-orange-600 font-bold">{formatCurrency(offer.price)}</span>
-                                        </div>
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value={`قطعة واحدة - ${formatCurrency(parseFloat(product?.price || 0))}`}>
-                                      قطعة واحدة - {formatCurrency(parseFloat(product?.price || 0))}
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerGovernorate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>المحافظة *</FormLabel>
-                            <FormControl>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 border-[0.5px]">
-                                  <div className="flex items-center">
-                                    <MapPin className="ml-2 h-4 w-4 text-gray-400" />
-                                    <SelectValue placeholder="اختر المحافظة" />
-                                  </div>
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[400px] overflow-auto" position="popper" sideOffset={4}>
-                                  {iraqGovernorates.map((gov) => (
-                                    <SelectItem key={gov} value={gov}>
-                                      {gov}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="customerAddress"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>العنوان *</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <Home className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
-                                <Textarea 
-                                  placeholder="العنوان التفصيلي"
-                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
-                                  rows={1}
-                                  {...field}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>ملاحظات إضافية</FormLabel>
-                            <FormControl>
-                              <div className="relative">
-                                <MessageSquare className="absolute right-3 top-2 text-gray-400 h-4 w-4" />
-                                <Textarea 
-                                  placeholder="أي ملاحظات أو طلبات خاصة (اختياري)"
-                                  className="resize-none pr-10 min-h-[38px] py-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]"
-                                  rows={1}
-                                  {...field}
-                                  value={field.value || ""}
-                                />
-                              </div>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="flex gap-3 pt-2">
-                        <Button
-                          type="submit"
-                          disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-orange-600 hover:bg-orange-700 h-12 text-base font-bold"
-                        >
-                          {submitOrderMutation.isPending ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
-                              جارٍ الإرسال...
-                            </>
-                          ) : (
-                            "💎 استفد من المزايا الآن"
-                          )}
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </div>
-              </div>
-
-              {/* All Benefits Summary */}
-              <div className="bg-gradient-to-r from-theme-light to-theme-medium border border-theme-primary rounded-lg p-3 mx-2 my-3">
-                <h3 className="text-sm font-bold text-theme-primary mb-2 text-center">🎁 كل هذه المزايا معاً</h3>
-                <div className="grid grid-cols-2 gap-1 text-xs">
-                  <div className="flex items-center gap-1">
-                    <i className="fas fa-check text-green-600"></i>
-                    <span className="text-theme-primary">توفير 70% من التكاليف</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <i className="fas fa-check text-green-600"></i>
-                    <span className="text-theme-primary">حلول ذكية توفر الوقت</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <i className="fas fa-check text-green-600"></i>
-                    <span className="text-theme-primary">راحة بال ونتائج مضمونة</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <i className="fas fa-check text-green-600"></i>
-                    <span className="text-theme-primary">دعم فني وأمان شامل</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="bg-gradient-to-r from-purple-700 to-purple-800 text-white rounded-lg mx-2 my-3 p-4">
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-8 h-8 object-cover rounded border"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gradient-to-br from-theme-400 to-theme-500 rounded flex items-center justify-center">
-                        <i className="fas fa-gem text-white text-sm"></i>
-                      </div>
-                    )}
-                    <h3 className="text-sm font-bold">{platformData?.platformName || "متجرنا"}</h3>
-                  </div>
-                  <p className="text-gray-400 text-xs mb-3">
-                    جميع الحقوق محفوظة © 2024 | تم التطوير بواسطة sanadi.pro
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Fixed Bottom Order Button for Mobile */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-3 md:hidden z-50">
-              <Button 
-                onClick={() => {
-                  const orderForm = document.getElementById('order-form');
-                }}
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 text-base font-bold rounded-lg"
-              >
-                💎 استفد من المزايا • {formatCurrency(parseFloat(productPrice || '0'))}
-              </Button>
-            </div>
-
-            {/* Add bottom padding to prevent content overlap and privacy policy button */}
-            <div className="pb-20 md:pb-8">
-              {/* Privacy Policy Button */}
-              <div className="flex justify-center mt-8 mb-4">
-                <a 
-                  href="/privacy-policy" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-gray-500 hover:text-gray-700 text-sm underline transition-colors"
-                >
-                  سياسة الخصوصية
-                </a>
-              </div>
-            </div>
-          </div>
-        );
-
-      case "story_driven":
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
-            {/* Header */}
-            <div className="bg-white/90 backdrop-blur-sm shadow-sm sticky top-0 z-40">
-              <div className="container mx-auto px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="bg-gradient-to-r from-theme-500 to-theme-600 text-white px-2 py-1 rounded-full text-xs font-bold">
-                    📖 قصة نجاح
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-8 h-8 object-cover rounded-lg"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gradient-to-r from-theme-500 to-theme-600 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-book text-white text-xs"></i>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <h1 className="text-sm font-bold text-gray-900">{platformData?.platformName || "قصتنا"}</h1>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Hero Story */}
-            <div className="bg-theme-gradient-strong text-white py-6">
-              <div className="container mx-auto px-3">
-                <div className="text-center mb-4">
-                  <div className="inline-block bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold mb-2">
-                    📚 رحلة إلهام حقيقية
-                  </div>
-                  <h1 className="text-lg font-bold mb-2">{productName}</h1>
-                  <p className="text-sm opacity-90 leading-relaxed max-w-sm mx-auto">
-                    قصة نجاح حقيقية بدأت من حلم بسيط وتحولت إلى منتج يغير الحياة
-                  </p>
-                </div>
-                
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 mb-4">
-                  <ImageSlider 
-                    images={convertToPublicUrls((product as any)?.imageUrls || [])} 
-                    productName={productName}
-                    template={landingPage.template}
-                  />
-                </div>
-
-                <div className="text-center">
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 inline-block mb-3">
-                    <div className="text-xl font-bold text-yellow-300">{formatCurrency(parseFloat(productPrice || '0'))}</div>
-                    <div className="text-xs opacity-80">استثمار في مستقبل أفضل</div>
-                  </div>
-                  <br />
-                  <Button 
-                    className="bg-yellow-400 text-black hover:bg-yellow-300 px-6 py-3 text-sm font-bold rounded-lg shadow-lg"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowOrderForm(true);
-                    }}
-                  >
-                    📖 انضم لقصة النجاح
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Story Timeline - Compact */}
-            <div className="py-4 bg-white mx-3 mt-4 rounded-lg shadow-sm">
-              <h2 className="text-base font-bold text-center mb-3 text-gray-900">📚 رحلة التطوير</h2>
-              <div className="space-y-3 px-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">1</div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-bold mb-1 text-gray-900">🌟 البداية</h3>
-                    <p className="text-xs text-gray-600">بدأت الفكرة من مشكلة حقيقية واجهها مؤسسنا</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">2</div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-bold mb-1 text-gray-900">🔬 البحث والتطوير</h3>
-                    <p className="text-xs text-gray-600">سنوات من البحث والتجارب لإيجاد الحل الأمثل</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">3</div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-bold mb-1 text-gray-900">✨ التجارب الأولى</h3>
-                    <p className="text-xs text-gray-600">نتائج مذهلة مع أول مجموعة من المستخدمين</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">4</div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-bold mb-1 text-gray-900">🎯 النتائج المذهلة</h3>
-                    <p className="text-xs text-gray-600">أكثر من 10,000 عميل راضي حققوا نتائج رائعة</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Success Stories */}
-            <div className="bg-white mx-3 mt-4 rounded-lg shadow-sm p-3">
-              <h3 className="text-base font-bold text-gray-900 mb-3 text-center">🏆 قصص نجاح حقيقية</h3>
-              <div className="space-y-2">
-                <div className="bg-gradient-to-r from-theme-50 to-theme-100 p-2 rounded-lg border-l-3 border-theme-500">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="text-sm font-medium text-gray-900">أحمد محمد - بغداد</span>
-                    <div className="flex text-yellow-400">
-                      {[1,2,3,4,5].map((star) => (
-                        <i key={star} className="fas fa-star text-xs"></i>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-600">"غيّر حياتي للأفضل، نتائج مذهلة خلال أسبوعين فقط"</p>
-                </div>
-                
-                <div className="bg-gradient-to-r from-green-50 to-blue-50 p-2 rounded-lg border-l-3 border-green-500">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="text-sm font-medium text-gray-900">فاطمة علي - البصرة</span>
-                    <div className="flex text-yellow-400">
-                      {[1,2,3,4,5].map((star) => (
-                        <i key={star} className="fas fa-star text-xs"></i>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-600">"قصة نجاح حقيقية، أنصح الجميع بتجربة هذا المنتج"</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Founder Story */}
-            <div className="bg-gradient-to-r from-theme-500 to-theme-600 text-white mx-3 mt-4 rounded-lg p-4">
-              <h3 className="text-sm font-bold mb-2 text-center">👨‍💼 كلمة المؤسس</h3>
-              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 text-center">
-                <p className="text-xs leading-relaxed mb-2">
-                  "بدأت هذه الرحلة بحلم بسيط: مساعدة الناس على تحقيق أهدافهم. اليوم، أفتخر بأن منتجنا غيّر حياة الآلاف."
-                </p>
-                <p className="text-xs font-bold">- المؤسس والمدير التنفيذي</p>
-              </div>
-            </div>
-
-            {/* Call to Action */}
-            <div className="bg-white mx-3 mt-4 rounded-lg shadow-sm p-4 text-center">
-              <h3 className="text-sm font-bold text-gray-900 mb-2">📖 اكتب قصة نجاحك الآن</h3>
-              <p className="text-xs text-gray-600 mb-3">انضم إلى آلاف العملاء الذين غيروا حياتهم للأفضل</p>
-              <div className="bg-gradient-to-r from-theme-50 to-theme-100 rounded-lg p-3 mb-3">
-                <div className="text-lg font-bold text-amber-600">{formatCurrency(parseFloat(productPrice || '0'))}</div>
-                <div className="text-xs text-gray-600">استثمار في مستقبلك</div>
-              </div>
-              <Button 
-                className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 text-sm font-bold rounded-lg"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowOrderForm(true);
-                }}
-              >
-                📚 ابدأ قصة نجاحك الآن
-              </Button>
-            </div>
-
-            {/* Product Description */}
-            <div className="bg-white mx-3 my-4 rounded-lg shadow-sm p-3">
-              <h3 className="text-sm font-bold text-gray-900 mb-2 text-center">📖 تفاصيل المنتج</h3>
-              <p className="text-xs text-gray-600 leading-relaxed text-center">
-                {productDescription || "منتج مطور بعناية فائقة ليساعدك على تحقيق أهدافك وتغيير حياتك للأفضل."}
-              </p>
-            </div>
-
-            {/* Additional Images */}
-            <AdditionalImages images={convertToPublicUrls((product as any)?.additionalImages || [])} />
-
-            {/* Mobile Bottom Padding */}
-            <div className="h-20"></div>
-
-            {/* Fixed Bottom Order Button */}
-            <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-theme-500 to-theme-600 p-3 z-50">
-              <div className="max-w-sm mx-auto">
-                <Button 
-                  className="w-full bg-yellow-400 text-black hover:bg-yellow-300 py-3 text-sm font-bold rounded-lg shadow-lg"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowOrderForm(true);
-                  }}
-                >
-                  📖 انضم لقصة النجاح • {formatCurrency(parseFloat(productPrice || '0'))}
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
-
-      case "colorful_vibrant":
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
-            {/* Header */}
-            <div className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-40">
-              <div className="container mx-auto px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-2 py-1 rounded-full text-xs font-bold">
-                    ✨ عرض خاص
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {platformData?.logoUrl ? (
-                      <img 
-                        src={platformData.logoUrl.startsWith('/objects/') ? 
-                          platformData.logoUrl.replace('/objects/', '/public-objects/') : 
-                          platformData.logoUrl
-                        }
-                        alt="شعار المتجر"
-                        className="w-8 h-8 object-cover rounded-lg"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-600 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-store text-white text-xs"></i>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <h1 className="text-sm font-bold text-gray-900">{platformData?.platformName || "متجرنا"}</h1>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Hero Section */}
-            <div className="bg-gradient-to-br from-pink-500 via-purple-600 to-blue-600 text-white py-6">
-              <div className="container mx-auto px-3">
-                <div className="text-center mb-4">
-                  <div className="inline-block bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold mb-2">
-                    🌈 منتج ملوّن ونابض بالحياة
-                  </div>
-                  <h1 className="text-lg font-bold mb-2">{productName}</h1>
-                  <p className="text-sm opacity-90 leading-relaxed max-w-sm mx-auto">
-                    {productDescription || "منتج مميز بألوان زاهية وتصميم عصري"}
-                  </p>
-                </div>
-                
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 mb-4">
-                  <ImageSlider 
-                    images={convertToPublicUrls((product as any)?.imageUrls || [])} 
-                    productName={productName}
-                    template={landingPage.template}
-                  />
-                </div>
-
-                <div className="text-center">
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 inline-block mb-3">
-                    <div className="text-xl font-bold text-yellow-300">{formatCurrency(parseFloat(productPrice || '0'))}</div>
-                    <div className="text-xs opacity-80">السعر شامل التوصيل</div>
-                  </div>
-                  <br />
-                  <Button 
-                    className="bg-yellow-400 text-black hover:bg-yellow-300 px-6 py-3 text-sm font-bold rounded-lg shadow-lg animate-bounce"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowOrderForm(true);
-                    }}
-                  >
-                    🛒 اطلب الآن • توصيل مجاني
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Features Grid */}
-            <div className="py-4 bg-white mx-3 mt-4 rounded-lg shadow-sm">
-              <h2 className="text-base font-bold text-center mb-3 text-gray-900">✨ المميزات الملونة</h2>
-              <div className="grid grid-cols-2 gap-2 px-3">
-                <div className="bg-theme-gradient-strong text-white p-2 rounded-lg text-center">
-                  <i className="fas fa-palette text-sm mb-1"></i>
-                  <p className="text-xs font-medium">ألوان زاهية</p>
-                </div>
-                <div className="bg-gradient-to-br from-blue-400 to-purple-500 text-white p-2 rounded-lg text-center">
-                  <i className="fas fa-star text-sm mb-1"></i>
-                  <p className="text-xs font-medium">جودة عالية</p>
-                </div>
-                <div className="bg-gradient-to-br from-green-400 to-teal-500 text-white p-2 rounded-lg text-center">
-                  <i className="fas fa-shipping-fast text-sm mb-1"></i>
-                  <p className="text-xs font-medium">توصيل سريع</p>
-                </div>
-                <div className="bg-theme-gradient-strong text-white p-2 rounded-lg text-center">
-                  <i className="fas fa-shield-alt text-sm mb-1"></i>
-                  <p className="text-xs font-medium">ضمان شامل</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Testimonials */}
-            <div className="bg-white mx-3 mt-4 rounded-lg shadow-sm p-3">
-              <h3 className="text-base font-bold text-gray-900 mb-3 text-center">🌟 آراء العملاء الملونة</h3>
-              <div className="space-y-2">
-                <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-2 rounded-lg border-l-3 border-pink-500">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="text-sm font-medium text-gray-900">سارة أحمد</span>
-                    <div className="flex text-yellow-400">
-                      {[1,2,3,4,5].map((star) => (
-                        <i key={star} className="fas fa-star text-xs"></i>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-600">"ألوان رائعة وجودة ممتازة، يضفي حيوية على المكان"</p>
-                </div>
-                
-                <div className="bg-gradient-to-r from-blue-50 to-green-50 p-2 rounded-lg border-l-3 border-blue-500">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="text-sm font-medium text-gray-900">محمد علي</span>
-                    <div className="flex text-yellow-400">
-                      {[1,2,3,4,5].map((star) => (
-                        <i key={star} className="fas fa-star text-xs"></i>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-600">"تصميم عصري وألوان جذابة، أنصح به للجميع"</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Section */}
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white mx-3 mt-4 rounded-lg p-4 text-center">
-              <h3 className="text-sm font-bold mb-2">🎨 عرض الألوان المحدود</h3>
-              <p className="text-xs mb-3 opacity-90">احصل على المنتج بألوانه الزاهية الآن</p>
-              <div className="bg-white/20 backdrop-blur-sm rounded-lg p-2 mb-3 inline-block">
-                <div className="text-lg font-bold text-yellow-300">{formatCurrency(parseFloat(productPrice || '0'))}</div>
-                <div className="text-xs">وفر {formatCurrency(5000)} اليوم</div>
-              </div>
-              <br />
-              <Button 
-                className="bg-yellow-400 text-black hover:bg-yellow-300 px-4 py-2 text-sm font-bold rounded-lg w-full"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowOrderForm(true);
-                }}
-              >
-                ⚡ اطلب فوراً • ألوان محدودة
-              </Button>
-            </div>
-
-            {/* Product Description */}
-            <div className="bg-white mx-3 my-4 rounded-lg shadow-sm p-3">
-              <h3 className="text-sm font-bold text-gray-900 mb-2 text-center">🎨 وصف المنتج الملون</h3>
-              <p className="text-xs text-gray-600 leading-relaxed text-center">
-                {productDescription || "منتج مميز بألوان زاهية ونابضة بالحياة، مصمم ليضفي البهجة والحيوية على حياتك اليومية."}
-              </p>
-            </div>
-
-            {/* Additional Images */}
-            <AdditionalImages images={convertToPublicUrls((product as any)?.additionalImages || [])} />
-
-            {/* Mobile Bottom Padding */}
-            <div className="h-20"></div>
-
-            {/* Fixed Bottom Order Button */}
-            <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-pink-500 to-purple-600 p-3 z-50">
-              <div className="max-w-sm mx-auto">
-                <Button 
-                  className="w-full bg-yellow-400 text-black hover:bg-yellow-300 py-3 text-sm font-bold rounded-lg shadow-lg animate-pulse"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowOrderForm(true);
-                  }}
-                >
-                  🌈 اطلب المنتج الملون الآن • {formatCurrency(parseFloat(productPrice || '0'))}
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
 
       default:
         return (
@@ -6698,96 +6198,151 @@ export default function LandingPageView() {
                   <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <h4 className="font-medium text-gray-800 mb-3">خيارات المنتج</h4>
                     
+                    {/* رسائل الخطأ */}
+                    {variantErrors.length > 0 && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            <i className="fas fa-exclamation-triangle text-red-500 text-lg"></i>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-red-800 mb-1">
+                              تنبيه: تجاوز الحد المسموح
+                            </h4>
+                            {variantErrors.map((error, index) => (
+                              <p key={index} className="text-red-700 text-sm leading-relaxed">
+                                {error}
+                              </p>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setVariantErrors([])}
+                            className="flex-shrink-0 text-red-600 hover:text-red-500 transition-colors"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* الألوان */}
                     {productColors.length > 0 && (
                       <div className="mb-4">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">الألوان المتاحة</label>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productColors.length}
+                        </label>
                         <div className="flex flex-wrap gap-2">
-                          {productColors.map((color: any) => (
-                            <button 
-                              key={color.id} 
-                              type="button"
-                              className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                selectedColorIds.includes(color.id) 
-                                  ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                                  : 'border-gray-300 bg-white'
-                              }`}
-                              title={color.colorName}
-                              onClick={() => handleColorSelection(color.id)}
-                            >
-                              {color.colorImageUrl ? (
-                                <div className="flex items-center gap-2">
-                                  <img 
-                                    src={color.colorImageUrl.startsWith('/objects/') ? 
-                                      color.colorImageUrl.replace('/objects/', '/public-objects/') : 
-                                      color.colorImageUrl
-                                    }
-                                    alt={color.colorName}
-                                    className="w-6 h-6 object-cover rounded border"
-                                    style={{ borderColor: color.colorCode }}
-                                  />
-                                  <span className="text-sm font-medium text-gray-700">{color.colorName}</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <div 
-                                    className="w-6 h-6 rounded border-2 border-gray-300"
-                                    style={{ backgroundColor: color.colorCode }}
-                                  />
-                                  <span className="text-sm font-medium text-gray-700">{color.colorName}</span>
-                                </div>
-                              )}
-                            </button>
-                          ))}
+                          {productColors.map((color: any) => {
+                            const isSelected = selectedColorIds.includes(color.id);
+                            const isDisabled = !isSelected && selectedColorIds.length >= getSelectedOfferQuantity();
+                            
+                            return (
+                              <button 
+                                key={color.id} 
+                                type="button"
+                                disabled={isDisabled}
+                                className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                  isSelected
+                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                    : isDisabled
+                                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                      : 'border-gray-300 bg-white hover:border-blue-500 hover:shadow-sm'
+                                }`}
+                                title={color.colorName}
+                                onClick={() => handleColorSelection(color.id)}
+                              >
+                                {color.colorImageUrl ? (
+                                  <div className="flex items-center gap-2">
+                                    <img 
+                                      src={color.colorImageUrl.startsWith('/objects/') ? 
+                                        color.colorImageUrl.replace('/objects/', '/public-objects/') : 
+                                        color.colorImageUrl
+                                      }
+                                      alt={color.colorName}
+                                      className="w-6 h-6 object-cover rounded border"
+                                      style={{ borderColor: color.colorCode }}
+                                    />
+                                    <span className="text-sm font-medium">{color.colorName}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <div 
+                                      className="w-6 h-6 rounded border-2 border-gray-300"
+                                      style={{ backgroundColor: color.colorCode }}
+                                    />
+                                    <span className="text-sm font-medium">{color.colorName}</span>
+                                  </div>
+                                )}
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                    <span className="text-xs text-white">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
-                        {selectedColorIds.length > 0 && (
-                          <div className="mt-2 text-sm text-blue-600">
-                            ✓ تم اختيار {selectedColorIds.length} لون
-                          </div>
-                        )}
                       </div>
                     )}
 
                     {/* الأشكال */}
                     {productShapes.length > 0 && (
                       <div className="mb-4">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">الأشكال المتاحة</label>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                          الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productShapes.length}
+                        </label>
                         <div className="flex flex-wrap gap-2">
-                          {productShapes.map((shape: any) => (
-                            <button 
-                              key={shape.id} 
-                              type="button"
-                              className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer ${
-                                selectedShapeIds.includes(shape.id) 
-                                  ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                                  : 'border-gray-300 bg-white'
-                              }`}
-                              title={shape.shapeName}
-                              onClick={() => handleShapeSelection(shape.id)}
-                            >
-                              {shape.shapeImageUrl ? (
-                                <div className="flex items-center gap-2">
-                                  <img 
-                                    src={shape.shapeImageUrl.startsWith('/objects/') ? 
-                                      shape.shapeImageUrl.replace('/objects/', '/public-objects/') : 
-                                      shape.shapeImageUrl
-                                    }
-                                    alt={shape.shapeName}
-                                    className="w-6 h-6 object-cover rounded border"
-                                  />
-                                  <span className="text-sm font-medium text-gray-700">{shape.shapeName}</span>
-                                </div>
-                              ) : (
-                                <span className="text-sm font-medium text-gray-700">{shape.shapeName}</span>
-                              )}
-                            </button>
-                          ))}
+                          {productShapes.map((shape: any) => {
+                            const isSelected = selectedShapeIds.includes(shape.id);
+                            const isDisabled = !isSelected && selectedShapeIds.length >= getSelectedOfferQuantity();
+                            
+                            console.log("🔷 Simple Form Shape Render:", {
+                              shapeId: shape.id,
+                              shapeName: shape.shapeName,
+                              isSelected,
+                              selectedShapeIds,
+                              isDisabled
+                            });
+                            
+                            return (
+                              <button 
+                                key={shape.id} 
+                                type="button"
+                                disabled={isDisabled}
+                                className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                  isSelected
+                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                    : isDisabled
+                                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                      : 'border-gray-300 bg-white hover:border-blue-500 hover:shadow-sm'
+                                }`}
+                                title={shape.shapeName}
+                                onClick={() => handleShapeSelection(shape.id)}
+                              >
+                                {shape.shapeImageUrl ? (
+                                  <div className="flex items-center gap-2">
+                                    <img 
+                                      src={shape.shapeImageUrl.startsWith('/objects/') ? 
+                                        shape.shapeImageUrl.replace('/objects/', '/public-objects/') : 
+                                        shape.shapeImageUrl
+                                      }
+                                      alt={shape.shapeName}
+                                      className="w-6 h-6 object-cover rounded border"
+                                    />
+                                    <span className="text-sm font-medium">{shape.shapeName}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm font-medium">{shape.shapeName}</span>
+                                )}
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center border-2 border-white shadow-lg z-10">
+                                    <span className="text-xs text-white font-bold">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
-                        {selectedShapeIds.length > 0 && (
-                          <div className="mt-2 text-sm text-blue-600">
-                            ✓ تم اختيار {selectedShapeIds.length} شكل
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -6798,50 +6353,58 @@ export default function LandingPageView() {
                           الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()})
                         </label>
                         <div className="flex flex-wrap gap-2">
-                          {productSizes.map((size: any) => (
-                            <button 
-                              key={size.id} 
-                              type="button"
-                              className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md hover:border-blue-500 hover:shadow-sm transition-all cursor-pointer relative ${
-                                selectedSizeIds.includes(size.id) 
-                                  ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                                  : 'border-gray-300 bg-white'
-                              }`}
-                              title={size.sizeName}
-                              onClick={() => handleSizeSelection(size.id)}
-                            >
-                              {size.sizeImageUrl ? (
-                                <div className="flex items-center gap-2">
-                                  <img 
-                                    src={size.sizeImageUrl.startsWith('/objects/') ? 
-                                      size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
-                                      size.sizeImageUrl
-                                    }
-                                    alt={size.sizeName}
-                                    className="w-6 h-6 object-cover rounded border"
-                                  />
+                          {productSizes.map((size: any) => {
+                            const isSelected = selectedSizeIds.includes(size.id);
+                            const isDisabled = !isSelected && selectedSizeIds.length >= getSelectedOfferQuantity();
+                            
+                            return (
+                              <button 
+                                key={size.id} 
+                                type="button"
+                                disabled={isDisabled}
+                                className={`inline-flex items-center gap-2 px-3 py-2 border-2 rounded-md transition-all cursor-pointer relative ${
+                                  isSelected
+                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                    : isDisabled
+                                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                                      : 'border-gray-300 bg-white hover:border-blue-500 hover:shadow-sm'
+                                }`}
+                                title={size.sizeName}
+                                onClick={() => handleSizeSelection(size.id)}
+                              >
+                                {size.sizeImageUrl ? (
+                                  <div className="flex items-center gap-2">
+                                    <img 
+                                      src={size.sizeImageUrl.startsWith('/objects/') ? 
+                                        size.sizeImageUrl.replace('/objects/', '/public-objects/') : 
+                                        size.sizeImageUrl
+                                      }
+                                      alt={size.sizeName}
+                                      className="w-6 h-6 object-cover rounded border"
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-medium">{size.sizeName}</span>
+                                      {size.sizeValue && (
+                                        <span className="text-xs text-gray-500">{size.sizeValue}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
                                   <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
+                                    <span className="text-sm font-medium">{size.sizeName}</span>
                                     {size.sizeValue && (
                                       <span className="text-xs text-gray-500">{size.sizeValue}</span>
                                     )}
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-medium text-gray-700">{size.sizeName}</span>
-                                  {size.sizeValue && (
-                                    <span className="text-xs text-gray-500">{size.sizeValue}</span>
-                                  )}
-                                </div>
-                              )}
-                              {selectedSizeIds.includes(size.id) && (
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                                  <span className="text-xs text-white">✓</span>
-                                </div>
-                              )}
-                            </button>
-                          ))}
+                                )}
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                    <span className="text-xs text-white">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

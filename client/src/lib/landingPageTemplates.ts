@@ -66,42 +66,6 @@ export const landingPageTemplates: LandingPageTemplate[] = [
     layout: "مركزي مع مؤقت"
   },
   {
-    id: "video_intro",
-    name: "التفاعلي",
-    description: "يستخدم الفيديو لجذب الانتباه مع نموذج طلب تفاعلي",
-    preview: "fas fa-play-circle",
-    features: ["فيديو جذاب", "عرض تفاعلي", "نموذج مرن", "تصميم بصري"],
-    colorScheme: "أسود وأزرق",
-    layout: "فيديو كامل العرض"
-  },
-  {
-    id: "comparison_table",
-    name: "المقارن",
-    description: "يقارن بين خيارات مختلفة للمنتج أو الباقات",
-    preview: "fas fa-table",
-    features: ["جدول مقارنة", "خطط متعددة", "أسعار متدرجة", "اختيار الباقة"],
-    colorScheme: "أزرق وأبيض",
-    layout: "جدول تفاعلي"
-  },
-  {
-    id: "benefits_grid",
-    name: "الفوائد",
-    description: "يعرض الفوائد في تخطيط شبكي منظم",
-    preview: "fas fa-th",
-    features: ["فوائد متعددة", "رموز واضحة", "تخطيط منظم", "سهولة المسح"],
-    colorScheme: "بنفسجي وأبيض",
-    layout: "شبكة ٣×٣"
-  },
-  {
-    id: "story_driven",
-    name: "القصة",
-    description: "يحكي قصة المنتج أو المؤسس لخلق اتصال عاطفي",
-    preview: "fas fa-book-open",
-    features: ["سرد القصة", "رحلة العميل", "اتصال عاطفي", "خلفية المؤسس"],
-    colorScheme: "بني وكريمي",
-    layout: "تدرج زمني"
-  },
-  {
     id: "colorful_vibrant",
     name: "الملوّن",
     description: "تصميم مفعم بالألوان والحيوية لجذب الانتباه",
@@ -109,6 +73,15 @@ export const landingPageTemplates: LandingPageTemplate[] = [
     features: ["ألوان زاهية", "تدرجات جذابة", "تأثيرات بصرية", "طاقة عالية"],
     colorScheme: "متعدد الألوان",
     layout: "ديناميكي متدرج"
+  },
+  {
+    id: "tiktok_style",
+    name: "تيك توك",
+    description: "تصميم مشابه لصفحات TikTok مع شبكة صور وعروض دائرية",
+    preview: "fab fa-tiktok",
+    features: ["شبكة صور 2x2", "عروض دائرية", "تصميم عمودي", "نموذج مدمج", "ألوان داكنة"],
+    colorScheme: "أسود وأحمر",
+    layout: "عمودي مع شبكة"
   }
 ];
 
