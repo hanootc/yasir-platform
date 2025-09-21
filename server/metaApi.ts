@@ -743,6 +743,7 @@ export class MetaMarketingAPI {
             ...(data.adSetBudget && {
               [data.adSetBudgetMode === 'DAILY_BUDGET' ? 'daily_budget' : 'lifetime_budget']: Math.floor(parseInt(data.adSetBudget) * 100 / messageDestinations.length) // تقسيم الميزانية
             }),
+            // إضافة bid_amount فقط إذا تم توفيره من المستخدم
             ...(data.bidAmount && { bid_amount: parseInt(data.bidAmount) }),
             // إزالة startTime لجعل Ad Set نشط فوراً
             // ...(data.startTime && { start_time: data.startTime }),
@@ -782,7 +783,16 @@ export class MetaMarketingAPI {
           ...(data.adSetBudget && {
             [data.adSetBudgetMode === 'DAILY_BUDGET' ? 'daily_budget' : 'lifetime_budget']: parseInt(data.adSetBudget) * 100
           }),
-          ...(data.bidAmount && { bid_amount: parseInt(data.bidAmount) }),
+          // إضافة bid_amount فقط إذا تم توفيره من المستخدم
+          ...((() => {
+            console.log('💰 Bid Amount Debug:', {
+              bidAmount: data.bidAmount,
+              bidAmountType: typeof data.bidAmount,
+              bidStrategy: data.bidStrategy,
+              parsed: data.bidAmount ? parseInt(data.bidAmount) : 'N/A'
+            });
+            return data.bidAmount && { bid_amount: parseInt(data.bidAmount) };
+          })()),
           // إزالة startTime لجعل Ad Set نشط فوراً
           // ...(data.startTime && { start_time: data.startTime }),
           ...(data.endTime && { end_time: data.endTime }),
@@ -1113,7 +1123,7 @@ export class MetaMarketingAPI {
       // استخدام قيم الأجهزة من الواجهة أو الافتراضي (الأجهزة المحمولة فقط)
       device_platforms: placements?.devicePlatforms?.length > 0 ? placements.devicePlatforms : ['mobile'],
       targeting_automation: {
-        advantage_audience: 0 // إيقاف Advantage Audience
+        advantage_audience: targeting.advantageAudience ? 1 : 0 // تفعيل/تعطيل Advantage+ Audience حسب اختيار المستخدم
       }
     };
 

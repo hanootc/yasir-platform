@@ -7451,17 +7451,40 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log('✅ تم التحقق من البيانات بنجاح');
 
       // إنشاء Meta API instance باستخدام الحساب المختار
+      console.log('🔄 بدء إنشاء Meta API instance...');
       const { MetaMarketingAPI } = await import('./metaApi');
       const selectedAdAccountId = campaignData.adAccountId;
       console.log('🏦 استخدام الحساب الإعلاني المختار:', selectedAdAccountId);
+      console.log('🔑 Meta Access Token length:', platform.metaAccessToken?.length || 0);
+      
       const metaApi = new MetaMarketingAPI(platform.metaAccessToken, selectedAdAccountId);
+      console.log('✅ تم إنشاء Meta API instance بنجاح');
 
-      // إنشاء الحملة الكاملة باستخدام Meta API
-      const result = await metaApi.createCompleteCampaign({
+      // إعداد بيانات الحملة
+      const finalCampaignData = {
         ...campaignData,
         campaignBudgetMode: campaignData.campaignBudgetMode || 'DAILY_BUDGET',
         adSetBudget: campaignData.adSetBudget || '100'
+      };
+      
+      console.log('📝 بيانات الحملة النهائية:', JSON.stringify(finalCampaignData, null, 2));
+      
+      // فحص خاص لـ bidAmount
+      console.log('💰 Bid Amount Check:', {
+        bidAmount: finalCampaignData.bidAmount,
+        bidAmountType: typeof finalCampaignData.bidAmount,
+        bidStrategy: finalCampaignData.bidStrategy,
+        allBidFields: {
+          bidAmount: finalCampaignData.bidAmount,
+          bidStrategy: finalCampaignData.bidStrategy,
+          adSetBudgetMode: finalCampaignData.adSetBudgetMode,
+          adSetBudget: finalCampaignData.adSetBudget
+        }
       });
+      
+      // إنشاء الحملة الكاملة باستخدام Meta API
+      console.log('🚀 بدء إنشاء الحملة الكاملة...');
+      const result = await metaApi.createCompleteCampaign(finalCampaignData);
 
       console.log('🎉 تم إنشاء حملة Meta الكاملة بنجاح!');
       
@@ -7473,9 +7496,17 @@ ${platform?.platformName || 'متجرنا'}`;
 
     } catch (error) {
       console.error('❌ خطأ في إنشاء حملة Meta الكاملة:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('❌ Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        constructor: error instanceof Error ? error.constructor.name : 'Unknown'
+      });
+      
       res.status(500).json({
         error: 'فشل في إنشاء الحملة',
-        details: error instanceof Error ? error.message : String(error)
+        details: error instanceof Error ? error.message : String(error),
+        type: error instanceof Error ? error.name : 'Unknown Error'
       });
     }
   });
@@ -7484,6 +7515,14 @@ ${platform?.platformName || 'متجرنا'}`;
   app.post('/api/meta/campaigns/complete-multiple', ensurePlatformSession, async (req: any, res) => {
     console.log('🎯 META MULTIPLE ADS CAMPAIGN - إنشاء حملة Meta مع عدة إعلانات');
     console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
+    
+    // فحص خاص لـ bidAmount في بداية الطلب
+    console.log('💰 INITIAL Bid Amount Check:', {
+      bidAmount: req.body.bidAmount,
+      bidAmountType: typeof req.body.bidAmount,
+      bidStrategy: req.body.bidStrategy,
+      hasVideos: req.body.videos ? req.body.videos.length : 0
+    });
     
     try {
       const platformId = (req.session as any).platform?.platformId;
@@ -7529,20 +7568,35 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log('✅ تم إنشاء الحملة:', campaignResult.id);
 
       // تحويل الاستهداف إلى الشكل الصحيح لـ Meta API
+      
+      // فحص Advantage+ Audience
+      console.log('🚀 Advantage+ Audience Debug:', {
+        advantageAudience: campaignData.targeting?.advantageAudience,
+        advantageAudienceType: typeof campaignData.targeting?.advantageAudience,
+        targeting: campaignData.targeting,
+        willSet: campaignData.targeting?.advantageAudience ? 1 : 0
+      });
+      
+      // إعداد targeting بشكل صحيح لـ Meta API
+      const { advantageAudience, advantageCreative, geoLocations, ageMin, ageMax, ...restTargeting } = campaignData.targeting || {};
+      
+      // فحص Advantage+ Creative
+      console.log('🎨 Advantage+ Creative Debug:', {
+        advantageCreative: advantageCreative,
+        advantageCreativeType: typeof advantageCreative
+      });
+      
       const processedTargeting = {
-        ...campaignData.targeting,
-        geo_locations: campaignData.targeting.geoLocations || { countries: ['IQ'] },
-        age_min: campaignData.targeting.ageMin || 18,
-        age_max: campaignData.targeting.ageMax || 65,
+        ...restTargeting,
+        geo_locations: geoLocations || { countries: ['IQ'] },
+        age_min: ageMin || 18,
+        age_max: ageMax || 65,
         targeting_automation: {
-          advantage_audience: 0  // تعطيل Advantage Audience للحصول على تحكم كامل في الاستهداف
+          advantage_audience: advantageAudience ? 1 : 0  // تفعيل/تعطيل Advantage+ Audience حسب اختيار المستخدم
         }
       };
       
-      // حذف الحقول القديمة
-      delete processedTargeting.geoLocations;
-      delete processedTargeting.ageMin;
-      delete processedTargeting.ageMax;
+      // تم إزالة الحقول غير المطلوبة باستخدام destructuring
 
       // إعداد adSet data حسب نوع الحملة
       const adSetData: any = {
@@ -7552,10 +7606,25 @@ ${platform?.platformName || 'متجرنا'}`;
         billing_event: campaignData.objective === 'OUTCOME_SALES' ? 'IMPRESSIONS' : 'LINK_CLICKS',
         bid_strategy: campaignData.bidStrategy || 'LOWEST_COST_WITHOUT_CAP',
         daily_budget: campaignData.adSetBudget ? parseInt(campaignData.adSetBudget) * 100 : 2500, // تحويل إلى cents
-        start_time: campaignData.startTime,
+        // إزالة start_time لجعل الحملة تبدأ فوراً
+        // start_time: campaignData.startTime,
         end_time: campaignData.endTime || undefined,
-        optimization_goal: campaignData.objective === 'OUTCOME_SALES' ? 'OFFSITE_CONVERSIONS' : 'LINK_CLICKS'
+        optimization_goal: campaignData.objective === 'OUTCOME_SALES' ? 'OFFSITE_CONVERSIONS' : 'LINK_CLICKS',
+        // إضافة bid_amount إذا تم توفيره
+        ...(campaignData.bidAmount && { bid_amount: parseInt(campaignData.bidAmount) * 100 }) // تحويل إلى cents
       };
+      
+      // فحص خاص لـ bid_amount في complete-multiple
+      console.log('💰 MULTIPLE ADS Bid Amount Check:', {
+        bidAmount: campaignData.bidAmount,
+        bidAmountType: typeof campaignData.bidAmount,
+        bidStrategy: campaignData.bidStrategy,
+        bidAmountInCents: campaignData.bidAmount ? parseInt(campaignData.bidAmount) * 100 : 'N/A',
+        finalAdSetData: {
+          bid_strategy: adSetData.bid_strategy,
+          bid_amount: adSetData.bid_amount
+        }
+      });
 
       // إضافة promoted_object للحملات التحويلية
       if (campaignData.objective === 'OUTCOME_SALES' && campaignData.pixelId) {
@@ -7596,6 +7665,18 @@ ${platform?.platformName || 'متجرنا'}`;
               }
             }
           };
+          
+          // إضافة Advantage+ Creative إذا كان مفعلاً
+          if (advantageCreative) {
+            creativeData.advantage_creative_optimization = {
+              standard_enhancements: {
+                brightness_and_contrast: true,
+                image_templates: true,
+                aspect_ratio_optimization: true
+              }
+            };
+            console.log('🎨 تم تفعيل Advantage+ Creative للإعلان:', i + 1);
+          }
 
           // إضافة thumbnail إذا كان متوفراً
           if (video.thumbnailUrl) {

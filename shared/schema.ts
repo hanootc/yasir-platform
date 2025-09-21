@@ -1454,6 +1454,8 @@ export const completeMetaCampaignSchema = z.object({
     }).optional(),
     interests: z.array(z.string()).optional(),
     behaviors: z.array(z.string()).optional(),
+    advantageAudience: z.boolean().optional().default(false), // Advantage+ Audience
+    advantageCreative: z.boolean().optional().default(false), // Advantage+ Creative
   }).optional(),
   
   // Placements configuration (مواضع الإعلان)

@@ -276,7 +276,9 @@ export default function PlatformAdsMetaManagement() {
           cities: []
         },
         interests: [],
-        behaviors: []
+        behaviors: [],
+        advantageAudience: false, // Advantage+ Audience معطل افتراضياً
+        advantageCreative: false // Advantage+ Creative معطل افتراضياً
       },
       
       // Placements - مواضع الإعلان
@@ -1805,7 +1807,9 @@ export default function PlatformAdsMetaManagement() {
                                       cities: []
                                     },
                                     interests: [],
-                                    behaviors: []
+                                    behaviors: [],
+                                    advantageAudience: false, // Advantage+ Audience معطل افتراضياً
+                                    advantageCreative: false // Advantage+ Creative معطل افتراضياً
                                   },
                                   
                                   // Placements - المواضع الافتراضية
@@ -2235,26 +2239,135 @@ export default function PlatformAdsMetaManagement() {
                                             {/* Age Range Facebook Style */}
                                             <div>
                                               <FormLabel className="text-theme-primary mb-2 block">الفئة العمرية</FormLabel>
-                                              <Select onValueChange={(value) => {
-                                                const [min, max] = value.split('-');
-                                                completeCampaignForm.setValue('targeting.ageMin', parseInt(min));
-                                                completeCampaignForm.setValue('targeting.ageMax', parseInt(max));
-                                              }} defaultValue="18-65">
-                                                <SelectTrigger className="theme-input">
-                                                  <SelectValue placeholder="اختر الفئة العمرية" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-black border-gray-700">
-                                                  <SelectItem value="13-17">13-17 سنة</SelectItem>
-                                                  <SelectItem value="18-24">18-24 سنة</SelectItem>
-                                                  <SelectItem value="25-34">25-34 سنة</SelectItem>
-                                                  <SelectItem value="35-44">35-44 سنة</SelectItem>
-                                                  <SelectItem value="45-54">45-54 سنة</SelectItem>
-                                                  <SelectItem value="55-64">55-64 سنة</SelectItem>
-                                                  <SelectItem value="18-65">18-65 سنة (جميع الأعمار)</SelectItem>
-                                                  <SelectItem value="25-65">25-65 سنة</SelectItem>
-                                                  <SelectItem value="35-65">35-65 سنة</SelectItem>
-                                                </SelectContent>
-                                              </Select>
+                                              <div className="grid grid-cols-2 gap-4">
+                                                {/* من عمر */}
+                                                <FormField
+                                                  control={completeCampaignForm.control}
+                                                  name="targeting.ageMin"
+                                                  render={({ field }) => (
+                                                    <FormItem>
+                                                      <FormLabel className="text-sm text-gray-400">من عمر</FormLabel>
+                                                      <FormControl>
+                                                        <Select 
+                                                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                                                          defaultValue="18"
+                                                          value={field.value?.toString()}
+                                                        >
+                                                          <SelectTrigger className="theme-input">
+                                                            <SelectValue placeholder="18" />
+                                                          </SelectTrigger>
+                                                          <SelectContent className="bg-black border-gray-700 max-h-60 overflow-y-auto">
+                                                            {Array.from({length: 53}, (_, i) => i + 13).map(age => (
+                                                              <SelectItem key={age} value={age.toString()}>{age}</SelectItem>
+                                                            ))}
+                                                          </SelectContent>
+                                                        </Select>
+                                                      </FormControl>
+                                                    </FormItem>
+                                                  )}
+                                                />
+                                                
+                                                {/* إلى عمر */}
+                                                <FormField
+                                                  control={completeCampaignForm.control}
+                                                  name="targeting.ageMax"
+                                                  render={({ field }) => (
+                                                    <FormItem>
+                                                      <FormLabel className="text-sm text-gray-400">إلى عمر</FormLabel>
+                                                      <FormControl>
+                                                        <Select 
+                                                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                                                          defaultValue="65"
+                                                          value={field.value?.toString()}
+                                                        >
+                                                          <SelectTrigger className="theme-input">
+                                                            <SelectValue placeholder="65+" />
+                                                          </SelectTrigger>
+                                                          <SelectContent className="bg-black border-gray-700 max-h-60 overflow-y-auto">
+                                                            {Array.from({length: 53}, (_, i) => i + 13).map(age => (
+                                                              <SelectItem key={age} value={age.toString()}>
+                                                                {age === 65 ? '65+' : age.toString()}
+                                                              </SelectItem>
+                                                            ))}
+                                                          </SelectContent>
+                                                        </Select>
+                                                      </FormControl>
+                                                    </FormItem>
+                                                  )}
+                                                />
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Advantage+ Audience */}
+                                            <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-600/50 rounded-lg p-4">
+                                              <FormField
+                                                control={completeCampaignForm.control}
+                                                name="targeting.advantageAudience"
+                                                render={({ field }) => (
+                                                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                    <FormControl>
+                                                      <Checkbox
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                        className="mt-1"
+                                                      />
+                                                    </FormControl>
+                                                    <div className="space-y-2 leading-none">
+                                                      <FormLabel className="text-sm font-medium text-blue-300 cursor-pointer">
+                                                        🚀 تفعيل Advantage+ للجمهور (موصى به)
+                                                      </FormLabel>
+                                                      <div className="bg-green-900/20 border border-green-700/50 rounded p-3 mt-2">
+                                                        <p className="text-xs text-green-300 mb-2">
+                                                          📊 <strong>يمكن أن يؤدي التبديل إلى إعداد الجمهور الموصى به إلى تقليل التكلفة لكل نتيجة بنسبة 7.2%</strong>
+                                                        </p>
+                                                        <p className="text-xs text-green-200">
+                                                          يساعدك الإعداد الموصى به على تحقيق الأداء الأمثل لأن معظم الإعدادات تكون عبارة عن اقتراحات. ولا يزال بإمكانك قصر الإعلانات على جماهير معينة من خلال تعيين عناصر التحكم.
+                                                        </p>
+                                                        <div className="flex items-center mt-2 text-xs text-blue-300">
+                                                          <Info className="w-3 h-3 ml-1" />
+                                                          سيؤدي تبديل الإعدادات إلى تشغيل Advantage+ للجمهور
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </FormItem>
+                                                )}
+                                              />
+                                            </div>
+                                            
+                                            {/* Advantage+ Creative */}
+                                            <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-600/50 rounded-lg p-4">
+                                              <FormField
+                                                control={completeCampaignForm.control}
+                                                name="targeting.advantageCreative"
+                                                render={({ field }) => (
+                                                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                    <FormControl>
+                                                      <Checkbox
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                        className="mt-1"
+                                                      />
+                                                    </FormControl>
+                                                    <div className="space-y-2 leading-none">
+                                                      <FormLabel className="text-sm font-medium text-purple-300 cursor-pointer">
+                                                        🎨 تفعيل Advantage+ للتصميم (موصى به)
+                                                      </FormLabel>
+                                                      <div className="bg-orange-900/20 border border-orange-700/50 rounded p-3 mt-2">
+                                                        <p className="text-xs text-orange-300 mb-2">
+                                                          📈 <strong>يمكنك تقليل التكلفة لكل نتيجة بنسبة 3% من خلال بعض تحسينات تصميم Advantage+ لأجل إعلان واحد</strong>
+                                                        </p>
+                                                        <p className="text-xs text-orange-200">
+                                                          يستخدم الذكاء الاصطناعي لتحسين صورك وفيديوهاتك تلقائياً بإضافة قوالب وتأثيرات وتعديلات في السطوع والتباين.
+                                                        </p>
+                                                        <div className="flex items-center mt-2 text-xs text-purple-300">
+                                                          <Info className="w-3 h-3 ml-1" />
+                                                          يتم تطبيق التحسينات على مستوى الإعلان لكل شخص حسب استجابته
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </FormItem>
+                                                )}
+                                              />
                                             </div>
                                             
                                             {/* Geographic Targeting */}
