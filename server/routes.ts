@@ -4507,6 +4507,7 @@ ${platform?.platformName || 'متجرنا'}`;
         description: product.description,
         price: product.price,
         categoryId: product.categoryId, // إضافة معرف الفئة
+        category: (product as any).category, // إضافة اسم الفئة
         imageUrls: product.imageUrls,
         additionalImages: product.additionalImages, // إضافة الصور الإضافية
         offers: product.offers,
@@ -4517,6 +4518,8 @@ ${platform?.platformName || 'متجرنا'}`;
         bulkMinQuantity: product.bulkMinQuantity,
         isActive: product.isActive
       };
+      
+      // Product data prepared for public API
       
       res.json(publicProduct);
     } catch (error) {
@@ -5081,6 +5084,20 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // Public category endpoint (for landing pages)
+  app.get("/api/public/categories/:id", async (req, res) => {
+    try {
+      const category = await storage.getCategory(req.params.id);
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      console.error("Error fetching category:", error);
+      res.status(500).json({ message: "Failed to fetch category" });
+    }
+  });
+
   app.get("/api/categories/:id", isAuthenticated, async (req, res) => {
     try {
       const category = await storage.getCategory(req.params.id);
@@ -5320,7 +5337,14 @@ ${platform?.platformName || 'متجرنا'}`;
         return res.status(404).json({ message: "Order not found" });
       }
       
-      console.log("Order found:", order);
+      console.log("Order found:", {
+        id: order.id,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        createdAt: order.createdAt
+      });
       res.json(order);
     } catch (error) {
       console.error("Error fetching landing page order:", error);
@@ -5429,6 +5453,28 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // Update landing page order status
+  app.patch("/api/landing-page-orders/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      console.log(`=== Updating Landing Page Order Status ===`);
+      console.log(`Order ID: ${id}, New Status: ${status}`);
+      
+      const updatedOrder = await storage.updateLandingPageOrderStatus(id, status);
+      
+      if (!updatedOrder) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("Error updating landing page order status:", error);
+      res.status(500).json({ message: "Failed to update order status" });
+    }
+  });
+
   app.post("/api/landing-page-orders", async (req, res) => {
     try {
       console.log("=== Landing Page Order Request ===");
@@ -5468,68 +5514,7 @@ ${platform?.platformName || 'متجرنا'}`;
       
       console.log("✅ Found landing page:", landingPage.id, "for customUrl:", orderData.landingPageId);
 
-      // Calculate total amount from offer
-      let subtotal = 10000; // default price
-      let total = subtotal;
-      let discountAmount = 0;
-      
-      // Extract price from offer string
-      const offer = orderData.offer || '';
-      console.log("Processing offer:", offer);
-      console.log("🔍 Initial values: subtotal =", subtotal, "total =", total);
-      
-      if (offer.includes('10,000')) {
-        subtotal = 10000;
-        total = 10000;
-      } else if (offer.includes('20,000')) {
-        subtotal = 20000; 
-        total = 20000;
-      } else if (offer.includes('25,000')) {
-        subtotal = 25000;
-        total = 25000;
-      } else if (offer.includes('30,000')) {
-        subtotal = 30000;
-        total = 30000;
-      } else if (offer.includes('35,000')) {
-        subtotal = 35000;
-        total = 35000;
-      } else if (offer.includes('40,000')) {
-        subtotal = 40000;
-        total = 40000;
-      } else if (offer.includes('50,000')) {
-        subtotal = 50000;
-        total = 50000;
-      } else if (offer.includes('60,000')) {
-        subtotal = 60000;
-        total = 60000;
-      } else if (offer.includes('75,000')) {
-        subtotal = 75000;
-        total = 75000;
-        console.log("✅ Found 75,000 in offer! Setting values:", { subtotal, total });
-      } else if (offer.includes('80,000')) {
-        subtotal = 80000;
-        total = 80000;
-      } else if (offer.includes('100,000')) {
-        subtotal = 100000;
-        total = 100000;
-      } else {
-        // Try to extract any number from offer string
-        const priceMatch = offer.match(/(\d{1,3}(?:,\d{3})*)/);
-        console.log("🔍 Price match result:", priceMatch);
-        if (priceMatch) {
-          const extractedPrice = parseInt(priceMatch[1].replace(/,/g, ''));
-          console.log("🔍 Extracted price:", extractedPrice);
-          if (extractedPrice > 0) {
-            subtotal = extractedPrice;
-            total = extractedPrice;
-            console.log("✅ Using extracted price:", { subtotal, total });
-          }
-        }
-      }
-      
-      console.log("Calculated totals:", { subtotal, total, discountAmount });
-
-      // Get delivery settings to calculate delivery fee
+      // Get delivery settings first
       const deliverySettings = await storage.getDeliverySettings(landingPage.platformId);
       let deliveryFee = 0;
       
@@ -5539,7 +5524,7 @@ ${platform?.platformName || 'متجرنا'}`;
           parseFloat(deliverySettings.deliveryPriceBaghdad || 0) : 
           parseFloat(deliverySettings.deliveryPriceProvinces || 0);
       }
-
+      
       console.log("Calculated delivery fee:", { 
         customerGovernorate: orderData.customerGovernorate, 
         deliveryFee,
@@ -5548,6 +5533,68 @@ ${platform?.platformName || 'متجرنا'}`;
           provincesFee: deliverySettings.deliveryPriceProvinces 
         } : null
       });
+      
+      // Calculate total amount - استخدام السعر المرسل من العميل أولاً
+      let subtotal = 10000; // default price
+      let total = subtotal;
+      let discountAmount = 0;
+      
+      console.log("💰 Price calculation - orderData.price:", orderData.price);
+      console.log("💰 Price calculation - orderData.offer:", orderData.offer);
+      
+      // أولاً: استخدام السعر المرسل مباشرة من العميل (الأولوية)
+      if (orderData.price && typeof orderData.price === 'number' && orderData.price > 0) {
+        subtotal = orderData.price;
+        total = orderData.price;
+        console.log("✅ Using price from client:", { subtotal, total });
+        
+        // تأكد من استخدام القيم المرسلة من العميل إذا كانت متوفرة
+        if (orderData.totalAmount && typeof orderData.totalAmount === 'number' && orderData.totalAmount > 0) {
+          console.log("✅ Using totalAmount from client:", orderData.totalAmount);
+          subtotal = orderData.totalAmount;
+          total = orderData.totalAmount;
+        }
+        if (orderData.subtotal && typeof orderData.subtotal === 'number' && orderData.subtotal > 0) {
+          console.log("✅ Using subtotal from client:", orderData.subtotal);
+          subtotal = orderData.subtotal;
+        }
+      } else {
+        // ثانياً: استخراج السعر من نص العرض (fallback)
+        const offer = orderData.offer || '';
+        console.log("🔍 Fallback: extracting price from offer text:", offer);
+        
+        // تحسين استخراج السعر - البحث عن أي رقم في النص
+        const pricePatterns = [
+          /(\d{1,3}(?:,\d{3})+)/, // أرقام بفواصل مثل 19,000
+          /(\d{4,})/, // أرقام بدون فواصل مثل 19000
+          /(\d{1,3}\.\d{3})/ // أرقام بنقاط مثل 19.000
+        ];
+        
+        let extractedPrice = 0;
+        for (const pattern of pricePatterns) {
+          const match = offer.match(pattern);
+          if (match) {
+            extractedPrice = parseInt(match[1].replace(/[,\.]/g, ''));
+            console.log("🔍 Pattern matched:", pattern, "-> Price:", extractedPrice);
+            break;
+          }
+        }
+        
+        if (extractedPrice > 0) {
+          subtotal = extractedPrice;
+          total = extractedPrice;
+          console.log("✅ Using extracted price from offer:", { subtotal, total });
+        } else {
+          console.log("⚠️ No price found, using default:", { subtotal, total });
+        }
+      }
+      
+      console.log("Calculated totals:", { subtotal, total, discountAmount });
+      
+      // إضافة رسوم التوصيل إلى المجموع
+      total += deliveryFee;
+      
+      console.log("💰 Final calculated totals:", { subtotal, deliveryFee, total });
 
       // Add platform ID and calculated totals to order data
       const orderDataWithCalculations = {
@@ -7476,25 +7523,49 @@ ${platform?.platformName || 'متجرنا'}`;
       
       const campaignResult = await metaApi.createCampaign({
         name: campaignData.campaignName,
-        objective: campaignData.objective,
-        status: 'ACTIVE',
-        budget_mode: campaignData.campaignBudgetMode || 'UNLIMITED'
+        objective: campaignData.objective
       });
 
       console.log('✅ تم إنشاء الحملة:', campaignResult.id);
 
-      const adSetResult = await metaApi.createAdSet({
+      // تحويل الاستهداف إلى الشكل الصحيح لـ Meta API
+      const processedTargeting = {
+        ...campaignData.targeting,
+        geo_locations: campaignData.targeting.geoLocations || { countries: ['IQ'] },
+        age_min: campaignData.targeting.ageMin || 18,
+        age_max: campaignData.targeting.ageMax || 65,
+        targeting_automation: {
+          advantage_audience: 0  // تعطيل Advantage Audience للحصول على تحكم كامل في الاستهداف
+        }
+      };
+      
+      // حذف الحقول القديمة
+      delete processedTargeting.geoLocations;
+      delete processedTargeting.ageMin;
+      delete processedTargeting.ageMax;
+
+      // إعداد adSet data حسب نوع الحملة
+      const adSetData: any = {
         name: `${campaignData.campaignName} - مجموعة إعلانية`,
         campaign_id: campaignResult.id,
-        targeting: campaignData.targeting,
-        billing_event: campaignData.billingEvent,
-        bid_amount: campaignData.bidAmount,
-        daily_budget: campaignData.dailyBudget,
-        status: 'ACTIVE',
-        start_time: campaignData.startDate,
-        end_time: campaignData.endDate,
-        optimization_goal: campaignData.optimizationGoal
-      });
+        targeting: processedTargeting,
+        billing_event: campaignData.objective === 'OUTCOME_SALES' ? 'IMPRESSIONS' : 'LINK_CLICKS',
+        bid_strategy: campaignData.bidStrategy || 'LOWEST_COST_WITHOUT_CAP',
+        daily_budget: campaignData.adSetBudget ? parseInt(campaignData.adSetBudget) * 100 : 2500, // تحويل إلى cents
+        start_time: campaignData.startTime,
+        end_time: campaignData.endTime || undefined,
+        optimization_goal: campaignData.objective === 'OUTCOME_SALES' ? 'OFFSITE_CONVERSIONS' : 'LINK_CLICKS'
+      };
+
+      // إضافة promoted_object للحملات التحويلية
+      if (campaignData.objective === 'OUTCOME_SALES' && campaignData.pixelId) {
+        adSetData.promoted_object = {
+          pixel_id: campaignData.pixelId,
+          custom_event_type: campaignData.customEventType || 'PURCHASE'
+        };
+      }
+
+      const adSetResult = await metaApi.createAdSet(adSetData);
 
       console.log('✅ تم إنشاء المجموعة الإعلانية:', adSetResult.id);
 
@@ -7506,25 +7577,35 @@ ${platform?.platformName || 'متجرنا'}`;
         console.log(`📱 إنشاء الإعلان ${i + 1}/${videos.length} للفيديو: ${video.fileName}`);
 
         try {
-          const adResult = await metaApi.createAd({
-            name: `${campaignData.campaignName} - إعلان ${i + 1}`,
-            adset_id: adSetResult.id,
-            creative: {
-              name: `${campaignData.campaignName} - كريتيف ${i + 1}`,
-              object_story_spec: {
-                page_id: campaignData.pageId,
-                video_data: {
-                  video_id: video.videoId,
-                  image_url: video.thumbnailUrl,
-                  call_to_action: {
-                    type: campaignData.callToAction || 'LEARN_MORE',
-                    value: {
-                      link: campaignData.landingPageUrl
-                    }
+          // تحضير creative data حسب نوع الحملة
+          const creativeData: any = {
+            name: `${campaignData.campaignName} - كريتيف ${i + 1}`,
+            object_story_spec: {
+              page_id: campaignData.pageId,
+              video_data: {
+                video_id: video.videoId,
+                message: campaignData.adText || `${campaignData.displayName}`,
+                call_to_action: campaignData.objective === 'OUTCOME_TRAFFIC' ? {
+                  type: 'MESSAGE_PAGE'
+                } : {
+                  type: campaignData.callToAction || 'LEARN_MORE',
+                  value: {
+                    link: campaignData.landingPageUrl
                   }
                 }
               }
-            },
+            }
+          };
+
+          // إضافة thumbnail إذا كان متوفراً
+          if (video.thumbnailUrl) {
+            creativeData.object_story_spec.video_data.image_url = video.thumbnailUrl;
+          }
+
+          const adResult = await metaApi.createAd({
+            name: `${campaignData.campaignName} - إعلان ${i + 1}`,
+            adset_id: adSetResult.id,
+            creative: creativeData,
             status: 'ACTIVE'
           });
 
@@ -13906,13 +13987,20 @@ ${platform?.platformName || 'متجرنا'}`;
       }
       
       const categoryData = {
-        ...req.body,
+        name: req.body.name,
+        description: req.body.description,
         platformId: platformId,
-        isActive: true
+        isActive: req.body.isActive !== undefined ? req.body.isActive : true
       };
+      
+      // إضافة Google Category إذا كان موجوداً
+      if (req.body.googleCategory) {
+        (categoryData as any).googleCategory = req.body.googleCategory;
+      }
       
       console.log("Creating category for platform:", platformId);
       console.log("Category data:", categoryData);
+      console.log("Google Category:", (categoryData as any).googleCategory);
       
       const category = await storage.createCategory(categoryData);
       res.json(category);
@@ -13937,8 +14025,18 @@ ${platform?.platformName || 'متجرنا'}`;
         return res.status(404).json({ error: "Category not found or not accessible" });
       }
       
-      const categoryData = req.body;
+      const categoryData = {
+        name: req.body.name,
+        description: req.body.description,
+        isActive: req.body.isActive
+      };
+      
+      // تحديث Google Category إذا كان موجوداً
+      if (req.body.googleCategory) {
+        (categoryData as any).googleCategory = req.body.googleCategory;
+      }
       console.log("Updating category:", categoryId, "for platform:", platformId);
+      console.log("Updated Google Category:", (categoryData as any).googleCategory);
       
       const updatedCategory = await storage.updateCategory(categoryId, categoryData);
       res.json(updatedCategory);
@@ -14358,10 +14456,11 @@ ${platform?.platformName || 'متجرنا'}`;
             
             const orderDate = order.createdAt ? new Date(order.createdAt) : new Date();
             const startDateObj = start ? new Date(start as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-            const endDateObj = end ? new Date(end as string) : new Date();
+            // إضافة 23:59:59 لتاريخ النهاية ليشمل اليوم بالكامل
+            const endDateObj = end ? new Date(end as string + 'T23:59:59.999Z') : new Date();
             const passesFilter = orderDate >= startDateObj && orderDate <= endDateObj;
             
-            console.log(`🔍 Order ${order.orderNumber}: date=${orderDate.toISOString()}, status=${order.status}, amount=${order.total}, passes=${passesFilter}`);
+            console.log(`🔍 Order ${order.orderNumber}: date=${orderDate.toISOString()}, status=${order.status}, amount=${order.totalAmount}, passes=${passesFilter}`);
             
             return passesFilter;
           });
@@ -14784,7 +14883,15 @@ ${platform?.platformName || 'متجرنا'}`;
         return res.status(404).json({ message: "Product not found" });
       }
       
-      res.json(product);
+      // تنظيف بيانات المنتج لضمان وجود category name
+      const cleanProduct = {
+        ...product,
+        category: (product as any).category?.name || null // استخراج اسم الفئة
+      };
+      
+      // Category name extracted successfully
+      
+      res.json(cleanProduct);
     } catch (error) {
       console.error("Error fetching product by slug:", error);
       res.status(500).json({ message: "Failed to fetch product" });

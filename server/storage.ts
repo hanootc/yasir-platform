@@ -211,6 +211,7 @@ export interface IStorage {
   getLandingPageOrderById(id: string): Promise<LandingPageOrder | undefined>;
   getLandingPageOrdersByPageId(landingPageId: string, limit?: number): Promise<LandingPageOrder[]>;
   createLandingPageOrder(order: InsertLandingPageOrder): Promise<LandingPageOrder>;
+  updateLandingPageOrderStatus(id: string, status: string): Promise<LandingPageOrder | undefined>;
 
   // Activity operations
   getActivities(): Promise<Activity[]>;
@@ -779,10 +780,17 @@ export class DatabaseStorage implements IStorage {
 
       // Get categories for these products
       const categoriesMap = new Map();
-      const allCategories = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.platformId, platformId));
+      // جلب الفئات بأمان (حتى لو لم يوجد googleCategory في قاعدة البيانات)
+      let allCategories: any[] = [];
+      try {
+        allCategories = await db
+          .select()
+          .from(categories)
+          .where(eq(categories.platformId, platformId));
+      } catch (error) {
+        console.error('⚠️ Error fetching categories:', error);
+        allCategories = [];
+      }
       
       allCategories.forEach(cat => {
         categoriesMap.set(cat.id, cat);
@@ -814,7 +822,8 @@ export class DatabaseStorage implements IStorage {
             category: product.categoryId && categoriesMap.has(product.categoryId) 
               ? {
                   id: product.categoryId,
-                  name: categoriesMap.get(product.categoryId)?.name
+                  name: categoriesMap.get(product.categoryId)?.name,
+                  googleCategory: categoriesMap.get(product.categoryId)?.googleCategory
                 }
               : undefined,
             colors,
@@ -895,10 +904,35 @@ export class DatabaseStorage implements IStorage {
           .filter(id => id)
       )];
 
-      const categoriesData = categoryIds.length > 0 ? await db
-        .select()
-        .from(categories)
-        .where(inArray(categories.id, categoryIds.filter((id): id is string => id !== null))) : [];
+      let categoriesData: any[] = [];
+      if (categoryIds.length > 0) {
+        try {
+          categoriesData = await db
+            .select()
+            .from(categories)
+            .where(inArray(categories.id, categoryIds.filter((id): id is string => id !== null)));
+        } catch (error) {
+          console.error('⚠️ Error fetching categories (trying without googleCategory):', error);
+          // Try without googleCategory column
+          try {
+            categoriesData = await db
+              .select({
+                id: categories.id,
+                name: categories.name,
+                description: categories.description,
+                icon: categories.icon,
+                platformId: categories.platformId,
+                isActive: categories.isActive,
+                createdAt: categories.createdAt
+              })
+              .from(categories)
+              .where(inArray(categories.id, categoryIds.filter((id): id is string => id !== null)));
+          } catch (fallbackError) {
+            console.error('❌ Failed to fetch categories even without googleCategory:', fallbackError);
+            categoriesData = [];
+          }
+        }
+      }
 
       // Create a map for quick category lookup
       const categoriesMap = new Map(
@@ -911,7 +945,8 @@ export class DatabaseStorage implements IStorage {
         category: product.categoryId && categoriesMap.has(product.categoryId) 
           ? {
               id: product.categoryId,
-              name: categoriesMap.get(product.categoryId)?.name
+              name: categoriesMap.get(product.categoryId)?.name,
+              googleCategory: (categoriesMap.get(product.categoryId) as any)?.googleCategory
             }
           : undefined
       }));
@@ -925,6 +960,8 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveProductsByPlatformAndCategory(platformId: string, categoryId: string): Promise<Product[]> {
     try {
+      console.log('🔍 getActiveProductsByPlatformAndCategory called with:', { platformId, categoryId });
+      
       const platformProducts = await db
         .select()
         .from(products)
@@ -934,19 +971,46 @@ export class DatabaseStorage implements IStorage {
           eq(products.isActive, true)
         ))
         .orderBy(desc(products.createdAt));
+        
+      console.log('📊 Found products for category:', platformProducts.length);
 
-      // Get category info
-      const [categoryData] = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.id, categoryId));
+      // Get category info (safely handle missing googleCategory column)
+      let categoryData = null;
+      try {
+        const [result] = await db
+          .select()
+          .from(categories)
+          .where(eq(categories.id, categoryId));
+        categoryData = result;
+      } catch (error) {
+        console.error('⚠️ Error fetching category data:', error);
+        // Try without googleCategory column
+        try {
+          const [result] = await db
+            .select({
+              id: categories.id,
+              name: categories.name,
+              description: categories.description,
+              icon: categories.icon,
+              platformId: categories.platformId,
+              isActive: categories.isActive,
+              createdAt: categories.createdAt
+            })
+            .from(categories)
+            .where(eq(categories.id, categoryId));
+          categoryData = result;
+        } catch (fallbackError) {
+          console.error('❌ Failed to fetch category even without googleCategory:', fallbackError);
+        }
+      }
 
       // Add category info to products
       const productsWithCategories = platformProducts.map(product => ({
         ...product,
         category: categoryData ? {
           id: categoryData.id,
-          name: categoryData.name
+          name: categoryData.name,
+          googleCategory: (categoryData as any).googleCategory
         } : undefined
       }));
       
@@ -1908,6 +1972,33 @@ export class DatabaseStorage implements IStorage {
         );
         
         const order = result.rows[0];
+        if (order) {
+          // تحويل أسماء الأعمدة لتتطابق مع الواجهة الأمامية
+          return {
+            ...order,
+            // تأكد من وجود الحقول المطلوبة
+            customerName: order.customer_name || order.customerName,
+            customerPhone: order.customer_phone || order.customerPhone,
+            customerEmail: order.customer_email || order.customerEmail,
+            customerAddress: order.customer_address || order.customerAddress,
+            customerGovernorate: order.customer_governorate || order.customerGovernorate,
+            orderNumber: order.order_number || order.orderNumber,
+            landingPageId: order.landing_page_id || order.landingPageId,
+            platformId: order.platform_id || order.platformId,
+            productId: order.product_id || order.productId,
+            totalAmount: order.total_amount || order.totalAmount,
+            createdAt: order.created_at || order.createdAt,
+            updatedAt: order.updated_at || order.updatedAt,
+            // معلومات المنتج
+            productDetails: {
+              name: order.product_name,
+              imageUrls: order.product_image,
+              price: order.product_price,
+              categoryId: order.product_category,
+              categoryName: order.category_name
+            }
+          };
+        }
         return order;
       } finally {
         client.release();
@@ -1920,20 +2011,35 @@ export class DatabaseStorage implements IStorage {
 
   async getLandingPageOrdersByPageId(landingPageId: string, limit?: number): Promise<LandingPageOrder[]> {
     try {
-      const baseQuery = db
+      const query = db
         .select()
         .from(landingPageOrders)
         .where(eq(landingPageOrders.landingPageId, landingPageId))
         .orderBy(desc(landingPageOrders.createdAt));
-
+      
       if (limit) {
-        return await baseQuery.limit(limit);
+        return await query.limit(limit);
       }
-
-      return await baseQuery;
+      
+      return await query;
     } catch (error) {
-      console.error("Error in getLandingPageOrdersByPageId:", error);
+      console.error('Error fetching landing page orders by page ID:', error);
       return [];
+    }
+  }
+
+  async updateLandingPageOrderStatus(id: string, status: string): Promise<LandingPageOrder | undefined> {
+    try {
+      const [updatedOrder] = await db
+        .update(landingPageOrders)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(landingPageOrders.id, id))
+        .returning();
+      
+      return updatedOrder;
+    } catch (error) {
+      console.error('Error updating landing page order status:', error);
+      return undefined;
     }
   }
 

@@ -494,6 +494,7 @@ export default function LandingPageView() {
   const [selectedShapeIds, setSelectedShapeIds] = useState<string[]>([]);
   const [selectedSizeIds, setSelectedSizeIds] = useState<string[]>([]);
   const [variantErrors, setVariantErrors] = useState<string[]>([]);
+  const [categoryGoogleCategory, setCategoryGoogleCategory] = useState<string | null>(null);
 
 
 
@@ -1073,10 +1074,12 @@ export default function LandingPageView() {
       
       // إذا كان المنتج مضمناً مباشرة (منتج مباشر بالـ slug)، استخدمه
       if (landingPage?.isProductDirect && landingPage?.product) {
+        // Using direct product from landing page
         return landingPage.product;
       }
       
       // وإلا، اجلب المنتج من الـ API
+      // Fetching product from API
       const response = await fetch(`/api/public/products/${landingPage.productId}`);
       if (!response.ok) return null;
       return response.json();
@@ -1180,9 +1183,202 @@ export default function LandingPageView() {
       
       console.log('🎨 Custom favicon set with cache busting:', faviconUrl);
       console.log('🏪 Platform:', platformData.platformName);
+      console.log('Favicon set successfully');
     }
   }, [platformData]);
 
+  // جلب بيانات الفئة إذا لم توجد googleCategory
+  useEffect(() => {
+    if (product?.categoryId && !categoryGoogleCategory) {
+      fetch(`/api/public/categories/${product.categoryId}`)
+        .then(res => res.json())
+        .then(categoryData => {
+          if (categoryData?.googleCategory) {
+            setCategoryGoogleCategory(categoryData.googleCategory);
+          }
+        })
+        .catch(err => {
+          // Silent error handling
+        });
+    }
+  }, [product?.categoryId, categoryGoogleCategory]);
+
+  // الحصول على Google Product Category من بيانات الفئة أو الافتراضي
+  const getGoogleProductCategory = (productData: any) => {
+    // محاولة الحصول على googleCategory من مصادر مختلفة
+    let googleCategory = null;
+    
+    // 1. من categoryData.googleCategory
+    if (productData?.categoryData?.googleCategory) {
+      googleCategory = productData.categoryData.googleCategory;
+    }
+    // 2. من category.googleCategory (إذا كانت category كائن)
+    else if (productData?.category?.googleCategory) {
+      googleCategory = productData.category.googleCategory;
+    }
+    // 3. من الـ state الذي تم جلبه
+    else if (categoryGoogleCategory) {
+      googleCategory = categoryGoogleCategory;
+    }
+    
+    if (googleCategory) {
+      return googleCategory;
+    }
+    
+    // إذا لم يوجد، استخدم الترجمة اليدوية كـ fallback
+    const categoryName = typeof productData?.category === 'string' 
+      ? productData.category 
+      : productData?.category?.name || 'منتجات';
+    
+    const fallbackMap: { [key: string]: string } = {
+      'أجهزة منزلية': 'Home & Garden > Kitchen & Dining > Kitchen Appliances',
+      'أدوات مطبخ': 'Home & Garden > Kitchen & Dining > Kitchen Tools & Utensils',
+      'ديكور منزلي': 'Home & Garden > Decor',
+      'أدوات تنظيف': 'Home & Garden > Household Supplies',
+      'منسوجات منزلية': 'Home & Garden > Linens & Bedding',
+      'أدوات حديقة': 'Home & Garden > Yard, Garden & Outdoor Living > Gardening',
+      'الأطفال والأسرة': 'Baby & Toddler',
+      'صحة ورياضة': 'Sporting Goods > Exercise & Fitness'
+    };
+    
+    return fallbackMap[categoryName] || 'Home & Garden';
+  };
+
+  // إضافة Product Schema للـ Facebook Catalog
+  useEffect(() => {
+    if (product && landingPage && platformData) {
+      // إنشاء Product Schema JSON-LD
+      const currentUrl = window.location.href;
+      const productImage = product.imageUrls && product.imageUrls.length > 0 
+        ? (product.imageUrls[0].startsWith('http') ? product.imageUrls[0] : `https://sanadi.pro${product.imageUrls[0]}`)
+        : null;
+      
+      // الحصول على السعر المناسب
+      let displayPrice = product.price;
+      if (product.priceOffers && Array.isArray(product.priceOffers) && product.priceOffers.length > 0) {
+        const defaultOffer = product.priceOffers.find((offer: any) => offer.isDefault) || product.priceOffers[0];
+        displayPrice = defaultOffer.price;
+      }
+      
+      // تحديد Google Category مرة واحدة لاستخدامه في أماكن مختلفة
+      const googleCategory = getGoogleProductCategory(product);
+      
+      const productSchema = {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": product.name,
+        "image": productImage,
+        "description": product.description || product.name,
+        "sku": product.id,
+        "gtin": product.id, // Global Trade Item Number
+        "brand": {
+          "@type": "Brand",
+          "name": platformData.storeName || "متجر إلكتروني"
+        },
+        "category": googleCategory,
+        "google_product_category": googleCategory,
+        "offers": {
+          "@type": "Offer",
+          "url": currentUrl,
+          "priceCurrency": "IQD",
+          "price": displayPrice,
+          "availability": product.isActive ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+          "itemCondition": "https://schema.org/NewCondition",
+          "seller": {
+            "@type": "Organization",
+            "name": platformData.storeName || "متجر إلكتروني"
+          }
+        }
+      };
+      
+      // إضافة JSON-LD إلى head
+      let existingSchema = document.getElementById('product-schema');
+      if (existingSchema) {
+        existingSchema.remove();
+      }
+      
+      const script = document.createElement('script');
+      script.id = 'product-schema';
+      script.type = 'application/ld+json';
+      script.textContent = JSON.stringify(productSchema);
+      document.head.appendChild(script);
+      
+      // إضافة Microdata للـ body لضمان قراءة Facebook للبيانات
+      let existingMicrodata = document.getElementById('product-microdata');
+      if (existingMicrodata) {
+        existingMicrodata.remove();
+      }
+      
+      const microdataDiv = document.createElement('div');
+      microdataDiv.id = 'product-microdata';
+      microdataDiv.style.display = 'none';
+      microdataDiv.innerHTML = `
+        <div itemscope itemtype="https://schema.org/Product">
+          <span itemprop="name">${product.name}</span>
+          <span itemprop="sku">${product.id}</span>
+          <span itemprop="category">${googleCategory}</span>
+          <span itemprop="google_product_category">${googleCategory}</span>
+          <div itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+            <span itemprop="price">${displayPrice}</span>
+            <span itemprop="priceCurrency">IQD</span>
+            <span itemprop="availability">${product.isActive ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'}</span>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(microdataDiv);
+      
+      // إضافة Meta Tags للـ Facebook Product Catalog (جميع الحقول المطلوبة)
+      const metaTags = [
+        // الحقول الأساسية المطلوبة
+        { property: 'og:type', content: 'product' },
+        { property: 'og:title', content: product.name },
+        { property: 'og:description', content: product.description || product.name },
+        { property: 'og:image', content: productImage },
+        { property: 'og:url', content: currentUrl },
+        
+        // بيانات المنتج المطلوبة
+        { name: 'product:id', content: product.id },
+        { property: 'product:retailer_item_id', content: product.id },
+        { name: 'product:title', content: product.name },
+        { name: 'product:description', content: product.description || product.name },
+        { name: 'product:link', content: currentUrl },
+        { name: 'product:image_link', content: productImage },
+        { name: 'product:availability', content: product.isActive ? 'in stock' : 'out of stock' },
+        { name: 'product:price', content: `${displayPrice} IQD` },
+        { property: 'product:price:amount', content: displayPrice.toString() },
+        { property: 'product:price:currency', content: 'IQD' },
+        { property: 'product:condition', content: 'new' },
+        { property: 'product:category', content: googleCategory },
+        { property: 'product:brand', content: platformData.storeName || 'متجر إلكتروني' },
+        
+        // Google Product Category بطرق مختلفة
+        { name: 'google_product_category', content: googleCategory },
+        { property: 'product:google_product_category', content: googleCategory },
+        { property: 'og:product:category', content: googleCategory },
+        { name: 'product_category', content: googleCategory }
+      ];
+      
+      // إزالة Meta Tags القديمة
+      const oldProductMetas = document.querySelectorAll('meta[property^="product:"], meta[name^="product:"], meta[name="google_product_category"], meta[property^="og:"]');
+      oldProductMetas.forEach(meta => meta.remove());
+      
+      // إضافة Meta Tags الجديدة (فقط التي لها قيم)
+      metaTags
+        .filter(tag => tag.content && tag.content.trim() !== '' && tag.content !== 'null' && tag.content !== 'undefined')
+        .forEach(tag => {
+          const meta = document.createElement('meta');
+          if (tag.property) {
+            meta.setAttribute('property', tag.property);
+          }
+          if ((tag as any).name) {
+            meta.setAttribute('name', (tag as any).name);
+          }
+          meta.setAttribute('content', tag.content);
+          document.head.appendChild(meta);
+        });
+    }
+  }, [product, landingPage, platformData]);
+  
   // تعيين title الصفحة بناءً على بيانات المنتج والمنصة (بعد الـ favicon)
   useEffect(() => {
     if (product && platformData) {
@@ -1646,6 +1842,7 @@ export default function LandingPageView() {
           selectedOfferData = availableOffers.find((offer: any) => offer.id === selectedOffer);
           quantity = selectedOfferData?.quantity || 1;
           offerPrice = selectedOfferData?.price || 0;
+          console.log("💰 TikTok template - selectedOfferData:", selectedOfferData);
         } else {
           // للقوالب الأخرى
           selectedOfferData = availableOffers.find((offer: any) => 
@@ -1653,7 +1850,19 @@ export default function LandingPageView() {
           );
           quantity = selectedOfferData?.quantity || 1;
           offerPrice = selectedOfferData?.price || 0;
+          console.log("💰 Default template - selectedOfferData:", selectedOfferData);
         }
+        
+        console.log("💰 Final calculated values:", {
+          quantity,
+          offerPrice,
+          selectedOfferData: selectedOfferData ? {
+            id: selectedOfferData.id,
+            label: selectedOfferData.label,
+            price: selectedOfferData.price,
+            quantity: selectedOfferData.quantity
+          } : null
+        });
         
         // Validate variant selections before submitting
         const validationErrors = validateVariantSelections();
@@ -1668,6 +1877,8 @@ export default function LandingPageView() {
           productId: landingPage?.productId,
           quantity: quantity, // إضافة الكمية المحسوبة
           price: offerPrice, // إضافة السعر
+          totalAmount: offerPrice, // إضافة المبلغ الإجمالي
+          subtotal: offerPrice, // إضافة المبلغ الفرعي
           offer: selectedOfferData ? `${selectedOfferData.label} - ${formatCurrency(selectedOfferData.price)}` : data.offer, // تنسيق العرض
           // إضافة معلومات المتغيرات المختارة
           selectedColorIds: selectedColorIds,
@@ -1678,6 +1889,15 @@ export default function LandingPageView() {
           shapeCount: selectedShapeIds.length,
           sizeCount: selectedSizeIds.length
         };
+        
+        console.log("📦 Final orderData being sent:", {
+          price: orderData.price,
+          totalAmount: orderData.totalAmount,
+          subtotal: orderData.subtotal,
+          quantity: orderData.quantity,
+          offer: orderData.offer,
+          landingPageId: orderData.landingPageId
+        });
         
         // Debug: طباعة بيانات المتغيرات المرسلة
         console.log("🛒 Order Data with Variants:", {
@@ -6520,13 +6740,18 @@ export default function LandingPageView() {
 
 
       {/* PixelTracker Component for Facebook and TikTok tracking */}
-      {landingPage && product && (
-        <PixelTracker
-          platformId={landingPage.platformId}
-          eventType="view_content"
-          eventData={{
-            content_name: product.name,
-            content_category: product.category || 'منتجات',
+      {landingPage && product && (() => {
+        // استخدام Google Product Category من بيانات الفئة أو الافتراضي
+        const googleCategory = getGoogleProductCategory(product);
+        const categoryToUse = googleCategory; // استخدام الفئة الإنجليزية
+        
+        return (
+          <PixelTracker
+            platformId={landingPage.platformId}
+            eventType="view_content"
+            eventData={{
+              content_name: product.name,
+              content_category: categoryToUse,
             content_ids: [product.id],
             value: (() => {
               const availableOffers = getAvailableOffers(product);
@@ -6541,7 +6766,8 @@ export default function LandingPageView() {
             product_id: product.id
           }}
         />
-      )}
+        );
+      })()}
     </div>
   );
 }

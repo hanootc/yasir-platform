@@ -925,7 +925,7 @@ export class WhatsAppGateway {
           console.log(`✅ تم تأكيد الطلب رقم ${order.orderNumber || order.order_number} تلقائياً`);
           
           // إرسال رسالة تأكيد للعميل
-          const confirmationReply = `✅ *تم تأكيد طلبك بنجاح*\n\nرقم الطلب: #${order.orderNumber || order.order_number}\nشكراً لك! سيتم التواصل معك قريباً لترتيب التوصيل 🚛`;
+          const confirmationReply = `✅ *تم تأكيد طلبك بنجاح*\n\nرقم الطلب: #${order.orderNumber || order.order_number}\nشكراً لك! سيتم توصيل الطلب اليك في اسرع وقت يرجى الانتباه على الهاتف للرد على المندوب 🚚`;
           
           const client = whatsappClients.get(platformId);
           if (client) {

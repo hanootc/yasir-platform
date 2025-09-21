@@ -240,9 +240,10 @@ export const landingPageTemplateEnum = pgEnum("landing_page_template", [
 // Product categories
 export const categories = pgTable("categories", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name").notNull(),
+  name: varchar("name").notNull(), // الاسم العربي
   description: text("description"),
   icon: varchar("icon", { length: 50 }),
+  googleCategory: varchar("google_category", { length: 255 }), // Google Product Category الإنجليزي
   platformId: varchar("platform_id").references(() => platforms.id).notNull(),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),

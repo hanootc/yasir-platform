@@ -28,7 +28,6 @@ import {
   Edit,
   Copy,
   RefreshCw,
-  Play,
   Pause,
   ExternalLink,
   Plus,
@@ -37,10 +36,11 @@ import {
   AlertCircle,
   Upload,
   CheckCircle,
-  Info,
   ChevronDown,
   ChevronUp,
   X,
+  Info,
+  Play,
   Settings,
   MessageCircle,
   Camera,
@@ -109,7 +109,7 @@ const getDateRangeOptions = (): DateRangeOption[] => {
     {
       value: 'all',
       label: 'طوال المدة',
-      startDate: subDays(today, 365), // آخر سنة
+      startDate: subDays(today, 365), // خر سنة
       endDate: today
     }
   ];
@@ -301,7 +301,7 @@ export default function PlatformAdsMetaManagement() {
   }, [selectedAccount, completeCampaignForm]);
 
 
-  // إزالة الواتساب من أي قيم محفوظة
+  // إزالة الاتساب من أي قيم مفوظة
   useEffect(() => {
     const currentDestinations = completeCampaignForm.getValues('messageDestinations') || [];
     const filteredDestinations = currentDestinations.filter(dest => dest !== 'WHATSAPP');
@@ -310,7 +310,7 @@ export default function PlatformAdsMetaManagement() {
     }
   }, []);
 
-  // دالة لملء البيانات تلقائياً عند اختيار المنتج
+  // دالة لملء البياات تلقائياً عند اختيار المنتج
   const handleProductSelect = async (productId: string) => {
     const selectedProduct = products?.find((p: any) => p.id === productId);
     if (selectedProduct) {
@@ -319,29 +319,29 @@ export default function PlatformAdsMetaManagement() {
       // ملء الأسماء
       form.setValue('campaignName', `حملة ${selectedProduct.name}`);
       form.setValue('adSetName', `مجموعة ${selectedProduct.name}`);
-      form.setValue('adName', `إعلان ${selectedProduct.name}`);
+      form.setValue('adName', `إلان ${selectedProduct.name}`);
       form.setValue('displayName', selectedProduct.name);
       
-      // ملء نص الإعلان من وصف المنتج
+      // ملء نص الإلان من وصف المنتج
       if (selectedProduct.description) {
         form.setValue('adText', selectedProduct.description);
       }
       
-      // جلب صفحة الهبوط الخاصة بالمنتج وملء الرابط
+      // جلب صفحة الهبوط اخاصة بالمنتج ومل الرابط
       try {
         const response = await fetch(`/api/platform-products/${productId}/landing-pages`);
         if (response.ok) {
           const landingPages = await response.json();
           if (landingPages && landingPages.length > 0) {
-            const landingPage = landingPages[0]; // أخذ أول صفحة هبوط
+            const landingPage = landingPages[0]; // أخذ أو صفحة هبوط
             const platformSubdomain = landingPage.platform?.subdomain || '';
-            // استخدام دومين الموقع الحالي مع النطاق الفرعي في المسار
+            // استخدام ومين الموقع الحاي مع النطاق الفرعي في المسار
             const landingPageUrl = `${window.location.origin}/${platformSubdomain}/${landingPage.customUrl || landingPage.id}`;
             form.setValue('landingPageUrl', landingPageUrl);
           }
         }
       } catch (error) {
-        console.warn('فشل في جلب صفحة الهبوط للمنتج:', error);
+        console.warn('فشل ف جلب صفحة الهبوط لمنتج:', error);
       }
     }
   };
@@ -349,15 +349,18 @@ export default function PlatformAdsMetaManagement() {
   // Create complete campaign mutation
   const createCompleteCampaignMutation = useMutation({
     mutationFn: async (data: CompleteMetaCampaign) => {
+      console.log('🎯 إرسل بيانات إنشاء حملة Meta الكاملة:', data);
       
-      // حذف landingPageUrl من حملات الرسائل
+      // حذف landingPageUrl من حملات الرائل
       const cleanData = { ...data };
       if (data.objective === 'OUTCOME_TRAFFIC') {
         delete cleanData.landingPageUrl;
         delete cleanData.pixelId;
         delete cleanData.customEventType;
       }
-
+      
+      console.log('🔧 البيانات النظيفة المرسلة:', cleanData);
+      
       // إذا كان هناك عدة فيديوهات، أنشئ عدة إعلانات
       if (uploadedVideos.length > 0) {
         const campaignData = {
@@ -369,6 +372,8 @@ export default function PlatformAdsMetaManagement() {
           }))
         };
 
+        console.log('🚀 إرسال طلب إنشاء حملة متعددة الإعلانات:', campaignData);
+        
         const response = await fetch('/api/meta/campaigns/complete-multiple', {
           method: 'POST',
           headers: {
@@ -377,12 +382,29 @@ export default function PlatformAdsMetaManagement() {
           body: JSON.stringify(campaignData),
         });
 
+        console.log('📡 استجابة الخادم:', response.status, response.statusText);
+
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || errorData.details || 'فشل في إنشاء الحملة مع عدة إعلانات');
+          const contentType = response.headers.get('content-type');
+          console.error('❌ خطأ في الاستجابة:', {
+            status: response.status,
+            statusText: response.statusText,
+            contentType
+          });
+          
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || errorData.details || 'فشل في إنشاء الحملة مع عدة إعلانات');
+          } else {
+            const errorText = await response.text();
+            console.error('❌ استجابة غير متوقعة:', errorText.substring(0, 200));
+            throw new Error(`خطأ في الخادم: ${response.status} - ${response.statusText}`);
+          }
         }
 
-        return response.json();
+        const result = await response.json();
+        console.log('✅ نتيجة إنشاء الحملة المتعددة:', result);
+        return result;
       } else {
         // الطريقة العادية لإعلان واحد
         const response = await fetch('/api/meta/campaigns/complete', {
@@ -402,6 +424,7 @@ export default function PlatformAdsMetaManagement() {
       }
     },
     onSuccess: (data) => {
+      console.log('✅ تم إنشاء حملة Meta الكاملة بنجاح!', data);
       
       // عرض رسالة نجاح بالثيم
       toast({
@@ -433,7 +456,7 @@ export default function PlatformAdsMetaManagement() {
         // Ad Set data
         adSetName: "",
         adSetBudgetMode: "DAILY_BUDGET",
-        adSetBudget: "25", // ميزانية افتراضية 25 دينار عراقي
+        adSetBudget: "25", // مزانية افتراضية 25 دينار عراقي
         bidStrategy: "LOWEST_COST_WITHOUT_CAP",
         bidAmount: "",
         destinationType: "WEBSITE",
@@ -631,6 +654,7 @@ export default function PlatformAdsMetaManagement() {
   // Mutation for toggling campaign status
   const toggleCampaignStatusMutation = useMutation({
     mutationFn: async ({ campaignId, status }: { campaignId: string; status: string }) => {
+      console.log(`Toggling Meta campaign ${campaignId} to ${status}`);
       const response = await fetch(`/api/platform-ads/meta/campaigns/${campaignId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -639,9 +663,10 @@ export default function PlatformAdsMetaManagement() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Meta campaign status update failed:", errorData);
-        throw new Error(errorData.error || "فشل في تحديث حالة الحملة");
+        throw new Error(errorData.error || "فشل في تحدي حالة الحملة");
       }
       const result = await response.json();
+      console.log("Meta campaign status update result:", result);
       return result;
     },
     onSuccess: () => {
@@ -649,7 +674,7 @@ export default function PlatformAdsMetaManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/platform-ads/meta/campaigns", selectedAccount] });
       toast({
         title: "تم التحديث",
-        description: "تم تحديث حالة الحملة بنجاح",
+        description: "تم تديث حالة الحملة بنجاح",
         variant: "success",
       });
     },
@@ -669,6 +694,7 @@ export default function PlatformAdsMetaManagement() {
   // Mutation for toggling ad set status
   const toggleAdSetStatusMutation = useMutation({
     mutationFn: async ({ adSetId, status }: { adSetId: string; status: string }) => {
+      console.log(`Toggling Meta ad set ${adSetId} to ${status}`);
       const response = await fetch(`/api/platform-ads/meta/adgroups/${adSetId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -677,9 +703,10 @@ export default function PlatformAdsMetaManagement() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Meta ad set status update failed:", errorData);
-        throw new Error(errorData.error || "فشل في تحديث حالة المجموعة الإعلانية");
+        throw new Error(errorData.error || "فشل في تحديث حالة المجموعة اإعلانية");
       }
       const result = await response.json();
+      console.log("Meta ad set status update result:", result);
       return result;
     },
     onSuccess: (data) => {
@@ -688,14 +715,14 @@ export default function PlatformAdsMetaManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/platform-ads/meta/adgroup-insights"] });
       toast({
         title: "تم التحديث",
-        description: `تم ${data.status === 'ACTIVE' ? 'تشغيل' : 'إيقاف'} المجموعة الإعلانية بنجاح`,
+        description: `تم ${data.status === 'ACTIVE' ? 'تشغيل' : 'إيقاف'} المجموعة لإعلانية بنجاح`,
         variant: "success",
       });
     },
     onError: (error: any) => {
       toast({
         title: "خطأ",
-        description: error.message || "فشل في تحديث حالة المجموعة الإعلانية",
+        description: error.message || "فشل في تحديث حالة المموعة الإعلانية",
         variant: "destructive",
       });
     },
@@ -708,6 +735,7 @@ export default function PlatformAdsMetaManagement() {
   // Mutation for toggling ad status
   const toggleAdStatusMutation = useMutation({
     mutationFn: async ({ adId, status }: { adId: string; status: string }) => {
+      console.log(`Toggling Meta ad ${adId} to ${status}`);
       const response = await fetch(`/api/platform-ads/meta/ads/${adId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -719,6 +747,7 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || "Failed to update ad status");
       }
       const result = await response.json();
+      console.log("Meta ad status update result:", result);
       return result;
     },
     onSuccess: (data) => {
@@ -758,7 +787,7 @@ export default function PlatformAdsMetaManagement() {
     refetchOnWindowFocus: false,
   });
 
-  // جلب الحسابات الإعلانية
+  // جلب الحسبات الإعلانية
   const { data: adAccounts, isLoading: accountsLoading } = useQuery({
     queryKey: ["/api/platform-ads/meta/ad-accounts"],
     enabled: !!(connectionStatus as any)?.meta?.connected,
@@ -766,7 +795,7 @@ export default function PlatformAdsMetaManagement() {
     refetchOnWindowFocus: false,
   });
 
-  // جلب البكسلات للحساب المختار
+  // جب البكسلات للحسا المختار
   const { data: pixels, isLoading: pixelsLoading } = useQuery({
     queryKey: ["/api/platform-ads/meta/pixels", selectedAccount],
     enabled: !!selectedAccount && !!(connectionStatus as any)?.meta?.connected,
@@ -787,13 +816,14 @@ export default function PlatformAdsMetaManagement() {
       const response = await fetch('/api/platform-ads/meta/pages');
       if (!response.ok) throw new Error('Failed to fetch pages');
       const data = await response.json();
+      console.log('📄 بيانات الصفحات:', data);
       return data;
     },
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // تحديد أول بكسل وصفحة تلقائياً عند تحميل البيانات
+  // تحديد أول بكسل وصفحة تلقائياً عند تحميل لبيانات
   useEffect(() => {
     if (pixels?.pixels && pages?.pages && pixels.pixels.length > 0 && pages.pages.length > 0) {
       const currentPixelId = completeCampaignForm.getValues('pixelId');
@@ -803,7 +833,7 @@ export default function PlatformAdsMetaManagement() {
         const firstPixel = pixels.pixels[0];
         const firstPage = pages.pages[0];
         
-        // إعادة تعيين الفورم مع القيم الجديدة
+        // إعادة تعيين الفورم مع القيم الديدة
         const currentValues = completeCampaignForm.getValues();
         completeCampaignForm.reset({
           ...currentValues,
@@ -811,6 +841,8 @@ export default function PlatformAdsMetaManagement() {
           pageId: firstPage.id
         });
         
+        console.log('🎯 تم تحديد البكسل الافتراضي:', firstPixel.name, firstPixel.id);
+        console.log('📄 تم تحديد الصحة الافتراضية:', firstPage.name, firstPage.id);
       }
     }
   }, [pixels, pages, completeCampaignForm]);
@@ -830,7 +862,7 @@ export default function PlatformAdsMetaManagement() {
     refetchOnWindowFocus: false,
   });
 
-  // تصفية الحملات حسب البحث والحالة
+  // تصفية الحملت حسب البحث والحالة
   const filteredCampaigns = campaigns?.campaigns?.filter((campaign: any) => {
     const matchesSearch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = campaignStatus === "all" || campaign.status.toLowerCase() === campaignStatus.toLowerCase();
@@ -848,20 +880,21 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
+      console.log('Meta Ad Sets response:', data);
       return data;
     },
     staleTime: 30000,
     retry: (failureCount, error: any) => {
       // لا تعيد المحاولة في حالة rate limit - دع الباك إند يتعامل معها
       if (error?.message?.includes('User request limit reached') || 
-          error?.message?.includes('يحتوي الحساب الإعلاني على الكثير من استدعاءات API')) {
+          error?.message?.includes('يحتوي الحساب الإعلاني على الكثير ن استدعاءات API')) {
         return false;
       }
       return failureCount < 2;
     },
   });
 
-  // جلب إحصائيات الحملات
+  // جلب إحصايات الحملات
   const { data: campaignInsights, isLoading: campaignInsightsLoading } = useQuery({
     queryKey: ["/api/platform-ads/meta/campaign-insights", selectedAccount, selectedDateRange.value, selectedDateRange.startDate.toISOString(), selectedDateRange.endDate.toISOString()],
     queryFn: async () => {
@@ -887,10 +920,10 @@ export default function PlatformAdsMetaManagement() {
       return insights;
     },
     enabled: !!selectedAccount && !!campaigns?.campaigns,
-    staleTime: 30000, // تحديث البيانات عند تغيير التاريخ
+    staleTime: 30000, // تحديث البيانات عد تغيير التاريخ
   });
 
-  // جلب إحصائيات المجموعات الإعلانية
+  // جلب إحصائيا المجموعات الإعلنية
   const { data: adSetInsights, isLoading: adSetInsightsLoading } = useQuery({
     queryKey: ["/api/platform-ads/meta/adgroup-insights", selectedAccount, selectedDateRange.value, selectedDateRange.startDate.toISOString(), selectedDateRange.endDate.toISOString()],
     queryFn: async () => {
@@ -916,7 +949,7 @@ export default function PlatformAdsMetaManagement() {
       return insights;
     },
     enabled: !!selectedAccount && !!adSets?.adGroups,
-    staleTime: 30000, // تحديث البيانات عند تغيير التاريخ
+    staleTime: 30000, // تحديث البانات عند تغيير التاريخ
   });
 
   // جلب الإعلانات للحساب المختار
@@ -930,6 +963,7 @@ export default function PlatformAdsMetaManagement() {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
+      console.log('Meta Ads response:', data);
       return data;
     },
     staleTime: 30000,
@@ -941,7 +975,7 @@ export default function PlatformAdsMetaManagement() {
     },
   });
 
-  // جلب إحصائيات الإعلانات
+  // جلب إحصائيا الإعلانات
   const { data: adInsights, isLoading: adInsightsLoading } = useQuery({
     queryKey: ["/api/platform-ads/meta/ad-insights", selectedAccount, selectedDateRange.value, selectedDateRange.startDate.toISOString(), selectedDateRange.endDate.toISOString()],
     queryFn: async () => {
@@ -1063,7 +1097,7 @@ export default function PlatformAdsMetaManagement() {
     return conversationStarted + conversationReplied + messagingFirstReply + totalMessaging + webLeads + groupedLeads + basicLeads + onsiteConversionLead + postSave;
   };
 
-  // Helper function to get conversions/purchases (شراء عبر الويب فقط) - مطابق لمنطق الخادم
+  // Helper function to get conversions/purchases (شراء عبر الويب فقط) - مطابق لمنطق الخام
   const getConversionsValue = (insights: any): number => {
     if (!insights.actions) return 0;
     
@@ -1072,7 +1106,7 @@ export default function PlatformAdsMetaManagement() {
       (action.action_type.includes('purchase') || 
        action.action_type.includes('buy') ||
        action.action_type.includes('order')) &&
-      // استبعاد أي شيء يحتوي على view أو messaging أو conversation
+      // استبعاد أي شيء يحوي على view أو messaging أو conversation
       !action.action_type.includes('view') &&
       !action.action_type.includes('messaging') && 
       !action.action_type.includes('conversation') &&
@@ -1177,7 +1211,7 @@ export default function PlatformAdsMetaManagement() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'ACTIVE': return 'نشطة';
-      case 'PAUSED': return 'متوقفة';
+      case 'PAUSED': return 'متوقة';
       case 'ARCHIVED': return 'مؤرشفة';
       default: return status;
     }
@@ -1248,7 +1282,7 @@ export default function PlatformAdsMetaManagement() {
             <Card className="theme-border bg-theme-primary-lighter mb-6">
               <CardContent className="p-8 text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-theme-primary mx-auto"></div>
-                <p className="mt-4 text-gray-600 dark:text-gray-400">جاري فحص حالة الاتصال...</p>
+                <p className="mt-4 text-gray-600 dark:text-gray-400">جاري فحص حاة الاتصال...</p>
               </CardContent>
             </Card>
           ) : !(connectionStatus as any)?.meta?.connected ? (
@@ -1260,7 +1294,7 @@ export default function PlatformAdsMetaManagement() {
                     الاتصال بـ Meta غير مفعل
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                    يجب أولاً ربط حسابك في Meta Business Manager للوصول إلى إدارة الحملات
+                    جب أولاً ربط حسابك في Meta Business Manager للوصول إلى إدارة احملات
                   </p>
                   <Button 
                     onClick={() => window.location.href = '/platform-ads-meta'}
@@ -1273,7 +1307,7 @@ export default function PlatformAdsMetaManagement() {
               </CardContent>
             </Card>
           ) : (
-            <div>
+            <>
               {/* Payment Required Warning - Only show when selected account needs payment */}
               {selectedAccount && (adAccounts as any)?.accounts && (() => {
                 const accounts = (adAccounts as any).accounts;
@@ -1380,7 +1414,7 @@ export default function PlatformAdsMetaManagement() {
                                   case 1: return '🟢 نشط';
                                   case 2: return '🔴 معطل للدفع';
                                   case 3: return '🔴 غير مسدد';
-                                  case 7: return '🟠 مراجعة أمنية';
+                                  case 7: return '🟠 مراعة أمنية';
                                   case 8: return '🟡 غير متاح مؤقتاً';
                                   case 9: return '🟠 مراجعة دفع';
                                   case 100: return '🟡 إغلاق معلق';
@@ -1406,6 +1440,7 @@ export default function PlatformAdsMetaManagement() {
                       
                       {(adAccounts as any)?.accounts && (() => {
                         const accounts = (adAccounts as any).accounts;
+                        console.log('🔍 تحليل الحسابات:', accounts.slice(0, 2)); // للفحص
                         
                         const activeAccounts = accounts.filter((acc: any) => acc.account_status === 1);
                         const needsPayment = accounts.filter((acc: any) => 
@@ -1423,7 +1458,7 @@ export default function PlatformAdsMetaManagement() {
                           acc.account_status === 100 // PENDING_CLOSURE
                         );
                         
-                        // حساب إجمالي المبالغ المطلوبة
+                        // ساب إجمالي المباغ المطلوبة
                         const totalAmountOwed = needsPayment.reduce((total: number, acc: any) => {
                           const balance = acc.balance ? parseInt(acc.balance) : 0;
                           const amountOwed = acc.amount_owed ? parseInt(acc.amount_owed) : 0;
@@ -1436,17 +1471,26 @@ export default function PlatformAdsMetaManagement() {
                           return total + spent;
                         }, 0);
                         
-                        // تحويل من cents إلى دولار مع تنسيق الفواصل
+                        // تحويل من cents إلى ولار مع تنسيق الفواصل
                         const totalOwedInDollars = (totalAmountOwed / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                         const totalSpentNeedsPaymentInDollars = (totalSpentNeedsPayment / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                         
-                        // حساب إجمالي المبالغ المنفقة للحسابات النشطة
+                        // حساب إجمالي البالغ المنفقة للحابات النشطة
                         const totalSpentActive = activeAccounts.reduce((total: number, acc: any) => {
                           const spent = acc.amount_spent ? parseInt(acc.amount_spent) : 0;
                           return total + spent;
                         }, 0);
                         const totalSpentInDollars = (totalSpentActive / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                         
+                        console.log('📊 العدادات:', { 
+                          active: activeAccounts.length, 
+                          needsPayment: needsPayment.length, 
+                          restricted: restricted.length, 
+                          needsSetup: needsSetup.length, 
+                          totalOwed: totalOwedInDollars, 
+                          totalSpentActive: totalSpentInDollars,
+                          totalSpentNeedsPayment: totalSpentNeedsPaymentInDollars
+                        });
                         
                         return (
                           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
@@ -1504,7 +1548,7 @@ export default function PlatformAdsMetaManagement() {
                               </div>
                               <div className={`text-xs ${
                                 accountFilter === 'needsPayment' ? 'text-white/90' : 'text-red-600 dark:text-red-400'
-                              }`}>مطلوب رصيد</div>
+                              }`}>مطلوب دفع</div>
                               <div className={`text-xs font-medium mt-1 space-y-0.5 ${
                                 accountFilter === 'needsPayment' ? 'text-white' : 'text-red-700 dark:text-red-300'
                               }`}>
@@ -1565,7 +1609,7 @@ export default function PlatformAdsMetaManagement() {
                     <div className="flex items-center justify-between">
                       <div></div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">الفترة الزمنية:</span>
+                        <span className="text-sm text-muted-foreground">الفترة ازمنية:</span>
                         {getDateRangeOptions().map((option) => (
                           <Button
                             key={option.value}
@@ -1589,9 +1633,9 @@ export default function PlatformAdsMetaManagement() {
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-3" align="start">
                             <div className="space-y-3">
-                              <div className="text-sm font-medium">اختر فترة مخصصة</div>
+                              <div className="text-sm font-medium">اختر فتة مخصصة</div>
                               <div className="text-xs text-muted-foreground">
-                                اختر تاريخ البداية أولاً ثم تاريخ النهاية
+                                اختر تاريخ البدية أولاً ثم تاريخ النهاية
                               </div>
                               
                               <Calendar
@@ -1640,7 +1684,7 @@ export default function PlatformAdsMetaManagement() {
                               
                               {customDateRange?.from && customDateRange?.to && (
                                 <div className="text-xs text-muted-foreground bg-gray-50 p-2 rounded text-center">
-                                  <div className="font-medium text-xs mb-1">الفترة المحددة:</div>
+                                  <div className="font-medium text-xs mb-1">لفترة المحددة:</div>
                                   <div className="text-xs">
                                     {format(customDateRange.from, "MM/dd", { locale: ar })} - {format(customDateRange.to, "MM/dd", { locale: ar })}
                                   </div>
@@ -1672,7 +1716,7 @@ export default function PlatformAdsMetaManagement() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-base font-semibold text-theme-primary">
-                              الحملات الإعلانية ({filteredCampaigns.length})
+                              الحملات العلانية ({filteredCampaigns.length})
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1680,7 +1724,7 @@ export default function PlatformAdsMetaManagement() {
                             <div className="relative">
                               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                               <Input
-                                placeholder="البحث في الحملات..."
+                                placeholder="البحث في الحمات..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="pr-10 theme-border text-right w-40 text-sm"
@@ -1700,8 +1744,8 @@ export default function PlatformAdsMetaManagement() {
                             </Select>
                             <Dialog open={createCampaignOpen} onOpenChange={(open) => {
                               if (open) {
-                                // إعداد القيم الافتراضية مع البكسل والصفحة
-                                // اختيار أول بكسل لا يحتوي على "بلا اتصال"
+                                // إعداد القيم الافتراضية مع البكسل والفحة
+                                // اختيار أول كسل لا يحتوي على "بلا اتصال"
                                 const availablePixels = pixels?.pixels || [];
                                 const firstPixel = availablePixels.find((p: any) => !p.name.includes("بلا اتصال")) || availablePixels[0];
                                 const firstPage = pages?.pages?.[0];
@@ -1737,7 +1781,7 @@ export default function PlatformAdsMetaManagement() {
                                   displayName: "",
                                   adText: "",
                                   adDescription: "",
-                                  callToAction: "MESSAGE_PAGE", // افتراضي للرسائل
+                                  callToAction: "MESSAGE_PAGE", // افتراضي للرائل
                                   
                                   // Media files
                                   videoUrl: "",
@@ -1777,6 +1821,10 @@ export default function PlatformAdsMetaManagement() {
                                   }
                                 });
                                 
+                                console.log('🎯 تم إعداد المودال مع القيم الافتراضية:');
+                                console.log('📄 الصفحة:', firstPage?.name, firstPage?.id);
+                                console.log('🎯 البكسل:', firstPixel?.name, firstPixel?.id);
+                                console.log('🌍 الاستهداف: العراق');
                               }
                               setCreateCampaignOpen(open);
                             }}>
@@ -1802,7 +1850,28 @@ export default function PlatformAdsMetaManagement() {
                                 
                                 <div>
                                   <Form {...completeCampaignForm}>
-                                    <div className="compact-form">
+                                    <form onSubmit={(e) => {
+                                      e.preventDefault();
+                                      
+                                      // التحقق من اختيار الحساب الإعلاني
+                                      if (!selectedAccount) {
+                                        toast({
+                                          title: "خطأ",
+                                          description: "يرجى اختيار الحساب الإعلاني أولاً",
+                                          variant: "destructive",
+                                        });
+                                        return;
+                                      }
+
+                                      // الحصول على بيانات النموذج مع إضافة adAccountId
+                                      const formData = completeCampaignForm.getValues();
+                                      const dataToSend = {
+                                        ...formData,
+                                        adAccountId: selectedAccount
+                                      };
+                                      
+                                      createCompleteCampaignMutation.mutate(dataToSend);
+                                    }} className="compact-form">
                                       
                                       {/* قسم اختيار المنتج */}
                                       <div className="form-section bg-theme-primary-light border theme-border rounded-lg mb-4">
@@ -1838,7 +1907,7 @@ export default function PlatformAdsMetaManagement() {
                                                     ))}
                                                   </SelectContent>
                                                 </Select>
-                                                <FormDescription>سيتم ملء بيانات الحملة تلقائياً من معلومات المنتج</FormDescription>
+                                                <FormDescription>سيتم ملء يانات الحملة تلقئياً من معلومات المنتج</FormDescription>
                                                 <FormMessage />
                                               </FormItem>
                                             )}
@@ -1906,7 +1975,7 @@ export default function PlatformAdsMetaManagement() {
                                                     <FormLabel className="text-theme-primary">هدف الحملة</FormLabel>
                                                     <Select onValueChange={(value) => {
                                                       field.onChange(value);
-                                                      // تحديث زر الدعوة حسب الهدف
+                                                      // تحديث زر الدعوة حسب الهف
                                                       if (value === 'OUTCOME_TRAFFIC') {
                                                         completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE');
                                                       } else if (value === 'OUTCOME_SALES') {
@@ -1920,7 +1989,7 @@ export default function PlatformAdsMetaManagement() {
                                                       </FormControl>
                                                       <SelectContent className="bg-black border-gray-700 z-50">
                                                         <SelectItem value="OUTCOME_TRAFFIC">حملة رسائل (Messages)</SelectItem>
-                                                        <SelectItem value="OUTCOME_SALES">حملة تحويلات (Conversions)</SelectItem>
+                                                        <SelectItem value="OUTCOME_SALES">حملة تحيلات (Conversions)</SelectItem>
                                                       </SelectContent>
                                                     </Select>
                                                     <FormMessage />
@@ -2043,7 +2112,7 @@ export default function PlatformAdsMetaManagement() {
                                         )}
                                       </div>
                                       
-                                      {/* قسم بيانات المجموعة الإعلانية */}
+                                      {/* قسم بياات المجموعة الإعانية */}
                                       <div className="form-section bg-theme-primary-light border theme-border rounded-lg mt-4">
                                         <h3 
                                           className={`text-base font-medium mb-2 flex items-center justify-between cursor-pointer hover:bg-gray-900/95 border-gray-700 backdrop-blur-sm p-2 rounded transition-colors ${
@@ -2066,7 +2135,7 @@ export default function PlatformAdsMetaManagement() {
                                             ) : (
                                               <span className="bg-theme-gradient text-white text-xs px-2 py-1 rounded-full ml-2 theme-shadow">2</span>
                                             )}
-                                            بيانات المجموعة الإعلانية
+                                            بياات المجموعة الإعانية
                                             {adSetCompleted && (
                                               <CheckCircle className="h-4 w-4 ml-2 text-green-600 dark:text-green-400" />
                                             )}
@@ -2125,7 +2194,7 @@ export default function PlatformAdsMetaManagement() {
                                                     <Select onValueChange={field.onChange} value={field.value}>
                                                       <FormControl>
                                                         <SelectTrigger className="theme-input">
-                                                          <SelectValue placeholder="اختر استراتيجية المزايدة" />
+                                                          <SelectValue placeholder="اختر استرايجية المزايدة" />
                                                         </SelectTrigger>
                                                       </FormControl>
                                                       <SelectContent className="bg-black border-gray-700">
@@ -2276,7 +2345,7 @@ export default function PlatformAdsMetaManagement() {
                                                   render={({ field }) => (
                                                     <FormItem>
                                                       <div className="flex items-center justify-between mb-3">
-                                                        <FormLabel className="text-theme-primary">اختر الولايات العراقية</FormLabel>
+                                                        <FormLabel className="text-theme-primary">اختر الولايات اعراقية</FormLabel>
                                                         <button
                                                           type="button"
                                                           onClick={() => {
@@ -2290,30 +2359,30 @@ export default function PlatformAdsMetaManagement() {
                                                           }}
                                                           className="px-3 py-1 text-xs bg-theme-primary hover:bg-theme-primary-light text-white rounded-md transition-colors"
                                                         >
-                                                          {(field.value || []).length === 18 ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                                          {(field.value || []).length === 18 ? 'إلغاء تحديد اكل' : 'تحديد الكل'}
                                                         </button>
                                                       </div>
                                                       <div className="max-h-60 overflow-y-auto border rounded-md p-3 theme-border bg-gray-900/30">
                                                         <div className="grid grid-cols-4 gap-2">
                                                           {[
                                                             { id: "Baghdad", name: "محافظة بغداد" },
-                                                            { id: "Basra", name: "محافظة البصرة" },
+                                                            { id: "Basra", name: "محافظة لبصرة" },
                                                             { id: "Nineveh", name: "محافظة نينوى" },
-                                                            { id: "Erbil", name: "محافظة أربيل" },
+                                                            { id: "Erbil", name: "محافظة ربيل" },
                                                             { id: "Sulaymaniyah", name: "محافظة السليمانية" },
                                                             { id: "Kirkuk", name: "محافظة كركوك" },
-                                                            { id: "Najaf", name: "محافظة النجف" },
+                                                            { id: "Najaf", name: "محافظة الجف" },
                                                             { id: "Karbala", name: "محافظة كربلاء" },
-                                                            { id: "Babylon", name: "محافظة بابل" },
-                                                            { id: "Diyala", name: "محافظة ديالى" },
+                                                            { id: "Babylon", name: "محافظة ببل" },
+                                                            { id: "Diyala", name: "مافظة ديالى" },
                                                             { id: "Anbar", name: "محافظة الأنبار" },
-                                                            { id: "Saladin", name: "محافظة صلاح الدين" },
-                                                            { id: "Qadisiyyah", name: "محافظة القادسية" },
+                                                            { id: "Saladin", name: "حافظة صلاح الدين" },
+                                                            { id: "Qadisiyyah", name: "محفظة القادسية" },
                                                             { id: "Wasit", name: "محافظة واسط" },
                                                             { id: "Maysan", name: "محافظة ميسان" },
                                                             { id: "Dhi_Qar", name: "محافظة ذي قار" },
                                                             { id: "Muthanna", name: "محافظة المثنى" },
-                                                            { id: "Dohuk", name: "محافظة دهوك" }
+                                                            { id: "Dohuk", name: "محافظة دهك" }
                                                           ].map((region) => (
                                                             <button
                                                               key={region.id}
@@ -2443,17 +2512,17 @@ export default function PlatformAdsMetaManagement() {
                                               )}
                                             </div>
                                             
-                                            {/* مواضع الإعلان - قوائم منسدلة في سطر واحد */}
+                                            {/* واضع الإعلان - قوئم منسدلة في سطر احد */}
                                             <div className="space-y-4">
                                               <h4 className="text-sm font-medium text-theme-primary mb-2">المواضع والمنصات</h4>
                                               <div className="grid grid-cols-4 gap-3">
-                                                {/* الأجهزة المستهدفة */}
+                                                {/* الأجهزة امستهدفة */}
                                                 <FormField
                                                   control={completeCampaignForm.control}
                                                   name="placements.devicePlatforms"
                                                   render={({ field }) => (
                                                     <FormItem className="space-y-2">
-                                                      <FormLabel className="text-theme-primary block">الأجهزة المستهدفة</FormLabel>
+                                                      <FormLabel className="text-theme-primary block">الأجهزة المستهدة</FormLabel>
                                                       <FormControl>
                                                         <Popover>
                                                           <PopoverTrigger asChild>
@@ -2467,7 +2536,7 @@ export default function PlatformAdsMetaManagement() {
                                                                  field.value?.length === 1 && field.value.includes('mobile') ? "📱 محمول" :
                                                                  field.value?.length === 1 && field.value.includes('desktop') ? "🖥️ كمبيوتر" :
                                                                  field.value?.length === 1 && field.value.includes('tablet') ? "📱 لوحي" :
-                                                                 `${field.value?.length || 0} محدد`}
+                                                                 `${field.value?.length || 0} حدد`}
                                                               </span>
                                                               <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                             </Button>
@@ -2636,7 +2705,7 @@ export default function PlatformAdsMetaManagement() {
                                                   )}
                                                 />
                                                 
-                                                {/* نوع الاتصال */}
+                                                {/* نوع ااتصال */}
                                                 <FormField
                                                   control={completeCampaignForm.control}
                                                   name="placements.connectionTypes"
@@ -2699,7 +2768,7 @@ export default function PlatformAdsMetaManagement() {
                                               
                                               {/* مواضع المنصات المحددة */}
                                               <div className="grid grid-cols-2 gap-4 mt-4">
-                                                {/* مواضع Facebook - يظهر فقط عند اختيار Facebook */}
+                                                {/* مواضع Facebook - يظهر فقط عند اخيار Facebook */}
                                                 {completeCampaignForm.watch('placements.publisherPlatforms')?.includes('facebook') && (
                                                   <FormField
                                                     control={completeCampaignForm.control}
@@ -2716,8 +2785,8 @@ export default function PlatformAdsMetaManagement() {
                                                                 className="theme-input justify-between w-full"
                                                               >
                                                                 <span className="truncate">
-                                                                  {field.value?.length === 0 ? "اختر مواضع Facebook" :
-                                                                   field.value?.length === 1 ? `📱 ${field.value[0] === 'feed' ? 'الخلاصة' : field.value[0] === 'right_hand_column' ? 'العمود الجانبي' : field.value[0] === 'marketplace' ? 'Marketplace' : field.value[0] === 'instant_article' ? 'المقالات الفورية' : field.value[0]}` :
+                                                                  {field.value?.length === 0 ? "اختر مواع Facebook" :
+                                                                   field.value?.length === 1 ? `📱 ${field.value[0] === 'feed' ? 'الخلاصة' : field.value[0] === 'right_hand_column' ? 'العمود اجانبي' : field.value[0] === 'marketplace' ? 'Marketplace' : field.value[0] === 'instant_article' ? 'المقالات الورية' : field.value[0]}` :
                                                                    `${field.value?.length || 0} موضع محدد`}
                                                                 </span>
                                                                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -2727,9 +2796,9 @@ export default function PlatformAdsMetaManagement() {
                                                               <div className="p-2 space-y-2">
                                                                 {[
                                                                   { value: "feed" as const, label: "📱 خلاصة Facebook", desc: "الموضع الأساسي" },
-                                                                  { value: "right_hand_column" as const, label: "➡️ العمود الجانبي", desc: "فقط على الكمبيوتر" },
+                                                                  { value: "right_hand_column" as const, label: "➡️ العمود الجانبي", desc: "فقط على الكمبيوت" },
                                                                   { value: "marketplace" as const, label: "🛍️ Marketplace", desc: "في منطقة التسوق" },
-                                                                  { value: "instant_article" as const, label: "⚡ المقالات الفورية", desc: "داخل المقالات" },
+                                                                  { value: "instant_article" as const, label: "📰 المقالات الفورية", desc: "داخل المقالات" },
                                                                   { value: "in_stream_video" as const, label: "📺 فيديوهات البث", desc: "أثناء مشاهدة الفيديو" },
                                                                   { value: "search" as const, label: "🔍 نتائج البحث", desc: "في صفحة البحث" },
                                                                   { value: "story" as const, label: "📸 قصص Facebook", desc: "بين القصص" },
@@ -2948,7 +3017,7 @@ export default function PlatformAdsMetaManagement() {
                                                 name="adDescription"
                                                 render={({ field }) => (
                                                   <FormItem>
-                                                    <FormLabel className="text-theme-primary">وصف الإعلان</FormLabel>
+                                                    <FormLabel className="text-theme-primary">وصف الإعلا</FormLabel>
                                                     <FormControl>
                                                       <Textarea 
                                                         {...field}
@@ -2958,7 +3027,7 @@ export default function PlatformAdsMetaManagement() {
                                                       />
                                                     </FormControl>
                                                     <FormDescription className="text-orange-500 font-medium">
-                                                      ⚠️ 7 كلمات كحد أقصى (اختياري)
+                                                      ⚠️ 7 كمات كحد أقصى (اختاري)
                                                     </FormDescription>
                                                     <FormMessage />
                                                   </FormItem>
@@ -2973,7 +3042,7 @@ export default function PlatformAdsMetaManagement() {
                                                 name="callToAction"
                                                 render={({ field }) => (
                                                   <FormItem>
-                                                    <FormLabel className="text-theme-primary">إجراء نقر الزبون</FormLabel>
+                                                    <FormLabel className="text-theme-primary">إجرء نقر الزبون</FormLabel>
                                                     <Select onValueChange={field.onChange} value={field.value} defaultValue="BOOK_NOW">
                                                       <FormControl>
                                                         <SelectTrigger className="theme-input">
@@ -2990,8 +3059,8 @@ export default function PlatformAdsMetaManagement() {
                                                           <>
                                                             <SelectItem value="SHOP_NOW">تسوق الآن</SelectItem>
                                                             <SelectItem value="LEARN_MORE">اعرف المزيد</SelectItem>
-                                                            <SelectItem value="BOOK_TRAVEL">احجز الآن</SelectItem>
-                                                            <SelectItem value="SIGN_UP">سجل الآن</SelectItem>
+                                                            <SelectItem value="BOOK_TRAVEL">حجز الآن</SelectItem>
+                                                            <SelectItem value="SIGN_UP">سجل اآن</SelectItem>
                                                             <SelectItem value="CONTACT_US">اتصل بنا</SelectItem>
                                                           </>
                                                         )}
@@ -3009,7 +3078,7 @@ export default function PlatformAdsMetaManagement() {
                                                   name="landingPageUrl"
                                                   render={({ field }) => (
                                                     <FormItem>
-                                                      <FormLabel className="text-theme-primary">رابط الصفحة *</FormLabel>
+                                                      <FormLabel className="text-theme-primary">رابط الصحة *</FormLabel>
                                                       <FormControl>
                                                         <Input 
                                                           {...field}
@@ -3146,7 +3215,7 @@ export default function PlatformAdsMetaManagement() {
                                                           {pages?.pages?.map((page: any) => (
                                                             <SelectItem key={page.id} value={page.id} className="whitespace-nowrap p-2 min-w-full">
                                                               <div className="w-full flex items-center justify-between gap-2">
-                                                                {/* المحتوى النصي على اليمين */}
+                                                                {/* المحتوى الني على اليمين */}
                                                                 <div className="flex-grow text-right overflow-hidden">
                                                                   <div className="space-y-1">
                                                                     <span className="font-medium text-sm block truncate">
@@ -3174,7 +3243,7 @@ export default function PlatformAdsMetaManagement() {
                                                                 
                                                                 {/* الصور على اليسار */}
                                                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                                                  {/* صورة الانستجرام */}
+                                                                  {/* صورة اانستجرام */}
                                                                   {page.instagram_business_account?.profile_picture_url && (
                                                                     <img 
                                                                       src={page.instagram_business_account.profile_picture_url} 
@@ -3202,7 +3271,7 @@ export default function PlatformAdsMetaManagement() {
                                                           ))}
                                                         </SelectContent>
                                                       </Select>
-                                                      <FormDescription>مطلوب لحملات الرسائل</FormDescription>
+                                                      <FormDescription>مطلب لحملات الرسائل</FormDescription>
                                                       <FormMessage />
                                                     </FormItem>
                                                   )}
@@ -3217,10 +3286,10 @@ export default function PlatformAdsMetaManagement() {
                                                   <div className="text-center space-y-1">
                                                     <div className="flex items-center justify-center gap-1">
                                                       <MessageCircle className="h-4 w-4 text-theme-primary" />
-                                                      <h3 className="text-sm font-bold text-theme-primary">وجهات الرسائل</h3>
+                                                      <h3 className="text-sm font-bold text-theme-primary">وجهات ارسائل</h3>
                                                     </div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-                                                      اختر التطبيقات التي تريد استقبال الرسائل من خلالها
+                                                      اختر التطبيقات التي تريد استقبال ارسائل من خلالها
                                                     </p>
                                                   </div>
                                                   
@@ -3387,7 +3456,7 @@ export default function PlatformAdsMetaManagement() {
                                                           
                                                           {/* Thumbnail preview */}
                                                           {video.thumbnailUrl ? (
-                                                            <div className="aspect-video bg-black rounded overflow-hidden mb-2">
+                                                            <div className="aspect-video bg-black rounded overflow-hidden mb-2 relative">
                                                               <img 
                                                                 src={video.thumbnailUrl} 
                                                                 alt={`معاينة ${video.fileName}`}
@@ -3430,6 +3499,9 @@ export default function PlatformAdsMetaManagement() {
                                                 </div>
                                               )}
                                             </div>
+                                          </div>
+                                        )}
+                                      </div>
                                       
                                       {/* أزرار الإجراءات */}
                                       <div className="flex justify-between mt-6">
@@ -3442,28 +3514,9 @@ export default function PlatformAdsMetaManagement() {
                                           إلغاء
                                         </Button>
                                         <Button
-                                          type="button"
+                                          type="submit"
                                           disabled={createCompleteCampaignMutation.isPending || !selectedAccount}
                                           className="bg-theme-gradient hover:opacity-90 text-white theme-shadow min-w-[120px]"
-                                          onClick={() => {
-                                            // التحقق من اختيار الحساب الإعلاني
-                                            if (!selectedAccount) {
-                                              toast({
-                                                title: "خطأ",
-                                                description: "يرجى اختيار الحساب الإعلاني أولاً",
-                                                variant: "destructive",
-                                              });
-                                              return;
-                                            }
-
-                                            const data = completeCampaignForm.getValues();
-                                            const dataToSend = {
-                                              ...data,
-                                              adAccountId: selectedAccount
-                                            };
-                                            
-                                            createCompleteCampaignMutation.mutate(dataToSend);
-                                          }}
                                         >
                                           {createCompleteCampaignMutation.isPending ? (
                                             <div className="flex items-center">
@@ -3475,11 +3528,12 @@ export default function PlatformAdsMetaManagement() {
                                           )}
                                         </Button>
                                       </div>
-                                    </div>
+                                    </form>
                                   </Form>
                                 </div>
                               </DialogContent>
                             </Dialog>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -3543,7 +3597,7 @@ export default function PlatformAdsMetaManagement() {
                       </button>
                     </div>
 
-                    {/* Table Container - منفصل ومع تمرير أفقي */}
+                    {/* Table Container - منفصل ومع ترير أفقي */}
                     <Card className="theme-border bg-theme-primary-lighter">
                       <CardContent className="p-0">
                         {campaignsLoading ? (
@@ -3689,7 +3743,7 @@ export default function PlatformAdsMetaManagement() {
                                               // حساب النتائج بناءً على نوع الحملة
                                               if (campaign.objective === 'OUTCOME_SALES') {
                                                 const purchases = getActionValue(insights, 'purchase') || 0;
-                                                return `🛒 ${formatNumber(purchases)}`;
+                                                return ` ${formatNumber(purchases)}`;
                                               } else if (campaign.objective === 'OUTCOME_TRAFFIC' || campaign.objective === 'LEAD_GENERATION') {
                                                 const messaging = getActionValue(insights, 'onsite_conversion.messaging_conversation_started_7d') || 0;
                                                 return `💬 ${formatNumber(messaging)}`;
@@ -3764,7 +3818,7 @@ export default function PlatformAdsMetaManagement() {
                                             size="sm" 
                                             variant="outline" 
                                             className="theme-border hover:bg-theme-primary-light"
-                                            title="عرض الإحصائيات"
+                                            title="عرض اإحصائيات"
                                           >
                                             <BarChart3 className="h-4 w-4" />
                                           </Button>
@@ -3783,7 +3837,7 @@ export default function PlatformAdsMetaManagement() {
 
                   {/* Ad Sets Tab */}
                   <TabsContent value="adsets" className="space-y-3">
-                    {/* Control Panel - منفصل عن الجدول */}
+                    {/* Control Panel - مفصل عن الجدول */}
                     <Card className="theme-border bg-theme-primary-lighter">
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
@@ -3797,7 +3851,7 @@ export default function PlatformAdsMetaManagement() {
                             <div className="relative">
                               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                               <Input
-                                placeholder="البحث في المجموعات..."
+                                placeholder="البحث في المجموعت..."
                                 value={adSetSearchTerm}
                                 onChange={(e) => setAdSetSearchTerm(e.target.value)}
                                 className="pr-10 theme-border text-right w-40 text-sm"
@@ -3806,10 +3860,10 @@ export default function PlatformAdsMetaManagement() {
                             {/* Status Filter */}
                             <Select value={adSetStatusFilter} onValueChange={setAdSetStatusFilter}>
                               <SelectTrigger className="w-32 theme-border text-right text-sm">
-                                <SelectValue placeholder="حالة المجموعة" />
+                                <SelectValue placeholder="الة المجموعة" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="all">جميع المجموعات</SelectItem>
+                                <SelectItem value="all">جميع الجموعات</SelectItem>
                                 <SelectItem value="active">نشطة</SelectItem>
                                 <SelectItem value="paused">متوقفة</SelectItem>
                                 <SelectItem value="archived">مؤرشفة</SelectItem>
@@ -3853,7 +3907,7 @@ export default function PlatformAdsMetaManagement() {
                         )}
                       >
                         <Target className="w-4 h-4 mb-1" />
-                        <span className="text-xs font-medium">المجموعات</span>
+                        <span className="text-xs font-medium">المجموعا</span>
                         <span className="text-xs opacity-75">({filteredAdSets.length})</span>
                       </button>
                       
@@ -3886,7 +3940,7 @@ export default function PlatformAdsMetaManagement() {
                       </button>
                     </div>
 
-                    {/* Table Container - منفصل ومع تمرير أفقي */}
+                    {/* Table Container - منفص ومع تمرير أفقي */}
                     <Card className="theme-border bg-theme-primary-lighter">
                       <CardContent className="p-0">
                         {adSetsError && (
@@ -3895,16 +3949,16 @@ export default function PlatformAdsMetaManagement() {
                             <AlertTitle>
                               {
                                 (adSetsError as any)?.message?.includes('User request limit reached') ||
-                                (adSetsError as any)?.message?.includes('يحتوي الحساب الإعلاني')
-                                  ? 'تم تجاوز حد الطلبات'
-                                  : 'خطأ في جلب البيانات'
+                                (adSetsError as any)?.message?.includes('يحتوي الساب الإعلاني')
+                                  ? 'تم تجاوز حد الطلبت'
+                                  : 'خطأ في جلب ابيانات'
                               }
                             </AlertTitle>
                             <AlertDescription>
                               {
                                 (adSetsError as any)?.message?.includes('User request limit reached') ||
                                 (adSetsError as any)?.message?.includes('يحتوي الحساب الإعلاني')
-                                  ? 'تم الوصول إلى حد طلبات Facebook API. النظام يحاول تلقائياً إعادة المحاولة. الرجاء الانتظار قليلاً.'
+                                  ? 'تم الوصول إلى حد طلبات Facebook API. النظام يحاول تلقئياً إعادة المحالة. الرجاء الانتظار قليلاً.'
                                   : (adSetsError as any)?.message || 'فشل في جلب المجموعات الإعلانية'
                               }
                             </AlertDescription>
@@ -3966,7 +4020,7 @@ export default function PlatformAdsMetaManagement() {
                                   <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[80px]">تاريخ الانتهاء</TableHead>
                                   <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[80px]">الجدول الزمني</TableHead>
                                   <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[80px]">جهات الاتصال</TableHead>
-                                  <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[100px]">جهات اتصال جديدة</TableHead>
+                                  <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[100px]">جهات اتصال جدية</TableHead>
                                   <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[80px]">عمليات الشراء</TableHead>
                                   <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[80px]">تكلفة الشراء</TableHead>
                                   <TableHead className="text-center theme-border-b text-theme-primary font-semibold px-2 py-2 min-w-[100px]">الإجراءات</TableHead>
@@ -4030,7 +4084,7 @@ export default function PlatformAdsMetaManagement() {
                                             <span className={`text-xs font-medium ${
                                               adSet.status === 'ACTIVE' ? 'text-theme-primary' : 'text-theme-primary/60'
                                             }`}>
-                                              {adSet.status === 'ACTIVE' ? 'نشط' : 'متوقف'}
+                                              {adSet.status === 'ACTIVE' ? 'نشط' : 'موقوف'}
                                             </span>
                                           </div>
                                         </TableCell>
@@ -4069,13 +4123,13 @@ export default function PlatformAdsMetaManagement() {
                                                 const purchases = getActionValue(insights, 'purchase') || 0;
                                                 const messaging = getActionValue(insights, 'onsite_conversion.messaging_conversation_started_7d') || 0;
                                                 
-                                                // عرض شراء إذا وجد
+                                                // عرض شراء إذا ود
                                                 if (purchases > 0) {
                                                   return 'شراء عبر الويب';
                                                 } 
                                                 // وإلا عرض محادثات إذا وجدت
                                                 else if (messaging > 0) {
-                                                  return 'محادثات';
+                                                  return 'محاثات';
                                                 } 
                                                 // لا يوجد بيانات
                                                 else {
@@ -4089,12 +4143,12 @@ export default function PlatformAdsMetaManagement() {
                                         <TableCell className="text-theme-primary font-medium">{formatNumber(insights.impressions || 0)}</TableCell>
                                         <TableCell className="text-theme-primary font-medium">
                                           {(() => {
-                                            // استخدام نفس منطق عرض النتائج
+                                            // استخدام نفس منق عرض النتائج
                                             const purchases = getActionValue(insights, 'purchase') || 0;
                                             const messaging = getActionValue(insights, 'onsite_conversion.messaging_conversation_started_7d') || 0;
                                             let resultCount = 0;
                                             
-                                            // حساب التكلفة بناءً على نوع النتيجة المعروضة
+                                            // حساب اتكلفة بناءً على نوع النتيجة المعروضة
                                             if (purchases > 0) {
                                               resultCount = purchases;
                                             } else if (messaging > 0) {
@@ -4111,12 +4165,12 @@ export default function PlatformAdsMetaManagement() {
                                           {(() => {
                                             const strategy = adSet.bid_strategy;
                                             if (strategy === 'LOWEST_COST_WITHOUT_CAP') return 'أقل تكلفة بدون حد أقصى';
-                                            if (strategy === 'LOWEST_COST_WITH_BID_CAP') return 'أقل تكلفة مع حد أقصى';
-                                            if (strategy === 'TARGET_COST') return 'التكلفة المستهدفة';
+                                            if (strategy === 'LOWEST_COST_WITH_BID_CAP') return 'أقل تكلفة ع حد أقصى';
+                                            if (strategy === 'TARGET_COST') return 'التكلفة المسهدفة';
                                             if (strategy === 'BID_CAP') return 'حد أقصى للمزايدة';
                                             if (strategy === 'COST_CAP') return 'حد أقصى للتكلفة';
                                             if (strategy === 'LOWEST_COST') return 'أقل تكلفة';
-                                            return strategy || 'تلقائي';
+                                            return strategy || 'تلقائ';
                                           })()}
                                         </TableCell>
                                         <TableCell className="text-theme-primary/80">
@@ -4124,7 +4178,7 @@ export default function PlatformAdsMetaManagement() {
                                             ? `${formatCurrency(parseFloat(adSet.daily_budget) / 100)} / يومي`
                                             : adSet.lifetime_budget 
                                             ? `${formatCurrency(parseFloat(adSet.lifetime_budget) / 100)} / إجمالي`
-                                            : 'غير محدد'
+                                            : 'ير محدد'
                                           }
                                         </TableCell>
                                         <TableCell className="text-theme-primary/80">
@@ -4134,7 +4188,7 @@ export default function PlatformAdsMetaManagement() {
                                           {adSet.end_time ? new Date(adSet.end_time).toLocaleDateString('en-US') : 'مستمر'}
                                         </TableCell>
                                         <TableCell className="text-theme-primary/80">
-                                          {adSet.start_time ? new Date(adSet.start_time).toLocaleDateString('en-US') : 'غير محدد'}
+                                          {adSet.start_time ? new Date(adSet.start_time).toLocaleDateString('en-US') : 'غي محدد'}
                                           {adSet.end_time && (
                                             <div className="text-xs text-theme-primary/60">
                                               إلى {new Date(adSet.end_time).toLocaleDateString('en-US')}
@@ -4304,8 +4358,8 @@ export default function PlatformAdsMetaManagement() {
                             <AlertDescription>
                               {
                                 (adsError as any)?.message?.includes('User request limit reached')
-                                  ? 'تم الوصول إلى حد طلبات Facebook API. النظام يحاول تلقائياً إعادة المحاولة. الرجاء الانتظار قليلاً.'
-                                  : (adsError as any)?.message || 'فشل في جلب الإعلانات'
+                                  ? 'تم الوصول إل حد طلبات Facebook API. النظام يحاول تلقائياً إعادة المحاولة. الرجاء الانتظر قليلاً.'
+                                  : (adsError as any)?.message || 'فشل ف جلب الإعلانات'
                               }
                             </AlertDescription>
                           </Alert>
@@ -4431,10 +4485,10 @@ export default function PlatformAdsMetaManagement() {
                                           {ad.adset?.name || 'غير محدد'}
                                         </TableCell>
                                         <TableCell className="text-theme-primary/80">
-                                          {ad.bid_type === 'CPC' ? 'كلفة لكل نقرة' : 
-                                           ad.bid_type === 'CPM' ? 'كلفة لكل 1000 ظهور' :
-                                           ad.bid_type === 'OCPM' ? 'كلفة محسّنة لكل ظهور' :
-                                           ad.bid_type === 'ABSOLUTE_OCPM' ? 'كلفة محسّنة مطلقة لكل ظهور' :
+                                          {ad.bid_type === 'CPC' ? 'تكلفة لكل نقرة' : 
+                                           ad.bid_type === 'CPM' ? 'تكلفة لكل 1000 ظهور' :
+                                           ad.bid_type === 'OCPM' ? 'تكلفة محسّنة لكل ظهور' :
+                                           ad.bid_type === 'ABSOLUTE_OCPM' ? 'تكلفة محسّنة مطلقة لكل ظهور' :
                                            ad.bid_type || 'تلقائي'}
                                         </TableCell>
                                         <TableCell className="text-theme-primary font-medium">
@@ -4599,7 +4653,7 @@ export default function PlatformAdsMetaManagement() {
                       >
                         <BarChart3 className="w-4 h-4 mb-1" />
                         <span className="text-xs font-medium">التحليلات</span>
-                        <span className="text-xs opacity-75">📊</span>
+                        <span className="text-xs opacity-75"></span>
                       </button>
                     </div>
                     
@@ -4613,7 +4667,7 @@ export default function PlatformAdsMetaManagement() {
                   </TabsContent>
                 </Tabs>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>

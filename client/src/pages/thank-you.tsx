@@ -6,10 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, Phone, MapPin, Package, Clock, MessageCircle, User, Mail, Calendar, DollarSign, Truck, Star, Copy, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/utils";
-import PixelTracker from "@/components/PixelTracker";
-import { OrderConfirmationModal } from "@/components/OrderConfirmationModal";
+import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
+import PixelTracker from '@/components/PixelTracker';
 import { apiRequest } from "@/lib/queryClient";
 
 interface OrderData {
@@ -39,22 +38,66 @@ interface OrderData {
     price: string;
     categoryId?: string;
     categoryName?: string;
+    categoryData?: {
+      googleCategory: string;
+    }
   };
   product_category?: string;
   category_name?: string;
 }
+
+// الحصول على Google Product Category من بيانات الفئة أو الافتراضي
+const getGoogleProductCategory = (orderData: any) => {
+  // إذا كان هناك googleCategory في بيانات الفئة، استخدمه
+  if (orderData?.productDetails?.categoryData?.googleCategory) {
+    return orderData.productDetails.categoryData.googleCategory;
+  }
+  
+  // إذا لم يوجد، استخدم الترجمة اليدوية كـ fallback
+  const categoryName = orderData?.category_name || orderData?.product_category || orderData?.productDetails?.categoryName || 'منتجات';
+  const fallbackMap: { [key: string]: string } = {
+    'أجهزة منزلية': 'Home & Garden > Kitchen & Dining > Kitchen Appliances',
+    'أدوات مطبخ': 'Home & Garden > Kitchen & Dining > Kitchen Tools & Utensils',
+    'ديكور منزلي': 'Home & Garden > Decor',
+    'أدوات تنظيف': 'Home & Garden > Household Supplies',
+    'منسوجات منزلية': 'Home & Garden > Linens & Bedding',
+    'أدوات حديقة': 'Home & Garden > Yard, Garden & Outdoor Living > Gardening',
+    'الأطفال والأسرة': 'Baby & Toddler',
+    'صحة ورياضة': 'Sporting Goods > Exercise & Fitness'
+  };
+  return fallbackMap[categoryName] || 'Home & Garden';
+};
 
 export default function ThankYouPage() {
   const { orderId } = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [messageSent, setMessageSent] = useState(false);
-  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  // تم إزالة popup التأكيد - الأزرار تفتح WhatsApp مباشرة
 
   const { data: order, isLoading, error } = useQuery<OrderData>({
-    queryKey: ["/api/orders", orderId],
+    queryKey: ["/api/landing-page-orders", orderId],
     enabled: !!orderId,
   });
+  
+  // تسجيل بيانات الطلب عند استلامها
+  useEffect(() => {
+    if (order) {
+      console.log('📝 Order data received:', {
+        id: order?.id,
+        customerName: order?.customerName,
+        customerPhone: order?.customerPhone,
+        orderNumber: order?.orderNumber,
+        totalAmount: order?.totalAmount,
+        createdAt: order?.createdAt,
+        customerAddress: order?.customerAddress,
+        customerGovernorate: order?.customerGovernorate
+      });
+    }
+    if (error) {
+      console.error('❌ Error fetching order:', error);
+    }
+  }, [order, error]);
 
   // الحصول على معلومات المنصة لإعادة التوجيه إلى المتجر
   const { data: platform } = useQuery({
@@ -62,61 +105,13 @@ export default function ThankYouPage() {
     enabled: !!order?.platformId,
   });
 
-  // Mutations لتحديث حالة الطلب
-  const confirmOrderMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      return await apiRequest(`/api/orders/${orderId}/status`, "PATCH", { status: "confirmed" });
-    },
-    onSuccess: () => {
-      toast({
-        title: "تم تأكيد الطلب",
-        description: "تم تأكيد طلبك بنجاح وسيتم التوصيل قريباً",
-      });
-      
-      // توجيه العميل إلى واتساب صاحب المنصة بعد التأكيد
-      if ((platform as any)?.whatsappNumber) {
+  // توجيه تلقائي إلى WhatsApp بعد 4 ثوانٍ
+  useEffect(() => {
+    if (order && (platform as any)?.whatsappNumber) {
+      const timer = setTimeout(() => {
         const message = `مرحباً، تم تأكيد طلبي رقم #${order?.orderNumber} بنجاح\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || "0").toLocaleString()} د.ع\n\nشكراً لكم`;
         
-        // تنسيق رقم WhatsApp (إزالة الصفر وإضافة كود الدولة إذا لزم الأمر)
-        let whatsappNumber = (platform as any).whatsappNumber;
-        if (whatsappNumber.startsWith('07')) {
-          whatsappNumber = '964' + whatsappNumber.substring(1);
-        } else if (whatsappNumber.startsWith('+964')) {
-          whatsappNumber = whatsappNumber.substring(1);
-        } else if (!whatsappNumber.startsWith('964')) {
-          whatsappNumber = '964' + whatsappNumber;
-        }
-        
-        const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-        
-        // فتح WhatsApp بعد تأخير قصير ليتمكن المستخدم من رؤية رسالة النجاح
-        setTimeout(() => {
-          window.open(whatsappUrl, '_blank');
-        }, 1500);
-      }
-      
-      queryClient.invalidateQueries({ queryKey: ["/api/orders", orderId] });
-      setShowConfirmationModal(false);
-    },
-    onError: () => {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ في تأكيد الطلب",
-        variant: "destructive",
-      });
-    }
-  });
-
-  const requestCallMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      return await apiRequest(`/api/orders/${orderId}/status`, "PATCH", { status: "processing" });
-    },
-    onSuccess: () => {
-      // توجيه العميل مباشرة إلى واتساب صاحب المنصة
-      if ((platform as any)?.whatsappNumber) {
-        const message = `مرحباً، أرجو الاتصال بي بخصوص طلبي رقم #${order?.orderNumber}\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || "0").toLocaleString()} د.ع`;
-        
-        // تنسيق رقم WhatsApp (إزالة الصفر وإضافة كود الدولة إذا لزم الأمر)
+        // تنسيق رقم WhatsApp
         let whatsappNumber = (platform as any).whatsappNumber;
         if (whatsappNumber.startsWith('07')) {
           whatsappNumber = '964' + whatsappNumber.substring(1);
@@ -128,33 +123,15 @@ export default function ThankYouPage() {
         
         const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
-      }
+      }, 4000); // 4 ثوانٍ
       
-      toast({
-        title: "تم التوجيه إلى WhatsApp",
-        description: "تم فتح محادثة WhatsApp مع صاحب المتجر",
-      });
-      setShowConfirmationModal(false);
-    },
-    onError: () => {
-      toast({
-        title: "خطأ",
-        description: "حدث خطأ في فتح WhatsApp",
-        variant: "destructive",
-      });
-    }
-  });
-
-  // إظهار بوب آب التأكيد بعد 5 ثواني
-  useEffect(() => {
-    if (order && orderId) {
-      const timer = setTimeout(() => {
-        setShowConfirmationModal(true);
-      }, 5000); // 5 ثواني
-
       return () => clearTimeout(timer);
     }
-  }, [order, orderId]);
+  }, [order, platform]);
+
+  // تم إزالة mutations - الأزرار تفتح WhatsApp مباشرة
+
+  // تم إزالة popup التأكيد - الأزرار تفتح WhatsApp مباشرة
 
   // إرسال رسالة تأكيد الطلب عبر WhatsApp مع عرض تنبيه النجاح فقط (مرة واحدة فقط)
   useEffect(() => {
@@ -245,7 +222,8 @@ export default function ThankYouPage() {
       productName = 'منتج';
     }
     
-    const productCategory = order.category_name || order.product_category || order.productDetails?.categoryName || 'منتجات';
+    // استخدام Google Product Category بدلاً من الفئة العربية
+    const productCategory = getGoogleProductCategory(order);
     const productId = order.productDetails?.id || order.landingPageId || order.id;
     
     console.log("🎯 Product tracking info:", {
@@ -302,7 +280,7 @@ export default function ThankYouPage() {
       customer_city: order.customerAddress,
       customer_state: order.customerGovernorate,
       customer_country: 'IQ', // ISO country code for Iraq
-      external_id: order.id,
+      external_id: order.customerPhone || order.customerEmail || order.id, // معرف خارجي فريد
       action_source: 'website'
     };
   };
@@ -557,7 +535,7 @@ export default function ThankYouPage() {
             </CardHeader>
             <CardContent>
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <p className="text-gray-700 leading-relaxed">{order.notes}</p>
+                <p className="text-black leading-relaxed font-medium">{order.notes}</p>
               </div>
             </CardContent>
           </Card>
@@ -610,63 +588,28 @@ export default function ThankYouPage() {
 
 
 
-        {/* أزرار الإجراءات */}
+        {/* رسالة التوجيه إلى WhatsApp */}
         <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="grid md:grid-cols-2 gap-4">
-              <Button 
-                onClick={() => {
-                  if ((platform as any)?.subdomain) {
-                    window.location.href = `https://sanadi.pro/${(platform as any).subdomain}`;
-                  } else {
-                    window.location.href = "/";
-                  }
-                }} 
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all duration-200"
-              >
-                <ExternalLink className="w-5 h-5 ml-2" />
-                تصفح منتجات أخرى
-              </Button>
-              
-              <Button 
-                onClick={() => {
-                  const shareText = `تم تأكيد طلبي رقم #${order.orderNumber} بقيمة ${formatCurrency(parseFloat(order.total))} د.ع`;
-                  if (navigator.share) {
-                    navigator.share({ title: "تأكيد الطلب", text: shareText });
-                  } else {
-                    navigator.clipboard.writeText(shareText);
-                    toast({ title: "تم النسخ", description: "تم نسخ تفاصيل الطلب" });
-                  }
-                }}
-                variant="outline"
-                className="w-full border-gray-300 hover:bg-gray-50 font-semibold py-3 px-6 rounded-xl shadow-lg transition-all duration-200"
-              >
-                <Copy className="w-5 h-5 ml-2" />
-                مشاركة تفاصيل الطلب
-              </Button>
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center space-x-3 space-x-reverse">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                <MessageCircle className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-green-600 mb-1">سيتم توجيهك إلى WhatsApp</h3>
+                <p className="text-green-600">لتأكيد طلبك ومتابعة التوصيل</p>
+              </div>
+            </div>
+            
+            <div className="mt-4 flex items-center justify-center space-x-2 space-x-reverse">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+              <span className="text-sm text-gray-500">جارٍ التوجيه...</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* بوب آب تأكيد الطلب */}
-      <OrderConfirmationModal
-        isOpen={showConfirmationModal}
-        onClose={() => setShowConfirmationModal(false)}
-        orderNumber={order?.orderNumber || ""}
-        customerPhone={order?.customerPhone || ""}
-        orderStatus={order?.status || "pending"}
-        onConfirmOrder={() => {
-          if (orderId) {
-            confirmOrderMutation.mutate(orderId);
-          }
-        }}
-        onRequestCall={() => {
-          if (orderId) {
-            requestCallMutation.mutate(orderId);
-          }
-        }}
-      />
+      {/* تم إزالة popup التأكيد - الأزرار تفتح WhatsApp مباشرة */}
     </div>
   );
 }

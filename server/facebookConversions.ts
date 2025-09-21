@@ -102,8 +102,12 @@ export function createFacebookConversionEvent(
   userAgent?: string,
   clientIP?: string
 ): FacebookConversionEvent {
-  // استخدام event_id من العميل إذا كان موجوداً، وإلا إنشاء واحد جديد
-  const eventId = eventData.event_id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // استخدام event_id من العميل (مطلوب لمنع التكرار)
+  const eventId = eventData.event_id;
+  
+  if (!eventId) {
+    console.warn('⚠️ Facebook Conversions API: Missing event_id - this may cause duplicate events');
+  }
   
   // تشفير البيانات الحساسة
   const hashedUserData: any = {};
@@ -177,8 +181,20 @@ export function createFacebookConversionEvent(
   // دائماً إرسال USD لـ Facebook API
   customData.currency = 'USD';
   
+  // تنظيف وتوحيد content_ids لضمان المطابقة مع الكتالوج
   if (eventData.content_ids) {
-    customData.content_ids = eventData.content_ids;
+    const normalizedIds = Array.isArray(eventData.content_ids) 
+      ? eventData.content_ids.map((id: any) => String(id).trim()).filter((id: string) => id.length > 0)
+      : [String(eventData.content_ids).trim()].filter((id: string) => id.length > 0);
+    
+    if (normalizedIds.length > 0) {
+      customData.content_ids = normalizedIds;
+    }
+  }
+  
+  // إضافة content_type لتحسين المطابقة
+  if (eventData.content_type) {
+    customData.content_type = eventData.content_type;
   }
   
   if (eventData.content_name) {
@@ -189,8 +205,8 @@ export function createFacebookConversionEvent(
     customData.content_category = eventData.content_category;
   }
   
-  if (eventData.quantity) {
-    customData.num_items = eventData.quantity;
+  if (eventData.quantity || eventData.num_items) {
+    customData.num_items = eventData.quantity || eventData.num_items;
   }
   
   if (eventData.transaction_id || eventData.order_number) {

@@ -14,6 +14,17 @@ interface PixelTrackerProps {
     quantity?: number;
     landing_page_id?: string;
     product_id?: string;
+    external_id?: string;
+    transaction_id?: string;
+    order_number?: string;
+    customer_email?: string;
+    customer_phone?: string;
+    customer_first_name?: string;
+    customer_last_name?: string;
+    customer_city?: string;
+    customer_state?: string;
+    customer_country?: string;
+    action_source?: string;
   };
 }
 
@@ -101,6 +112,20 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     return `${type}_${data?.transaction_id || data?.content_ids?.[0] || Date.now()}`;
   };
 
+  // إنشاء event_id ثابت ومشترك بين البكسل والخادم
+  const createSharedEventId = (type: string, data: any, timestamp?: number): string => {
+    // استخدام timestamp ثابت لضمان نفس event_id
+    const fixedTimestamp = timestamp || Date.now();
+    
+    // استخدام transaction_id أو content_id لضمان الثبات
+    const baseId = data?.transaction_id || data?.order_id || data?.content_ids?.[0] || data?.product_id;
+    if (baseId) {
+      return `${type}_${baseId}_${fixedTimestamp.toString().slice(-8)}`;
+    }
+    // إذا لم يوجد معرف ثابت، استخدم timestamp ثابت
+    return `${type}_${fixedTimestamp}_${Math.floor(fixedTimestamp / 1000).toString().slice(-4)}`;
+  };
+
   useEffect(() => {
     if (!pixelSettings) return;
 
@@ -118,12 +143,17 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     
     // إضافة الحدث للقائمة المرسلة
     setSentEvents(prev => new Set([...prev, eventKey]));
+    
+    // إنشاء event_id مشترك بtimestamp ثابت
+    const fixedTimestamp = Date.now();
+    const sharedEventId = createSharedEventId(eventType, eventData, fixedTimestamp);
+    console.log('🆔 Shared Event ID created:', sharedEventId);
 
     // تحميل وتفعيل Facebook Pixel - يحتاج فقط Pixel ID للعمل client-side
     if (pixelSettings.facebookPixelId && pixelSettings.facebookPixelId !== '') {
       console.log('📘 Facebook Pixel: Loading with ID', pixelSettings.facebookPixelId);
       loadFacebookPixel(pixelSettings.facebookPixelId);
-      trackFacebookEvent(eventType, eventData);
+      trackFacebookEvent(eventType, eventData, sharedEventId);
     } else {
       console.log('📘 Facebook Pixel: Not loaded - Missing Pixel ID', {
         pixelId: pixelSettings.facebookPixelId
@@ -184,7 +214,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     console.log('📘 Facebook Pixel: 🚀 PIXEL LOADING STARTED - ID:', pixelId);
     
     // إنشاء Facebook Pixel Script الأصلي - طريقة Facebook الرسمية
-    !function(f: any, b: any, e: any, v: any, n: any, t: any, s: any) {
+    (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
       if (f.fbq) return;
       n = f.fbq = function() {
         n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
@@ -198,8 +228,10 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       t.async = !0;
       t.src = v;
       s = b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t, s);
-    }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+      if (s && s.parentNode) {
+        s.parentNode.insertBefore(t, s);
+      }
+    })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
     
     // تهيئة الـ pixel
     console.log('📘 Facebook Pixel: ✅ INITIALIZING WITH ID:', pixelId);
@@ -321,7 +353,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   };
 
   // تتبع أحداث Facebook
-  const trackFacebookEvent = (eventType: string, data?: any) => {
+  const trackFacebookEvent = (eventType: string, data?: any, sharedEventId?: string) => {
     console.log('📘 Facebook Pixel: ✅ ATTEMPTING TO TRACK EVENT:', eventType, data);
     
     if (!window.fbq) {
@@ -351,8 +383,8 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       return;
     }
 
-    // إنشاء event_id فريد لكل حدث
-    const eventId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // استخدام event_id المشترك الثابت
+    const eventId = sharedEventId;
     
     // استخراج Cookie FBP و FBC
     const getFBCookie = (name: string) => {
@@ -367,12 +399,25 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     // تحويل المبلغ من الدينار العراقي إلى الدولار إذا كانت القيمة موجودة
     const convertedValue = data?.value ? convertIQDToUSD(data.value) : data?.value;
     
+    // تنظيف وتوحيد content_ids لضمان المطابقة مع الكتالوج
+    const normalizeContentIds = (ids: any): string[] => {
+      if (!ids) return [];
+      if (Array.isArray(ids)) {
+        return ids.map(id => String(id).trim()).filter(id => id.length > 0);
+      }
+      return [String(ids).trim()].filter(id => id.length > 0);
+    };
+    
+    const contentIds = normalizeContentIds(data?.content_ids || data?.product_id || data?.content_id);
+    
     const eventData = {
-      content_name: data?.content_name,
-      content_category: data?.content_category,
-      content_ids: data?.content_ids,
+      content_name: data?.content_name || data?.product_name,
+      content_category: data?.content_category || data?.product_category,
+      content_ids: contentIds.length > 0 ? contentIds : undefined,
+      content_type: 'product', // إضافة content_type لتحسين المطابقة
       value: convertedValue,
-      currency: data?.currency || 'USD',
+      currency: 'USD', // دائماً USD بعد التحويل
+      num_items: data?.quantity || 1,
       email: data?.customer_email,
       phone_number: data?.customer_phone,
       first_name: data?.customer_first_name,
@@ -421,7 +466,10 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
           fbp: getFBCookie('_fbp'),
           fbc: getFBCookie('_fbc'),
           action_source: 'website',
-          event_id: eventId // تمرير نفس event_id للخادم لمنع التكرار
+          event_id: eventId, // تمرير نفس event_id للخادم لمنع التكرار
+          content_ids: contentIds, // إرسال content_ids منظفة للمطابقة مع الكتالوج
+          content_type: 'product',
+          num_items: data?.quantity || 1
         }
       })
     }).then(async response => {
