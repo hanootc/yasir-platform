@@ -138,16 +138,7 @@ export default function ThankYouPage() {
   // تسجيل بيانات الطلب عند استلامها
   useEffect(() => {
     if (order) {
-      console.log('📝 Order data received:', {
-        id: order?.id,
-        customerName: order?.customerName,
-        customerPhone: order?.customerPhone,
-        orderNumber: order?.orderNumber,
-        totalAmount: order?.totalAmount,
-        createdAt: order?.createdAt,
-        customerAddress: order?.customerAddress,
-        customerGovernorate: order?.customerGovernorate
-      });
+      // Order data received
     }
     if (error) {
       console.error('❌ Error fetching order:', error);
@@ -229,7 +220,6 @@ export default function ThankYouPage() {
           // لا نعرض رسائل خطأ للعميل
         } catch (error) {
           // لا نعرض أي رسائل خطأ للعميل
-          console.log("WhatsApp message sending failed silently");
         }
       }, 2000);
       
@@ -248,7 +238,6 @@ export default function ThankYouPage() {
     // استخدام القيمة بالدينار العراقي مباشرة - سيتم التحويل في الخادم
     const orderValueIQD = parseFloat(order.totalAmount || order.total || "0");
     
-    console.log("💰 Order value (IQD):", orderValueIQD, "د.ع");
 
     // استخراج الاسم الأول والأخير من اسم العميل
     const nameParts = (order.customerName || '').split(' ');
@@ -281,14 +270,6 @@ export default function ThankYouPage() {
     const productCategory = getGoogleProductCategory(order);
     const productId = order.productDetails?.id || order.landingPageId || order.id;
     
-    console.log("🎯 Product tracking info:", {
-      productName,
-      productCategory, 
-      productId,
-      orderProductDetails: order.productDetails,
-      offer: order.offer
-    });
-    
     // Extract quantity from offer text
     let quantity = 1; // default quantity
     const offer = order.offer || '';
@@ -316,16 +297,10 @@ export default function ThankYouPage() {
       }
     }
     
-    console.log("🔢 Extracted quantity from offer:", offer, "->", quantity);
     
     // الحصول على معرفات المستخدم لتحسين تسجيل التحويلات
     const userIdentifiers = getUserIdentifiers();
     
-    console.log('🆔 Purchase Event - User Identifiers:', {
-      facebook_login_id: userIdentifiers.facebook_login_id,
-      external_id: userIdentifiers.external_id,
-      note: 'هذه المعرفات ستحسن تسجيل التحويلات بنسبة 19.71% و 14.5%'
-    });
 
     // استخدام معرف ثابت مبني على order.id لضمان التطابق مع الأحداث السابقة
     // استخدام createdAt timestamp من الطلب لضمان الثبات
@@ -334,15 +309,6 @@ export default function ThankYouPage() {
     
     // إنشاء event_id ثابت للـ Purchase باستخدام نفس النمط
     const purchaseEventId = `purchase_${productId}_${orderTimestamp.toString().slice(-8)}`;
-
-    console.log('🎯 Purchase Event Deduplication Info:', {
-      productId,
-      orderTimestamp,
-      orderCreatedAt: order.createdAt,
-      stableExternalId,
-      purchaseEventId,
-      note: 'هذه المعرفات ثابتة ومبنية على وقت إنشاء الطلب لضمان التطابق'
-    });
 
     // إعداد البيانات الأساسية
     const eventData: any = {
@@ -557,16 +523,7 @@ export default function ThankYouPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-black">المنتج المطلوب</p>
-                  <p className="text-black">{(() => {
-                    console.log('Order data for product name:', {
-                      orderId: order.id,
-                      landingPageId: order.landingPageId,
-                      productDetails: order.productDetails,
-                      offer: order.offer,
-                      fullOrder: order
-                    });
-                    return order.productDetails?.name || 'منتج غير محدد';
-                  })()}</p>
+                  <p className="text-black">{order.productDetails?.name || 'منتج غير محدد'}</p>
                   {order.offer && (
                     <p className="text-black text-sm">العرض: {order.offer}</p>
                   )}

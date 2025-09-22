@@ -1202,9 +1202,6 @@ export default function LandingPageView() {
       appleTouchIcon.href = faviconUrl;
       document.head.appendChild(appleTouchIcon);
       
-      console.log('🎨 Custom favicon set with cache busting:', faviconUrl);
-      console.log('🏪 Platform:', platformData.platformName);
-      console.log('Favicon set successfully');
     }
   }, [platformData]);
 
@@ -1498,7 +1495,6 @@ export default function LandingPageView() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ defaultTheme: newTheme })
         });
-        console.log('📝 Landing page theme update response:', response.status);
       }
       // أو حفظه في المنتج إذا كان منتجاً مباشراً
       else if (product && platformData) {
@@ -1507,10 +1503,8 @@ export default function LandingPageView() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ defaultTheme: newTheme })
         });
-        console.log('📝 Product theme update response:', response.status);
       }
       
-      console.log('✅ Theme saved:', newTheme);
     } catch (error) {
       console.error('❌ Failed to save theme:', error);
     }
@@ -1695,17 +1689,6 @@ export default function LandingPageView() {
     const maxSelections = getSelectedOfferQuantity();
     const currentSelections = selectedColorIds;
     
-    console.log("🎨 Color Selection DEBUG:", {
-      colorId,
-      maxSelections,
-      currentSelections: currentSelections.length,
-      selectedOffer,
-      availableOffers,
-      formWatchOffer: form.watch('offer'),
-      landingPageTemplate: landingPage?.template,
-      willUseFormWatch: !selectedOffer || landingPage?.template === 'default'
-    });
-    
     if (currentSelections.includes(colorId)) {
       // Remove selection
       setSelectedColorIds(currentSelections.filter(id => id !== colorId));
@@ -1720,7 +1703,6 @@ export default function LandingPageView() {
         const currentOffer = availableOffers.find((offer: any) => offer.id === selectedOffer);
         const errorMessage = `لقد اخترت العرض "${currentOffer?.label || 'الحالي'}" الذي يسمح باختيار ${maxSelections} لون فقط. يرجى تغيير العرض لاختيار المزيد من الألوان.`;
         setVariantErrors([errorMessage]);
-        console.log("❌ Cannot add more colors. Limit reached:", maxSelections);
       }
     }
   };
@@ -1729,13 +1711,6 @@ export default function LandingPageView() {
     const maxSelections = getSelectedOfferQuantity();
     const currentSelections = selectedShapeIds;
     
-    console.log("🔷 Shape Selection DEBUG:", {
-      shapeId,
-      maxSelections,
-      currentSelections,
-      isAlreadySelected: currentSelections.includes(shapeId)
-    });
-    
     if (currentSelections.includes(shapeId)) {
       // Remove selection
       setSelectedShapeIds(currentSelections.filter(id => id !== shapeId));
@@ -1743,7 +1718,6 @@ export default function LandingPageView() {
     } else {
       // Add selection if under limit
       if (currentSelections.length < maxSelections) {
-        console.log("✅ Adding shape to selection:", shapeId);
         setSelectedShapeIds([...currentSelections, shapeId]);
         setVariantErrors([]);
       } else {
@@ -1780,9 +1754,7 @@ export default function LandingPageView() {
   // حساب العروض المتاحة
   const availableOffers = getAvailableOffers(product);
   
-  // إضافة console.log للتشخيص
   useEffect(() => {
-    
     // فحص تفصيلي للعروض
     if (availableOffers && availableOffers.length > 0) {
       availableOffers.forEach((offer: any, index: number) => {
@@ -2237,9 +2209,6 @@ export default function LandingPageView() {
                 
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit((data) => {
-                    console.log("🔥🔥🔥 MODERN MINIMAL FORM - تم الضغط على زر الإرسال!");
-                    console.log("📝 بيانات النموذج:", data);
-                    console.log("🔍 أخطاء النموذج:", form.formState.errors);
                     submitOrderMutation.mutate(data);
                   })} className="space-y-4 landing-page-form">
                     {/* الاسم */}
@@ -3088,7 +3057,6 @@ export default function LandingPageView() {
                         <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                           الألوان المتاحة ({selectedColorIds.length}/{(() => {
                             const qty = getSelectedOfferQuantity();
-                            console.log("🎨 Color label - selectedOffer:", selectedOffer, "quantity:", qty);
                             return qty;
                           })()}) - المتوفر: {productColors.length}
                         </label>
@@ -6516,14 +6484,6 @@ export default function LandingPageView() {
                           {productShapes.map((shape: any) => {
                             const isSelected = selectedShapeIds.includes(shape.id);
                             const isDisabled = !isSelected && selectedShapeIds.length >= getSelectedOfferQuantity();
-                            
-                            console.log("🔷 Simple Form Shape Render:", {
-                              shapeId: shape.id,
-                              shapeName: shape.shapeName,
-                              isSelected,
-                              selectedShapeIds,
-                              isDisabled
-                            });
                             
                             return (
                               <button 
