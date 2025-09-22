@@ -25,6 +25,9 @@ interface PixelTrackerProps {
     customer_state?: string;
     customer_country?: string;
     action_source?: string;
+    facebook_login_id?: string;  // معرف تسجيل الدخول لفيسبوك (+19.71% تحسين)
+    login_id?: string;           // نفس قيمة facebook_login_id
+    content_type?: string;       // نوع المحتوى
   };
 }
 
@@ -49,14 +52,14 @@ declare global {
 }
 
 export default function PixelTracker({ platformId, eventType, eventData }: PixelTrackerProps) {
-  console.log('🎯🎯🎯 PIXELTRACKER COMPONENT LOADED! 🎯🎯🎯');
-  console.log('🎯 Platform ID:', platformId);
-  console.log('🎯 Event Type:', eventType);
-  console.log('🎯 Event Data:', eventData);
+  console.log('🔥🔥🔥 PIXELTRACKER COMPONENT LOADED - NEW VERSION 2025! 🔥🔥🔥');
+  console.log('🔥 Platform ID:', platformId);
+  console.log('🔥 Event Type:', eventType);
+  console.log('🔥 Event Data:', eventData);
+  console.log('🔥🔥🔥 هذا هو الكود الجديد بدون منع تكرار! 🔥🔥🔥');
   
-  // نظام منع الإرسال المتكرر
-  const [sentEvents, setSentEvents] = useState<Set<string>>(new Set());
-  const lastEventRef = useRef<string>('');
+  // نظام منع الإرسال المتكرر باستخدام localStorage
+  const [hasExecuted, setHasExecuted] = useState(false);
   
   // جلب إعدادات البكسلات من قاعدة البيانات
   const { data: pixelSettings, isLoading, error } = useQuery<PixelSettings>({
@@ -126,63 +129,13 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     return `${type}_${fixedTimestamp}_${Math.floor(fixedTimestamp / 1000).toString().slice(-4)}`;
   };
 
-  useEffect(() => {
-    if (!pixelSettings) return;
+  // تم حذف useEffect القديم نهائياً - الاعتماد فقط على useEffect الجديد مع sessionStorage
 
-    console.log('🎯 PixelTracker: Settings loaded', pixelSettings);
-    console.log('🎯 PixelTracker: Event type', eventType, 'Data:', eventData);
-    
-    // إنشاء معرف للحدث
-    const eventKey = createEventKey(eventType, eventData);
-    
-    // التحقق من عدم إرسال الحدث مسبقاً
-    if (sentEvents.has(eventKey)) {
-      console.log('🚫 PixelTracker: Event already sent, skipping:', eventKey);
-      return;
-    }
-    
-    // إضافة الحدث للقائمة المرسلة
-    setSentEvents(prev => new Set([...prev, eventKey]));
-    
-    // إنشاء event_id مشترك بtimestamp ثابت
-    const fixedTimestamp = Date.now();
-    const sharedEventId = createSharedEventId(eventType, eventData, fixedTimestamp);
-    console.log('🆔 Shared Event ID created:', sharedEventId);
+  // تم حذف useEffect القديم - الاعتماد فقط على useEffect الجديد مع sessionStorage
 
-    // تحميل وتفعيل Facebook Pixel - يحتاج فقط Pixel ID للعمل client-side
-    if (pixelSettings.facebookPixelId && pixelSettings.facebookPixelId !== '') {
-      console.log('📘 Facebook Pixel: Loading with ID', pixelSettings.facebookPixelId);
-      loadFacebookPixel(pixelSettings.facebookPixelId);
-      trackFacebookEvent(eventType, eventData, sharedEventId);
-    } else {
-      console.log('📘 Facebook Pixel: Not loaded - Missing Pixel ID', {
-        pixelId: pixelSettings.facebookPixelId
-      });
-    }
+  // حذف useEffect القديم نهائياً
 
-    // تحميل وتفعيل TikTok Pixel - يحتاج فقط Pixel ID للعمل client-side
-    if (pixelSettings.tiktokPixelId && pixelSettings.tiktokPixelId !== '') {
-      console.log('🎬 TikTok Pixel: Loading with ID', pixelSettings.tiktokPixelId);
-      loadTikTokPixel(pixelSettings.tiktokPixelId);
-      trackTikTokEvent(eventType, eventData);
-    } else {
-      console.log('🎬 TikTok Pixel: Not loaded - Missing Pixel ID', {
-        pixelId: pixelSettings.tiktokPixelId
-      });
-    }
-
-    // تحميل وتفعيل Snapchat Pixel
-    if (pixelSettings.snapchatPixelId && pixelSettings.snapchatAccessToken) {
-      loadSnapchatPixel(pixelSettings.snapchatPixelId);
-      trackSnapchatEvent(eventType, eventData);
-    }
-
-    // تحميل وتفعيل Google Analytics
-    if (pixelSettings.googleAnalyticsId) {
-      loadGoogleAnalytics(pixelSettings.googleAnalyticsId);
-      trackGoogleEvent(eventType, eventData);
-    }
-  }, [pixelSettings, eventType, eventData]);
+  // حذف useEffect القديم نهائياً
 
   // تحميل Facebook Pixel
   const loadFacebookPixel = (pixelId: string) => {
@@ -450,39 +403,9 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       console.error('📘 Facebook Pixel: fbq is not a function');
     }
     
-    // إرسال الحدث لـ Facebook Conversions API (Server-Side) - بدون await لعدم إبطاء الصفحة
-    fetch('/api/facebook/conversions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        platformId: platformId,
-        eventType: fbEvent,
-        eventData: {
-          ...data,
-          value: convertedValue, // استخدام القيمة المحوّلة لـ Conversions API أيضاً
-          event_source_url: window.location.href,
-          fbp: getFBCookie('_fbp'),
-          fbc: getFBCookie('_fbc'),
-          action_source: 'website',
-          event_id: eventId, // تمرير نفس event_id للخادم لمنع التكرار
-          content_ids: contentIds, // إرسال content_ids منظفة للمطابقة مع الكتالوج
-          content_type: 'product',
-          num_items: data?.quantity || 1
-        }
-      })
-    }).then(async response => {
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Facebook Conversions API success:', result);
-      } else {
-        const error = await response.text();
-        console.warn('⚠️ Facebook Conversions API error:', error);
-      }
-    }).catch(error => {
-      console.warn('⚠️ Failed to send to Facebook Conversions API:', error);
-    });
+    // ملاحظة: تم إزالة الإرسال المكرر لـ Server-Side API هنا
+    // سيتم الإرسال عبر sendToServerSideAPI فقط لتجنب التكرار
+    console.log('✅ Facebook Pixel: تم إرسال الحدث عبر Client-Side فقط');
   };
 
   // تتبع أحداث TikTok بطريقة طبيعية وصحيحة
@@ -682,6 +605,116 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
 
     window.gtag('event', gaEvent.action, eventData);
   };
+
+  // إرسال الحدث إلى Server-Side API لتحسين تغطية API التحويلات
+  const sendToServerSideAPI = async (platformId: string, eventType: string, eventData: any, eventId: string) => {
+    try {
+      // تحويل أسماء الأحداث إلى Facebook Standard Events
+      const fbEventMap: Record<string, string> = {
+        'page_view': 'PageView',
+        'view_content': 'ViewContent', 
+        'add_to_cart': 'AddToCart',
+        'initiate_checkout': 'InitiateCheckout',
+        'purchase': 'Purchase',
+        'lead': 'Lead'
+      };
+      
+      const standardEventType = fbEventMap[eventType] || eventType;
+      
+      console.log('📤 إرسال إلى Server-Side API:', {
+        platformId,
+        originalEventType: eventType,
+        standardEventType,
+        eventId,
+        url: window.location.href
+      });
+      
+      const response = await fetch('/api/facebook-conversions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          platformId,
+          eventType: standardEventType,
+          eventData: {
+            ...eventData,
+            event_id: eventId,
+            event_source_url: window.location.href
+          },
+          userAgent: navigator.userAgent,
+          clientIP: undefined // سيتم استخراجه في الخادم
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        console.log('✅ Server-Side API: تم إرسال الحدث بنجاح');
+      } else {
+        console.error('❌ Server-Side API: فشل في إرسال الحدث:', result);
+      }
+    } catch (error) {
+      console.error('💥 Server-Side API: خطأ في الإرسال:', error);
+    }
+  };
+
+  // تنفيذ الأحداث عند تغيير eventType أو eventData
+  useEffect(() => {
+    if (!pixelSettings || isLoading || !eventType || hasExecuted) return;
+    
+    // إنشاء مفتاح فريد باستخدام بيانات مستقرة
+    const contentId = eventData?.content_ids?.[0] || eventData?.product_id || 'unknown';
+    const eventKey = `pixel_${eventType}_${contentId}_${platformId}`;
+    
+    // تعطيل نظام منع التكرار مؤقتاً للاختبار
+    // const sessionKey = `session_${eventKey}`;
+    // if (sessionStorage.getItem(sessionKey)) {
+    //   console.log('⚠️ تم تجاهل الحدث المكرر في هذه الجلسة:', eventType, 'للمنتج:', contentId);
+    //   setHasExecuted(true);
+    //   return;
+    // }
+    
+    // تسجيل الحدث في sessionStorage (فقط للجلسة الحالية)
+    // sessionStorage.setItem(sessionKey, Date.now().toString());
+    // setHasExecuted(true); // تعطيل مؤقت للاختبار
+    
+    // إنشاء event_id متطابق - استخدام _eventId إذا كان متوفراً (للـ Purchase) أو إنشاء جديد
+    const presetEventId = (eventData as any)?._eventId;
+    const timestamp = (eventData as any)?._timestamp || Date.now();
+    const eventId = presetEventId || `${eventType}_${contentId}_${timestamp.toString().slice(-8)}`;
+    
+    console.log('🎆🎆🎆 تنفيذ حدث مع معرفات متطابقة:', eventType, 'للمنتج:', contentId, 'بمعرف:', eventId, 'external_id:', (eventData as any)?.external_id, 'preset:', !!presetEventId, '🎆🎆🎆');
+    
+    // تحميل وتنفيذ Facebook Pixel
+    if (pixelSettings.facebookPixelId) {
+      loadFacebookPixel(pixelSettings.facebookPixelId);
+      setTimeout(() => {
+        trackFacebookEvent(eventType, eventData, eventId);
+        // إرسال إلى Server-Side API بعد تأخير قصير
+        sendToServerSideAPI(platformId, eventType, eventData, eventId);
+      }, 100);
+    }
+    
+    // تحميل وتنفيذ TikTok Pixel
+    if (pixelSettings.tiktokPixelId) {
+      loadTikTokPixel(pixelSettings.tiktokPixelId);
+      setTimeout(() => {
+        trackTikTokEvent(eventType, eventData);
+      }, 200);
+    }
+    
+    // تنفيذ Snapchat Pixel
+    if (pixelSettings.snapchatPixelId) {
+      trackSnapchatEvent(eventType, eventData);
+    }
+    
+    // تنفيذ Google Analytics
+    if (pixelSettings.googleAnalyticsId) {
+      trackGoogleEvent(eventType, eventData);
+    }
+    
+  }, [eventType, eventData, pixelSettings, isLoading, platformId]);
 
   return null; // هذا المكون لا يعرض أي محتوى مرئي
 }

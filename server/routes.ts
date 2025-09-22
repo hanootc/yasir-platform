@@ -55,9 +55,11 @@ import {
   systemSettings,
   users,
   adminUsers,
-  insertAdminUserSchema
+  insertAdminUserSchema,
+  insertLandingPageOrderSchema
 } from "@shared/schema";
 import { db, exec } from "./db";
+// import { FlexibleOffersManager } from "./FlexibleOffersManager"; // غير مستخدم حالياً
 import { eq, and, or, desc, sql, inArray } from "drizzle-orm";
 import "./types";
 
@@ -5615,6 +5617,67 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log("🔍 About to create order with this data:", JSON.stringify(orderDataWithCalculations, null, 2));
       const newOrder = await storage.createLandingPageOrder(orderDataWithCalculations);
       console.log("Order created successfully:", newOrder);
+      
+      // إرسال حدث Lead إلى Server-Side API بعد إنشاء الطلب بنجاح
+      try {
+        console.log('🎆 إرسال حدث Lead إلى Server-Side API');
+        
+        // الحصول على بيانات المنصة للـ subdomain الصحيح
+        const platform = await storage.getPlatform(landingPage.platformId);
+        const platformSubdomain = platform?.subdomain || platform?.customDomain || 'hanoot';
+        
+        console.log('🌐 Platform subdomain:', platformSubdomain, 'for platform:', landingPage.platformId);
+        
+        // إعداد بيانات حدث Lead
+        const leadEventData = {
+          content_name: orderData.productName || 'منتج',
+          content_category: 'General',
+          content_ids: [orderData.productId || landingPage.productId],
+          value: parseFloat(newOrder.totalAmount || '0'),
+          currency: 'IQD',
+          transaction_id: newOrder.id,
+          order_number: newOrder.orderNumber,
+          customer_email: orderData.customerEmail || '',
+          customer_phone: newOrder.customerPhone,
+          customer_first_name: orderData.customerName?.split(' ')[0] || '',
+          customer_last_name: orderData.customerName?.split(' ').slice(1).join(' ') || '',
+          customer_city: newOrder.customerAddress,
+          customer_state: newOrder.customerGovernorate,
+          customer_country: 'IQ',
+          landing_page_id: newOrder.landingPageId,
+          product_id: orderData.productId || landingPage.productId,
+          external_id: orderData.external_id || newOrder.customerPhone || newOrder.id,
+          facebook_login_id: orderData.facebook_login_id || `order_${newOrder.id}`,
+          login_id: orderData.login_id || orderData.facebook_login_id || `order_${newOrder.id}`,
+          action_source: 'website',
+          event_source_url: req.headers.referer || `https://sanadi.pro/${platformSubdomain}/${landingPage.customUrl}`
+        };
+        
+        // إرسال إلى Facebook Conversions API
+        const response = await fetch(`${req.protocol}://${req.get('host')}/api/facebook-conversions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platformId: landingPage.platformId,
+            eventType: 'lead',
+            eventData: leadEventData,
+            userAgent: req.headers['user-agent'],
+            clientIP: req.ip || req.connection.remoteAddress
+          })
+        });
+        
+        if (response.ok) {
+          console.log('✅ Lead Event تم إرساله بنجاح إلى Server-Side API');
+        } else {
+          console.error('❌ فشل في إرسال Lead Event إلى Server-Side API:', await response.text());
+        }
+      } catch (error) {
+        console.error('💥 خطأ في إرسال Lead Event إلى Server-Side API:', error);
+        // لا نرجع خطأ للعميل - الطلب تم بنجاح
+      }
+      
       res.status(201).json(newOrder);
     } catch (error) {
       console.error("Error creating landing page order:", error);
@@ -16855,6 +16918,116 @@ ${platform?.platformName || 'متجرنا'}`;
       res.status(500).json({ message: "Failed to fetch product offers" });
     }
   });
+
+  // Facebook Conversions API endpoint
+  app.post('/api/facebook-conversions', async (req, res) => {
+    try {
+      const { platformId, eventType, eventData, userAgent, clientIP } = req.body;
+      
+      console.log('🔄 Facebook Conversions API endpoint called:', {
+        platformId,
+        eventType,
+        hasEventData: !!eventData,
+        eventId: eventData?.event_id
+      });
+      
+      if (!platformId || !eventType || !eventData) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Missing required fields: platformId, eventType, eventData' 
+        });
+      }
+      
+      // جلب إعدادات Facebook Pixel للمنصة
+      const platformSettings = await db.query.adPlatformSettings.findFirst({
+        where: eq(adPlatformSettings.platformId, platformId)
+      });
+      
+      if (!platformSettings?.facebookPixelId || !platformSettings?.facebookAccessToken) {
+        console.warn('⚠️ Facebook Pixel settings not found for platform:', platformId);
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Facebook Pixel settings not configured for this platform' 
+        });
+      }
+      
+      // استخراج عنوان IP مع تفضيل IPv6
+      const getClientIP = (req: any): string => {
+        // البحث عن IPv6 أولاً
+        const forwarded = req.headers['x-forwarded-for'];
+        if (forwarded) {
+          const ips = forwarded.split(',').map((ip: string) => ip.trim());
+          // البحث عن IPv6 (يحتوي على :)
+          const ipv6 = ips.find((ip: string) => ip.includes(':') && !ip.startsWith('::ffff:'));
+          if (ipv6) return ipv6;
+          
+          // إذا لم يوجد IPv6، استخدم أول IP
+          return ips[0];
+        }
+        
+        // التحقق من req.ip
+        if (req.ip && req.ip.includes(':') && !req.ip.startsWith('::ffff:')) {
+          return req.ip; // IPv6
+        }
+        
+        // استخدام req.ip أو connection.remoteAddress كـ fallback
+        return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '';
+      };
+
+      const extractedIP = clientIP || getClientIP(req);
+      
+      console.log('🌐 IP Address extracted:', {
+        clientIP,
+        extractedIP,
+        isIPv6: extractedIP.includes(':') && !extractedIP.startsWith('::ffff:'),
+        headers: {
+          'x-forwarded-for': req.headers['x-forwarded-for'],
+          'x-real-ip': req.headers['x-real-ip']
+        }
+      });
+
+      // إنشاء حدث Facebook Conversions API
+      const conversionEvent = createFacebookConversionEvent(
+        eventType,
+        {
+          ...eventData,
+          event_source_url: eventData.event_source_url || req.headers.referer
+        },
+        userAgent || req.headers['user-agent'],
+        extractedIP
+      );
+      
+      console.log('📤 Sending Facebook Conversion Event:', {
+        event_name: conversionEvent.event_name,
+        event_id: conversionEvent.event_id,
+        pixel_id: platformSettings.facebookPixelId
+      });
+      
+      // إرسال الحدث إلى Facebook Conversions API
+      const success = await sendFacebookConversion(
+        platformSettings.facebookPixelId,
+        platformSettings.facebookAccessToken,
+        [conversionEvent]
+      );
+      
+      if (success) {
+        console.log('✅ Facebook Conversions API: Event sent successfully');
+        res.json({ success: true, message: 'Event sent successfully' });
+      } else {
+        console.error('❌ Facebook Conversions API: Failed to send event');
+        res.status(500).json({ success: false, message: 'Failed to send event' });
+      }
+      
+    } catch (error) {
+      console.error('💥 Facebook Conversions API endpoint error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

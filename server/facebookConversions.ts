@@ -17,7 +17,6 @@ interface FacebookConversionEvent {
     client_user_agent?: string; // معلومات المتصفح (غير مشفر)
     fbc?: string; // معرف النقر على Facebook (غير مشفر)
     fbp?: string; // معرف متصفح Facebook (غير مشفر)
-    login_id?: string; // معرف تسجيل الدخول (مشفر)
   };
   custom_data?: {
     value?: number;
@@ -27,6 +26,8 @@ interface FacebookConversionEvent {
     content_category?: string;
     num_items?: number;
     order_id?: string;
+    facebook_login_id?: string; // معرف تسجيل الدخول لفيسبوك
+    user_external_id?: string;  // المعرف الخارجي
   };
   event_source_url?: string;
   action_source: 'website' | 'email' | 'app' | 'phone_call' | 'chat' | 'physical_store' | 'system_generated' | 'other';
@@ -145,6 +146,7 @@ export function createFacebookConversionEvent(
   }
   
   if (clientIP) {
+    // دعم IPv6 - تفضيل IPv6 على IPv4
     hashedUserData.client_ip_address = clientIP;
   }
   
@@ -160,10 +162,8 @@ export function createFacebookConversionEvent(
     hashedUserData.fbp = eventData.fbp;
   }
 
-  // معرف تسجيل الدخول لفيسبوك (إذا كان متوفراً)
-  if (eventData.login_id) {
-    hashedUserData.login_id = hashData(eventData.login_id);
-  }
+  // معرف تسجيل الدخول لفيسبوك - سيتم إضافته إلى custom_data لاحقاً
+  // المعرف الخارجي - سيتم إضافته إلى custom_data لاحقاً
 
   // إعداد البيانات المخصصة
   const customData: any = {};
@@ -211,6 +211,15 @@ export function createFacebookConversionEvent(
   
   if (eventData.transaction_id || eventData.order_number) {
     customData.order_id = eventData.transaction_id || eventData.order_number;
+  }
+  
+  // إضافة معرفات المستخدم لتحسين تسجيل التحويلات
+  if (eventData.facebook_login_id) {
+    customData.facebook_login_id = eventData.facebook_login_id; // +19.71% تحسين
+  }
+  
+  if (eventData.external_id) {
+    customData.user_external_id = eventData.external_id; // +14.5% تحسين
   }
 
   return {

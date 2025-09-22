@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -29,6 +29,33 @@ const headerStyles = `
   }
 `;
 import { ImageModal } from "@/components/ImageModal";
+
+// الحصول على Google Product Category من قاعدة البيانات أو الافتراضي
+const getGoogleProductCategory = (product: any) => {
+  // أولاً: استخدم googleCategory من قاعدة البيانات إذا كان متوفراً
+  if (product?.categoryGoogleCategory) {
+    return product.categoryGoogleCategory;
+  }
+  
+  // ثانياً: إذا كان هناك googleCategory في بيانات الفئة، استخدمه
+  if (product?.categoryData?.googleCategory) {
+    return product.categoryData.googleCategory;
+  }
+  
+  // ثالثاً: استخدم الترجمة اليدوية كـ fallback
+  const categoryName = product?.category || product?.categoryName || 'منتجات';
+  const fallbackMap: { [key: string]: string } = {
+    'أجهزة منزلية': 'Home & Garden > Kitchen & Dining > Kitchen Appliances',
+    'أدوات مطبخ': 'Home & Garden > Kitchen & Dining > Kitchen Tools & Utensils',
+    'ديكور منزلي': 'Home & Garden > Decor',
+    'أدوات تنظيف': 'Home & Garden > Household Supplies',
+    'منسوجات منزلية': 'Home & Garden > Linens & Bedding',
+    'أدوات حديقة': 'Home & Garden > Yard, Garden & Outdoor Living > Gardening',
+    'الأطفال والأسرة': 'Baby & Toddler',
+    'صحة ورياضة': 'Sporting Goods > Exercise & Fitness'
+  };
+  return fallbackMap[categoryName] || 'Home & Garden';
+};
 
 // دالة لتحويل الروابط الخاصة إلى روابط عامة
 function convertToPublicUrls(urls: string[]): string[] {
@@ -96,11 +123,6 @@ function getAvailableOffers(product: any) {
       const label = offer.label || '';
       const quantityFromText = extractQuantityFromText(label);
       
-      console.log(`🔢 Extracting quantity for "${label}":`, {
-        originalQuantity: offer.quantity,
-        quantityFromText,
-        finalQuantity: quantityFromText > quantity ? quantityFromText : quantity
-      });
       
       // استخدام الكمية المستخرجة من النص إذا كانت أكبر من الكمية المحفوظة
       if (quantityFromText > quantity) {
@@ -429,17 +451,6 @@ export default function LandingPageView() {
   // إضافة حماية ضد الأخطاء على الهاتف المحمول
   const [hasError, setHasError] = useState(false);
 
-  // تسجيل للتشخيص
-  useEffect(() => {
-    console.log('📱 LandingPageView Component Loaded');
-    console.log('📱 User Agent:', navigator.userAgent);
-    console.log('📱 Screen Size:', window.innerWidth, 'x', window.innerHeight);
-    console.log('📱 Device Pixel Ratio:', window.devicePixelRatio);
-    console.log('🔍 Current URL:', window.location.href);
-    console.log('🔍 Expected slug: jhaz-dght-masmy-574523');
-    console.log('🔍 Current URL:', window.location.href);
-    console.log('🔍 Expected slug: jhaz-dght-masmy-574523');
-  }, []);
 
   // Try different route patterns
   const [matchOldRoute, paramsOld] = useRoute("/view-landing/:slug");
@@ -451,17 +462,6 @@ export default function LandingPageView() {
   const slug = paramsOld?.slug || paramsSubdomain?.slug || paramsProduct?.slug;
   const platform = paramsSubdomain?.subdomain;
   
-  // Debug logging
-  console.log('🔍 LandingPageView Debug:', {
-    url: window.location.href,
-    slug,
-    platform,
-    paramsOld,
-    paramsSubdomain,
-    paramsProduct,
-    matchSubdomainRoute
-  });
-
   // Error boundary للقبض على الأخطاء
   useEffect(() => {
     const handleError = (error: ErrorEvent) => {
@@ -485,7 +485,9 @@ export default function LandingPageView() {
     };
   }, []);
 
-  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [viewContentSent, setViewContentSent] = useState(false);
+  const viewContentSentRef = useRef(false);
+  const [viewContentPixelData, setViewContentPixelData] = useState<any>(null);
   const [selectedOffer, setSelectedOffer] = useState<string>("");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -495,13 +497,13 @@ export default function LandingPageView() {
   const [selectedSizeIds, setSelectedSizeIds] = useState<string[]>([]);
   const [variantErrors, setVariantErrors] = useState<string[]>([]);
   const [categoryGoogleCategory, setCategoryGoogleCategory] = useState<string | null>(null);
+  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [addToCartPixelData, setAddToCartPixelData] = useState<any>(null);
+  const [initiateCheckoutData, setInitiateCheckoutData] = useState<any>(null);
+  const [leadEventData, setLeadEventData] = useState<any>(null);
 
 
 
-  // تسجيل عند تغير حالة النموذج
-  useEffect(() => {
-    console.log("Order form state changed:", showOrderForm);
-  }, [showOrderForm]);
   const [showFixedButton, setShowFixedButton] = useState(true);
   const { toast } = useToast();
 
@@ -1025,8 +1027,6 @@ export default function LandingPageView() {
   const { data: landingPage, isLoading, error } = useQuery({
     queryKey: ['/api/landing', slug],
     queryFn: async () => {
-      console.log('🔍 Fetching landing page with customUrl:', slug);
-      console.log('🔍 Platform:', platform);
       
       // جلب صفحة الهبوط بالـ customUrl (الطريقة الأصلية)
       const landingResponse = await fetch(`/api/landing/${slug}`);
@@ -1037,7 +1037,6 @@ export default function LandingPageView() {
             const productResponse = await fetch(`/api/public/platform/${platform}/products/by-slug/${slug}`);
             if (productResponse.ok) {
               const productData = await productResponse.json();
-              console.log('✅ Product data loaded by slug (fallback):', productData);
               
               // إنشاء صفحة هبوط افتراضية للمنتج
               return {
@@ -1053,14 +1052,12 @@ export default function LandingPageView() {
               };
             }
           } catch (error) {
-            console.log('⚠️ Product not found by slug');
           }
         }
         throw new Error('Landing page not found');
       }
       
       const landingData = await landingResponse.json();
-      console.log('✅ Landing page data loaded:', landingData);
       return landingData;
     },
     enabled: !!slug,
@@ -1086,6 +1083,35 @@ export default function LandingPageView() {
     },
     enabled: !!landingPage?.productId,
   });
+
+  // إرسال ViewContent عند توفر البيانات - مرة واحدة فقط عبر PixelTracker
+  useEffect(() => {
+    if (landingPage && product && !viewContentSentRef.current) {
+      viewContentSentRef.current = true;
+      setViewContentSent(true);
+      
+      // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
+      const timestamp = Date.now();
+      const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+      
+      // إعداد بيانات ViewContent حسب مواصفات Facebook الرسمية
+      const standardPixelData = {
+        content_name: product.name,
+        content_category: getGoogleProductCategory(product),
+        content_ids: [product.id],
+        content_type: 'product',
+        value: parseFloat(product.price),
+        currency: 'USD',
+        external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
+        landing_page_id: landingPage.id,
+        product_id: product.id,
+        // إضافة timestamp للاستخدام في PixelTracker
+        _timestamp: timestamp
+      };
+      
+      setViewContentPixelData(standardPixelData);
+    }
+  }, [landingPage?.id, product?.id]);
 
   // جلب بيانات مالك المنتج للحصول على السب دومين
   const { data: productOwner } = useQuery({
@@ -1122,11 +1148,6 @@ export default function LandingPageView() {
       // استخدام الثيم المحدد في صفحة الهبوط أو المنتج
       const selectedTheme = landingPageTheme || productTheme || 'light';
       
-      console.log('🎨 Theme selection:', {
-        landingPageTheme,
-        productTheme,
-        selectedTheme,
-      });
       
       setIsDarkMode(selectedTheme === 'dark');
     }
@@ -1400,7 +1421,6 @@ export default function LandingPageView() {
       // تعيين title الصفحة
       document.title = pageTitle;
       
-      console.log('📄 Page title set:', pageTitle);
     } else if (product) {
       // إذا كان هناك منتج فقط بدون بيانات المنصة
       const displayPrice = product.price;
@@ -1462,7 +1482,6 @@ export default function LandingPageView() {
         ogImage.content = productImage.startsWith('http') ? productImage : `${window.location.origin}${productImage}`;
       }
       
-      console.log('🏷️ Meta tags updated for SEO');
     }
   }, [product, platformData]);
 
@@ -1502,15 +1521,11 @@ export default function LandingPageView() {
     queryKey: [`/api/products/${landingPage?.productId}/colors`],
     queryFn: async () => {
       if (!landingPage?.productId) return [];
-      console.log('🎨 جاري جلب ألوان المنتج:', landingPage.productId);
       const response = await fetch(`/api/products/${landingPage.productId}/colors`);
       if (!response.ok) {
-        console.log('❌ فشل في جلب الألوان:', response.status);
         return [];
       }
       const colors = await response.json();
-      console.log('✅ الألوان المُحمّلة:', colors);
-      console.log('🖼️ صور الألوان:', colors.map((c: any) => ({ name: c.colorName, imageUrl: c.imageUrl })));
       return colors;
     },
     enabled: !!landingPage?.productId,
@@ -1521,15 +1536,11 @@ export default function LandingPageView() {
     queryKey: [`/api/products/${landingPage?.productId}/shapes`],
     queryFn: async () => {
       if (!landingPage?.productId) return [];
-      console.log('🔷 جاري جلب أشكال المنتج:', landingPage.productId);
       const response = await fetch(`/api/products/${landingPage.productId}/shapes`);
       if (!response.ok) {
-        console.log('❌ فشل في جلب الأشكال:', response.status);
         return [];
       }
       const shapes = await response.json();
-      console.log('✅ الأشكال المُحمّلة:', shapes);
-      console.log('🖼️ صور الأشكال:', shapes.map((s: any) => ({ name: s.shapeName, imageUrl: s.imageUrl })));
       return shapes;
     },
     enabled: !!landingPage?.productId,
@@ -1540,14 +1551,11 @@ export default function LandingPageView() {
     queryKey: [`/api/products/${landingPage?.productId}/sizes`],
     queryFn: async () => {
       if (!landingPage?.productId) return [];
-      console.log('📏 جاري جلب أحجام المنتج:', landingPage.productId);
       const response = await fetch(`/api/products/${landingPage.productId}/sizes`);
       if (!response.ok) {
-        console.log('❌ فشل في جلب الأحجام:', response.status);
         return [];
       }
       const sizes = await response.json();
-      console.log('✅ الأحجام المُحمّلة:', sizes);
       return sizes;
     },
     enabled: !!landingPage?.productId,
@@ -1567,24 +1575,40 @@ export default function LandingPageView() {
     },
   });
 
+  // دالة مساعدة لتفعيل AddToCart عبر PixelTracker
+  const handleAddToCartFocus = () => {
+    if (landingPage && product && !addToCartPixelData) {
+      // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
+      const timestamp = Date.now();
+      const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+      
+      // إعداد بيانات AddToCart حسب مواصفات Facebook الرسمية
+      const standardPixelData = {
+        content_name: product.name,
+        content_category: getGoogleProductCategory(product),
+        content_ids: [product.id],
+        content_type: 'product',
+        value: parseFloat(product.price),
+        currency: 'USD',
+        external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
+        landing_page_id: landingPage.id,
+        product_id: product.id,
+        // إضافة timestamp للاستخدام في PixelTracker
+        _timestamp: timestamp
+      };
+      
+      setAddToCartPixelData(standardPixelData);
+    }
+  };
+
   // Get selected offer quantity
   const getSelectedOfferQuantity = () => {
-    // إضافة console.log لمعرفة القالب المستخدم
-    console.log("🎨 Current Template Info:", {
-      template: landingPage?.template,
-      formStyle: landingPage?.formStyle,
-      landingPageData: landingPage
-    });
     
     // أولاً: تحقق من وجود form.watch('offer') للفورم البسيط
     const selectedOfferData = form.watch('offer');
     
     // إذا كان هناك عرض مختار في الفورم، استخدمه (له الأولوية)
     if (selectedOfferData) {
-      console.log("📊 Using form.watch offer:", selectedOfferData);
-      console.log("📊 Available offers:", availableOffers);
-      console.log("📊 Landing page template:", landingPage?.template);
-      console.log("📊 Using form.watch logic for simple form");
       
       // البحث عن العرض بناءً على النص - تحسين البحث
       let offerData = availableOffers.find((offer: any) => 
@@ -1592,37 +1616,26 @@ export default function LandingPageView() {
       );
       
       // استخراج الكمية من النص مباشرة (سواء وُجد العرض أم لا)
-      console.log("📊 Analyzing text for quantity keywords...");
       
       if (selectedOfferData.includes('قطعة واحدة') || (selectedOfferData.includes('قطعة') && !selectedOfferData.includes('قطعتان') && !selectedOfferData.includes('قطعتين'))) {
-        console.log("📊 Found 'قطعة واحدة' in text, returning 1");
         return 1;
       } else if (selectedOfferData.includes('قطعتان') || selectedOfferData.includes('قطعتين')) {
-        console.log("📊 Found 'قطعتان' in text, returning 2");
         return 2;
       } else if (selectedOfferData.includes('ثلاث قطع') || selectedOfferData.includes('ثلاثة قطع')) {
-        console.log("📊 Found 'ثلاث قطع' in text, returning 3");
         return 3;
       } else if (selectedOfferData.includes('أربع قطع') || selectedOfferData.includes('أربعة قطع')) {
-        console.log("📊 Found 'أربع قطع' in text, returning 4");
         return 4;
       } else if (selectedOfferData.includes('خمس قطع') || selectedOfferData.includes('خمسة قطع')) {
-        console.log("📊 Found 'خمس قطع' in text, returning 5");
         return 5;
       } else if (selectedOfferData.includes('ست قطع') || selectedOfferData.includes('ستة قطع')) {
-        console.log("📊 Found 'ست قطع' in text, returning 6");
         return 6;
       } else if (selectedOfferData.includes('سبع قطع') || selectedOfferData.includes('سبعة قطع')) {
-        console.log("📊 Found 'سبع قطع' in text, returning 7");
         return 7;
       } else if (selectedOfferData.includes('ثمان قطع') || selectedOfferData.includes('ثمانية قطع')) {
-        console.log("📊 Found 'ثمان قطع' in text, returning 8");
         return 8;
       } else if (selectedOfferData.includes('تسع قطع') || selectedOfferData.includes('تسعة قطع')) {
-        console.log("📊 Found 'تسع قطع' in text, returning 9");
         return 9;
       } else if (selectedOfferData.includes('عشر قطع') || selectedOfferData.includes('عشرة قطع')) {
-        console.log("📊 Found 'عشر قطع' in text, returning 10");
         return 10;
       }
       
@@ -1632,21 +1645,17 @@ export default function LandingPageView() {
         const extractedQuantity = parseInt(numberMatch[1]);
         // تجاهل الأرقام الكبيرة (الأسعار) - فقط الكميات الصغيرة
         if (extractedQuantity <= 10) {
-          console.log("📊 Extracted quantity from number:", extractedQuantity);
           return extractedQuantity;
         } else {
-          console.log("📊 Ignoring large number (price):", extractedQuantity);
         }
       }
       
       // إذا لم نجد أي شيء، نستخدم البيانات من العرض إن وُجد
       if (offerData) {
         const quantity = offerData.quantity || 1;
-        console.log("📊 Using offer data quantity:", quantity);
         return quantity;
       }
       
-      console.log("📊 Fallback to 1");
       return 1;
     }
     
@@ -1654,18 +1663,10 @@ export default function LandingPageView() {
     if (selectedOffer) {
       const offerData = availableOffers.find((offer: any) => offer.id === selectedOffer);
       const quantity = offerData?.quantity || 1;
-      console.log("📊 getSelectedOfferQuantity (TikTok):", {
-        selectedOffer,
-        offerData,
-        quantity,
-        availableOffers,
-        template: landingPage?.template
-      });
       return quantity;
     }
     
     // إذا لم يكن هناك أي عرض مختار، ارجع 1
-    console.log("📊 No offer selected, returning 1");
     return 1;
   };
 
@@ -1781,20 +1782,10 @@ export default function LandingPageView() {
   
   // إضافة console.log للتشخيص
   useEffect(() => {
-    console.log('🔍 Product loaded:', product);
-    console.log('🔍 Product priceOffers:', product?.priceOffers);
-    console.log('🔍 Available offers:', availableOffers);
     
     // فحص تفصيلي للعروض
     if (availableOffers && availableOffers.length > 0) {
       availableOffers.forEach((offer: any, index: number) => {
-        console.log(`🔍 Offer ${index + 1}:`, {
-          id: offer.id,
-          label: offer.label,
-          quantity: offer.quantity,
-          price: offer.price,
-          originalData: product?.priceOffers?.[index]
-        });
       });
     }
   }, [product, availableOffers]);
@@ -1804,15 +1795,8 @@ export default function LandingPageView() {
     if (availableOffers.length > 0) {
       const defaultOffer = availableOffers.find((offer: any) => offer.isDefault) || availableOffers[0];
       
-      console.log("🔄 Setting default offer:", {
-        defaultOffer,
-        currentSelectedOffer: selectedOffer,
-        availableOffers
-      });
-      
       // للقوالب التي تستخدم selectedOffer (مثل TikTok)
       if (!selectedOffer) {
-        console.log("✅ Setting selectedOffer to:", defaultOffer.id);
         setSelectedOffer(defaultOffer.id);
       }
       
@@ -1827,10 +1811,6 @@ export default function LandingPageView() {
   const submitOrderMutation = useMutation({
     mutationFn: async (data: OrderFormData) => {
       try {
-        console.log("🚀 بدء إرسال الطلب من landing-page-view");
-        console.log("📝 بيانات النموذج:", data);
-        console.log("🔍 selectedOffer:", selectedOffer);
-        console.log("🔍 availableOffers:", availableOffers);
         
         // حساب الكمية والسعر من العرض المختار
         let selectedOfferData;
@@ -1842,7 +1822,6 @@ export default function LandingPageView() {
           selectedOfferData = availableOffers.find((offer: any) => offer.id === selectedOffer);
           quantity = selectedOfferData?.quantity || 1;
           offerPrice = selectedOfferData?.price || 0;
-          console.log("💰 TikTok template - selectedOfferData:", selectedOfferData);
         } else {
           // للقوالب الأخرى
           selectedOfferData = availableOffers.find((offer: any) => 
@@ -1850,19 +1829,8 @@ export default function LandingPageView() {
           );
           quantity = selectedOfferData?.quantity || 1;
           offerPrice = selectedOfferData?.price || 0;
-          console.log("💰 Default template - selectedOfferData:", selectedOfferData);
         }
         
-        console.log("💰 Final calculated values:", {
-          quantity,
-          offerPrice,
-          selectedOfferData: selectedOfferData ? {
-            id: selectedOfferData.id,
-            label: selectedOfferData.label,
-            price: selectedOfferData.price,
-            quantity: selectedOfferData.quantity
-          } : null
-        });
         
         // Validate variant selections before submitting
         const validationErrors = validateVariantSelections();
@@ -1887,29 +1855,36 @@ export default function LandingPageView() {
           // إضافة تفاصيل إضافية للتشخيص
           colorCount: selectedColorIds.length,
           shapeCount: selectedShapeIds.length,
-          sizeCount: selectedSizeIds.length
+          sizeCount: selectedSizeIds.length,
+          test: 'test'
         };
         
-        console.log("📦 Final orderData being sent:", {
-          price: orderData.price,
-          totalAmount: orderData.totalAmount,
-          subtotal: orderData.subtotal,
-          quantity: orderData.quantity,
-          offer: orderData.offer,
-          landingPageId: orderData.landingPageId
-        });
         
-        // Debug: طباعة بيانات المتغيرات المرسلة
-        console.log("🛒 Order Data with Variants:", {
-          selectedColorIds: orderData.selectedColorIds,
-          selectedShapeIds: orderData.selectedShapeIds,
-          selectedSizeIds: orderData.selectedSizeIds,
-          colorCount: selectedColorIds.length,
-          shapeCount: selectedShapeIds.length,
-          sizeCount: selectedSizeIds.length
-        });
         
-        console.log("📤 إرسال الطلب إلى الخادم...");
+        // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
+        const timestamp = Date.now();
+        const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+        
+        // إعداد بيانات InitiateCheckout عبر PixelTracker
+        const checkoutData = {
+          content_name: product.name,
+          content_category: getGoogleProductCategory(product),
+          content_ids: [product.id],
+          content_type: 'product',
+          value: parseFloat(offerPrice.toString()),
+          currency: 'USD',
+          num_items: quantity,
+          customer_name: data.customerName,
+          customer_phone: data.customerPhone,
+          external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
+          landing_page_id: landingPage.id,
+          product_id: product.id,
+          // إضافة timestamp للاستخدام في PixelTracker
+          _timestamp: timestamp
+        };
+        
+        setInitiateCheckoutData(checkoutData);
+
         const result = await apiRequest("/api/landing-page-orders", "POST", orderData);
         return result;
       } catch (error) {
@@ -1917,6 +1892,32 @@ export default function LandingPageView() {
       }
     },
     onSuccess: (newOrder: any) => {
+      // إعداد بيانات Lead عبر PixelTracker
+      if (landingPage?.platformId && product) {
+        // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
+        const timestamp = Date.now();
+        const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+        
+        const leadData = {
+          content_name: product.name,
+          content_category: getGoogleProductCategory(product),
+          content_ids: [product.id],
+          content_type: 'product',
+          value: parseFloat(newOrder.totalAmount?.toString() || '0'),
+          currency: 'USD',
+          customer_name: newOrder.customerName,
+          customer_phone: newOrder.customerPhone,
+          external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
+          landing_page_id: landingPage.id,
+          product_id: product.id,
+          order_id: newOrder.id,
+          // إضافة timestamp للاستخدام في PixelTracker
+          _timestamp: timestamp
+        };
+        
+        setLeadEventData(leadData);
+      }
+
       toast({
         title: "تم إرسال الطلب!",
         description: "تم إرسال طلبك بنجاح. سنتواصل معك قريباً.",
@@ -2250,7 +2251,12 @@ export default function LandingPageView() {
                           <FormControl>
                             <div className="relative">
                               <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="الاسم الكامل *" className="pr-10 bg-white force-light-placeholder dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
+                              <Input 
+                                placeholder="الاسم الكامل *" 
+                                className="pr-10 bg-white force-light-placeholder dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" 
+                                {...field}
+                                onFocus={handleAddToCartFocus}
+                              />
                               <style dangerouslySetInnerHTML={{
                                 __html: `
                                   .force-light-placeholder::placeholder {
@@ -2976,11 +2982,6 @@ export default function LandingPageView() {
                               value={offer.id}
                               checked={selectedOffer === offer.id}
                               onChange={(e) => {
-                                console.log("🔄 Offer changed:", {
-                                  newOfferId: e.target.value,
-                                  availableOffers,
-                                  selectedOfferData: availableOffers.find((o: any) => o.id === e.target.value)
-                                });
                                 setSelectedOffer(e.target.value);
                                 const selectedOfferData = availableOffers.find((o: any) => o.id === e.target.value);
                                 if (selectedOfferData) {
@@ -2989,7 +2990,6 @@ export default function LandingPageView() {
                                   setSelectedColorIds([]);
                                   setSelectedShapeIds([]);
                                   setSelectedSizeIds([]);
-                                  console.log("✅ Offer changed to:", selectedOfferData.label, "Quantity:", selectedOfferData.quantity);
                                 }
                               }}
                               className="sr-only"
@@ -3055,6 +3055,7 @@ export default function LandingPageView() {
                               placeholder="الاسم الكامل"
                               className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500`}
                               {...field}
+                              onFocus={handleAddToCartFocus}
                             />
                           </FormControl>
                           <FormMessage className="text-red-400" />
@@ -3638,7 +3639,7 @@ export default function LandingPageView() {
                           <FormControl>
                             <div className="relative">
                               <User className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="الاسم الكامل *" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
+                              <Input placeholder="الاسم الكامل *" className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500" {...field} onFocus={handleAddToCartFocus} />
                             </div>
                           </FormControl>
                           <FormMessage />
@@ -6736,38 +6737,47 @@ export default function LandingPageView() {
           </div>
         </div>
       )}
+      {/* PixelTracker Components - نظيف ومرتب ومطابق للمواصفات */}
       
-
-
-      {/* PixelTracker Component for Facebook and TikTok tracking */}
-      {landingPage && product && (() => {
-        // استخدام Google Product Category من بيانات الفئة أو الافتراضي
-        const googleCategory = getGoogleProductCategory(product);
-        const categoryToUse = googleCategory; // استخدام الفئة الإنجليزية
-        
-        return (
-          <PixelTracker
-            platformId={landingPage.platformId}
-            eventType="view_content"
-            eventData={{
-              content_name: product.name,
-              content_category: categoryToUse,
-            content_ids: [product.id],
-            value: (() => {
-              const availableOffers = getAvailableOffers(product);
-              if (availableOffers.length > 0) {
-                const defaultOffer = availableOffers.find((offer: any) => offer.isDefault) || availableOffers[0];
-                return defaultOffer.price.toString();
-              }
-              return product.price?.toString() || '0';
-            })(),
-            currency: 'USD',
-            landing_page_id: landingPage.id,
-            product_id: product.id
-          }}
+      {/* ViewContent Event */}
+      {viewContentPixelData && landingPage?.platformId && (
+        <PixelTracker
+          key="view_content"
+          platformId={landingPage.platformId}
+          eventType="view_content"
+          eventData={viewContentPixelData}
         />
-        );
-      })()}
+      )}
+      
+      {/* AddToCart Event */}
+      {addToCartPixelData && landingPage?.platformId && (
+        <PixelTracker
+          key="add_to_cart_stable"
+          platformId={landingPage.platformId}
+          eventType="add_to_cart"
+          eventData={addToCartPixelData}
+        />
+      )}
+      
+      {/* InitiateCheckout Event */}
+      {initiateCheckoutData && landingPage?.platformId && (
+        <PixelTracker
+          key="initiate_checkout"
+          platformId={landingPage.platformId}
+          eventType="initiate_checkout"
+          eventData={initiateCheckoutData}
+        />
+      )}
+      
+      {/* Lead Event */}
+      {leadEventData && landingPage?.platformId && (
+        <PixelTracker
+          key="lead"
+          platformId={landingPage.platformId}
+          eventType="lead"
+          eventData={leadEventData}
+        />
+      )}
     </div>
   );
 }

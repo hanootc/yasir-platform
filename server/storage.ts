@@ -1190,8 +1190,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCategory(id: string): Promise<Category | undefined> {
-    const [category] = await db.select().from(categories).where(eq(categories.id, id));
-    return category;
+    try {
+      const [category] = await db.select().from(categories).where(eq(categories.id, id));
+      return category;
+    } catch (error) {
+      console.error('Error fetching category with all columns:', error);
+      // Fallback: select specific columns without googleCategory
+      const [category] = await db.select({
+        id: categories.id,
+        name: categories.name,
+        description: categories.description,
+        icon: categories.icon,
+        platformId: categories.platformId,
+        isActive: categories.isActive,
+        createdAt: categories.createdAt,
+        googleCategory: sql<string | null>`NULL`.as('googleCategory') // إضافة googleCategory كـ NULL
+      }).from(categories).where(eq(categories.id, id));
+      return category;
+    }
   }
 
   async createCategory(category: InsertCategory): Promise<Category> {
@@ -1233,6 +1249,8 @@ export class DatabaseStorage implements IStorage {
           platformId: products.platformId,
           categoryId: products.categoryId,
           category: categories.name,
+          categoryName: categories.name, // إضافة categoryName أيضاً
+          // categoryGoogleCategory: categories.googleCategory, // تعطيل مؤقت - العمود غير موجود
           stock: products.stock,
           lowStockThreshold: products.lowStockThreshold,
           sku: products.sku,
@@ -1246,6 +1264,14 @@ export class DatabaseStorage implements IStorage {
         .from(products)
         .leftJoin(categories, eq(products.categoryId, categories.id))
         .where(eq(products.id, id));
+      
+      console.log('🔍 Product with category data:', {
+        productId: id,
+        found: !!result[0],
+        categoryId: result[0]?.categoryId,
+        category: result[0]?.category,
+        categoryName: result[0]?.categoryName
+      });
       
       return result[0] || undefined;
     } catch (error) {
