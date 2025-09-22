@@ -52,11 +52,6 @@ declare global {
 }
 
 export default function PixelTracker({ platformId, eventType, eventData }: PixelTrackerProps) {
-  console.log('🔥🔥🔥 PIXELTRACKER COMPONENT LOADED - NEW VERSION 2025! 🔥🔥🔥');
-  console.log('🔥 Platform ID:', platformId);
-  console.log('🔥 Event Type:', eventType);
-  console.log('🔥 Event Data:', eventData);
-  console.log('🔥🔥🔥 هذا هو الكود الجديد بدون منع تكرار! 🔥🔥🔥');
   
   // نظام منع الإرسال المتكرر باستخدام localStorage
   const [hasExecuted, setHasExecuted] = useState(false);
@@ -68,17 +63,9 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     refetchOnWindowFocus: false,
   });
 
-  console.log('🔍 PixelTracker Query Status:', {
-    platformId,
-    isLoading,
-    error,
-    pixelSettings,
-    url: `/api/platforms/${platformId}/ad-platform-settings`
-  });
   
   // عرض حالة تحميل الـ Pixel Settings
   if (isLoading) {
-    console.log('⏳ PixelTracker: جاري تحميل إعدادات الـ Pixels...');
   }
   
   if (error) {
@@ -139,32 +126,26 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
 
   // تحميل Facebook Pixel
   const loadFacebookPixel = (pixelId: string) => {
-    console.log('📘 Facebook Pixel: Loading with ID', pixelId);
     
     // التحقق من وجود script فيسبوك مسبقاً
     const existingScript = document.querySelector('script[src*="fbevents.js"]');
     const existingPixelData = document.querySelector(`[data-fb-pixel-id="${pixelId}"]`);
     
     if (existingScript && existingPixelData) {
-      console.log('📘 Facebook Pixel: ✅ Already loaded for this pixel ID, skipping duplicate load');
       return;
     }
     
     // إذا كان fbq موجود، أضف الـ pixel ID الجديد فقط
     if (window.fbq && existingScript) {
-      console.log('📘 Facebook Pixel: ✅ FBQ exists, adding new pixel ID:', pixelId);
       window.fbq('init', pixelId);
       // إضافة علامة لتتبع الـ pixel المحمل
       const marker = document.createElement('div');
       marker.setAttribute('data-fb-pixel-id', pixelId);
       marker.style.display = 'none';
       document.head.appendChild(marker);
-      console.log('📘 Facebook Pixel: ✅ NEW PIXEL ID ADDED:', pixelId);
       return;
     }
     
-    console.log('📘 Facebook Pixel: Starting fresh load with ID', pixelId);
-    console.log('📘 Facebook Pixel: 🚀 PIXEL LOADING STARTED - ID:', pixelId);
     
     // إنشاء Facebook Pixel Script الأصلي - طريقة Facebook الرسمية
     (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
@@ -187,7 +168,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
     
     // تهيئة الـ pixel
-    console.log('📘 Facebook Pixel: ✅ INITIALIZING WITH ID:', pixelId);
     window.fbq('init', pixelId);
     
     // إضافة علامة لتتبع الـ pixel المحمل
@@ -196,11 +176,9 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     marker.style.display = 'none';
     document.head.appendChild(marker);
     
-    console.log('📘 Facebook Pixel: ✅ INIT COMMAND EXECUTED');
     
     // إرسال PageView تلقائياً
     window.fbq('track', 'PageView');
-    console.log('📘 Facebook Pixel: ✅ PAGEVIEW TRACKED AUTOMATICALLY');
     
     // إضافة noscript للمتصفحات التي لا تدعم JavaScript
     if (!document.querySelector('noscript img[src*="facebook.com/tr"]')) {
@@ -224,11 +202,9 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   const loadTikTokPixel = (pixelId: string) => {
     // التحقق من تحميل البكسل سابقاً
     if (document.querySelector(`[data-tiktok-pixel-id="${pixelId}"]`)) {
-      console.log('🎬 TikTok Pixel: ✅ Already loaded for this pixel ID, skipping duplicate load');
       return;
     }
 
-    console.log('🎬 TikTok Pixel: Loading with ID', pixelId);
 
     // تهيئة TikTok Pixel
     (function (w: any, d: Document, t: string) {
@@ -263,7 +239,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     marker.style.display = 'none';
     document.head.appendChild(marker);
 
-    console.log('🎬 TikTok Pixel: ✅ Successfully initialized and tracking PageView');
   };
 
   // تحميل Snapchat Pixel
@@ -307,14 +282,12 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
 
   // تتبع أحداث Facebook
   const trackFacebookEvent = (eventType: string, data?: any, sharedEventId?: string) => {
-    console.log('📘 Facebook Pixel: ✅ ATTEMPTING TO TRACK EVENT:', eventType, data);
     
     if (!window.fbq) {
       console.error('📘 Facebook Pixel: ❌ FBQ NOT AVAILABLE - PIXEL NOT LOADED');
       return;
     }
     
-    console.log('📘 Facebook Pixel: ✅ FBQ AVAILABLE - PROCEEDING WITH EVENT');
 
     const fbEventMap: Record<string, string> = {
       'page_view': 'PageView',
@@ -393,19 +366,16 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       Object.entries(eventData).filter(([_, value]) => value !== undefined && value !== '')
     );
 
-    console.log('📘 Facebook Event:', fbEvent, cleanEventData);
     
     // تأكد من تحميل fbq أولاً
     if (typeof window.fbq === 'function') {
       window.fbq('track', fbEvent, cleanEventData);
-      console.log('📘 Facebook Pixel: Event sent successfully');
     } else {
       console.error('📘 Facebook Pixel: fbq is not a function');
     }
     
     // ملاحظة: تم إزالة الإرسال المكرر لـ Server-Side API هنا
     // سيتم الإرسال عبر sendToServerSideAPI فقط لتجنب التكرار
-    console.log('✅ Facebook Pixel: تم إرسال الحدث عبر Client-Side فقط');
   };
 
   // تتبع أحداث TikTok بطريقة طبيعية وصحيحة
@@ -461,7 +431,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     if (email && email.trim()) eventData.email = email.trim();
     if (phone && phone.trim()) {
       eventData.phone_number = phone.trim();
-      console.log('📞 TikTok Event Data Phone formatted:', rawPhone, '->', phone);
     }
     
     // محاولة الحصول على email من eventData إذا لم يكن متوفراً
@@ -476,7 +445,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       )
     );
 
-    console.log('🎬 TikTok Event:', tikTokEvent, cleanEventData);
 
     try {
       // تجهيز البيانات الشخصية منفصلة لـ TikTok Pixel
@@ -484,13 +452,11 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       if (email && email.trim()) userProperties.email = email.trim();
       if (phone && phone.trim()) {
         userProperties.phone_number = phone.trim();
-        console.log('📞 TikTok Phone formatted:', rawPhone, '->', phone);
       }
       
       // إرسال البيانات الشخصية أولاً (إذا كانت متوفرة)
       if (Object.keys(userProperties).length > 0) {
         window.ttq.identify(userProperties);
-        console.log('🎬 TikTok Pixel: User data identified:', userProperties);
       }
       
       // ثم إرسال الحدث
@@ -532,7 +498,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
           }
         })
       });
-      console.log('🎬 TikTok API: Event sent successfully');
     } catch (error) {
       console.warn('🎬 TikTok API: Failed to send event:', error);
     }
@@ -621,13 +586,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       
       const standardEventType = fbEventMap[eventType] || eventType;
       
-      console.log('📤 إرسال إلى Server-Side API:', {
-        platformId,
-        originalEventType: eventType,
-        standardEventType,
-        eventId,
-        url: window.location.href
-      });
       
       const response = await fetch('/api/facebook-conversions', {
         method: 'POST',
@@ -650,7 +608,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       const result = await response.json();
       
       if (response.ok) {
-        console.log('✅ Server-Side API: تم إرسال الحدث بنجاح');
       } else {
         console.error('❌ Server-Side API: فشل في إرسال الحدث:', result);
       }
@@ -684,7 +641,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     const timestamp = (eventData as any)?._timestamp || Date.now();
     const eventId = presetEventId || `${eventType}_${contentId}_${timestamp.toString().slice(-8)}`;
     
-    console.log('🎆🎆🎆 تنفيذ حدث مع معرفات متطابقة:', eventType, 'للمنتج:', contentId, 'بمعرف:', eventId, 'external_id:', (eventData as any)?.external_id, 'preset:', !!presetEventId, '🎆🎆🎆');
     
     // تحميل وتنفيذ Facebook Pixel
     if (pixelSettings.facebookPixelId) {
