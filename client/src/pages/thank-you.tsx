@@ -46,6 +46,26 @@ interface OrderData {
   category_name?: string;
 }
 
+// إنشاء معرف خارجي ثابت ومحسن للمستخدم
+const createStableExternalId = (productId: string, orderData: any): string => {
+  // استخدام بيانات ثابتة لإنشاء معرف مستقر
+  const phone = orderData?.customerPhone || orderData?.phone || '';
+  const email = orderData?.customerEmail || orderData?.email || '';
+  const orderTimestamp = new Date(orderData.createdAt).getTime();
+  
+  // إنشاء hash بسيط من البيانات الثابتة
+  const stableData = `${phone}_${email}_${productId}`.replace(/[^a-zA-Z0-9]/g, '');
+  
+  if (stableData.length > 3) {
+    // استخدام أول وآخر أحرف + طول النص لإنشاء معرف ثابت
+    const hash = stableData.slice(0, 4) + stableData.slice(-4) + stableData.length.toString();
+    return `user_${hash}_${orderTimestamp.toString().slice(-8)}`;
+  }
+  
+  // fallback للمعرف المبني على وقت الطلب
+  return `user_${productId}_${orderTimestamp.toString().slice(-8)}`;
+};
+
 // الحصول على Google Product Category من بيانات الفئة أو الافتراضي
 const getGoogleProductCategory = (orderData: any) => {
   // إذا كان هناك googleCategory في بيانات الفئة، استخدمه
@@ -235,7 +255,7 @@ export default function ThankYouPage() {
   const trackPurchaseEvent = () => {
     if (!order) return null;
 
-    // استخدام القيمة بالدينار العراقي مباشرة - سيتم التحويل في الخادم
+    // استخدام القيمة بالدينار العراقي مباشرة بدون تحويل لتطابق الكتالوج
     const orderValueIQD = parseFloat(order.totalAmount || order.total || "0");
     
 
@@ -302,10 +322,9 @@ export default function ThankYouPage() {
     const userIdentifiers = getUserIdentifiers();
     
 
-    // استخدام معرف ثابت مبني على order.id لضمان التطابق مع الأحداث السابقة
-    // استخدام createdAt timestamp من الطلب لضمان الثبات
+    // استخدام معرف ثابت محسن مبني على بيانات المستخدم والطلب
     const orderTimestamp = new Date(order.createdAt).getTime();
-    const stableExternalId = `user_${productId}_${orderTimestamp.toString().slice(-8)}`;
+    const stableExternalId = createStableExternalId(productId, order);
     
     // إنشاء event_id ثابت للـ Purchase باستخدام نفس النمط
     const purchaseEventId = `purchase_${productId}_${orderTimestamp.toString().slice(-8)}`;

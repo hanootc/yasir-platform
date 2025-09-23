@@ -17,7 +17,8 @@ import {
   DollarSign,
   Menu,
   Truck,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
@@ -455,7 +456,7 @@ export default function PlatformDashboard() {
                             </div>
                             <div className="text-right">
                               <div className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                                {statsLoading ? '...' : ((stats as any)?.confirmedOrders || (((stats as any)?.totalOrders || 0) - ((stats as any)?.pendingOrders || 0)))}
+                                {statsLoading ? '...' : ((stats as any)?.confirmedOrders || 0)}
                               </div>
                             </div>
                           </div>
@@ -494,6 +495,23 @@ export default function PlatformDashboard() {
                             </div>
                           </div>
                           <div className="text-xs font-medium text-green-700 dark:text-green-300">مسلم</div>
+                        </div>
+                      </div>
+
+                      {/* مرتجع */}
+                      <div className="relative group">
+                        <div className="bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/20 dark:to-amber-900/20 rounded-xl p-2 border border-orange-200 dark:border-orange-800 hover:scale-105 transition-all duration-300">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="p-1.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg">
+                              <RotateCcw className="h-3 w-3 text-white" />
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-bold text-orange-600 dark:text-orange-400">
+                                {statsLoading ? '...' : ((stats as any)?.returnedOrders || 0)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs font-medium text-orange-700 dark:text-orange-300">مرتجع</div>
                         </div>
                       </div>
 
@@ -640,6 +658,19 @@ export default function PlatformDashboard() {
                         <div 
                           className="bg-gradient-to-r from-green-500 to-emerald-500 h-1.5 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.round((((stats as any)?.deliveredOrders || 0) / Math.max(1, (stats as any)?.totalOrders || 1)) * 100)}%` }}
+                        ></div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-orange-600 dark:text-orange-400 font-medium">مرتجع</span>
+                        <span className="text-orange-600 dark:text-orange-400">
+                          {Math.round((((stats as any)?.returnedOrders || 0) / Math.max(1, (stats as any)?.totalOrders || 1)) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-orange-100 dark:bg-orange-900/20 rounded-full h-1.5">
+                        <div 
+                          className="bg-gradient-to-r from-orange-500 to-amber-500 h-1.5 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.round((((stats as any)?.returnedOrders || 0) / Math.max(1, (stats as any)?.totalOrders || 1)) * 100)}%` }}
                         ></div>
                       </div>
                       

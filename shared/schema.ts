@@ -363,6 +363,7 @@ export const orders = pgTable("orders", {
   platformId: varchar("platform_id").references(() => platforms.id).notNull(),
   // تتبع مصدر الطلب
   orderSource: orderSourceEnum("order_source").default("manual"),
+  sourceDetails: text("source_details"), // تفاصيل إضافية عن مصدر الطلب (اسم المعلق، رقم الهاتف، إلخ)
   adCampaignId: varchar("ad_campaign_id"), // معرف الحملة الإعلانية (اختياري)
   adSetId: varchar("ad_set_id"), // معرف المجموعة الإعلانية (اختياري) 
   adId: varchar("ad_id"), // معرف الإعلان (اختياري)
@@ -681,6 +682,7 @@ export const landingPageOrders = pgTable("landing_page_orders", {
   
   // تتبع مصدر الطلب
   orderSource: orderSourceEnum("order_source").default("landing_page"),
+  sourceDetails: text("source_details"), // تفاصيل إضافية عن مصدر الطلب (اسم المعلق، رقم الهاتف، إلخ)
   adCampaignId: varchar("ad_campaign_id"), // معرف الحملة الإعلانية (اختياري)
   adSetId: varchar("ad_set_id"), // معرف المجموعة الإعلانية (اختياري)
   adId: varchar("ad_id"), // معرف الإعلان (اختياري)

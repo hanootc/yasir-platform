@@ -30,6 +30,25 @@ const headerStyles = `
 `;
 import { ImageModal } from "@/components/ImageModal";
 
+// إنشاء معرف خارجي ثابت للمستخدم بناءً على بيانات ثابتة
+const createStableExternalId = (productId: string, customerData?: any): string => {
+  // استخدام بيانات ثابتة لإنشاء معرف مستقر
+  const phone = customerData?.customerPhone || customerData?.phone || '';
+  const email = customerData?.customerEmail || customerData?.email || '';
+  
+  // إنشاء hash بسيط من البيانات الثابتة
+  const stableData = `${phone}_${email}_${productId}`.replace(/[^a-zA-Z0-9]/g, '');
+  
+  if (stableData.length > 3) {
+    // استخدام أول وآخر أحرف + طول النص لإنشاء معرف ثابت
+    const hash = stableData.slice(0, 4) + stableData.slice(-4) + stableData.length.toString();
+    return `user_${hash}`;
+  }
+  
+  // fallback للمعرف المبني على المنتج فقط
+  return `user_${productId}_stable`;
+};
+
 // الحصول على Google Product Category من قاعدة البيانات أو الافتراضي
 const getGoogleProductCategory = (product: any) => {
   // أولاً: استخدم googleCategory من قاعدة البيانات إذا كان متوفراً
@@ -1092,7 +1111,7 @@ export default function LandingPageView() {
       
       // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
       const timestamp = Date.now();
-      const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+      const uniqueExternalId = createStableExternalId(product.id);
       
       // إعداد بيانات ViewContent حسب مواصفات Facebook الرسمية
       const standardPixelData = {
@@ -1101,7 +1120,7 @@ export default function LandingPageView() {
         content_ids: [product.id],
         content_type: 'product',
         value: parseFloat(product.price),
-        currency: 'USD',
+        currency: 'IQD',
         external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
         landing_page_id: landingPage.id,
         product_id: product.id,
@@ -1574,7 +1593,7 @@ export default function LandingPageView() {
     if (landingPage && product && !addToCartPixelData) {
       // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
       const timestamp = Date.now();
-      const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+      const uniqueExternalId = createStableExternalId(product.id);
       
       // إعداد بيانات AddToCart حسب مواصفات Facebook الرسمية
       const standardPixelData = {
@@ -1583,7 +1602,7 @@ export default function LandingPageView() {
         content_ids: [product.id],
         content_type: 'product',
         value: parseFloat(product.price),
-        currency: 'USD',
+        currency: 'IQD',
         external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
         landing_page_id: landingPage.id,
         product_id: product.id,
@@ -1811,6 +1830,36 @@ export default function LandingPageView() {
           throw new Error(validationErrors[0]);
         }
         
+        // استخراج مصدر الطلب من معاملات URL
+        const getOrderSource = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const source = urlParams.get('utm_source') || urlParams.get('source');
+          const medium = urlParams.get('utm_medium') || urlParams.get('medium');
+          const campaign = urlParams.get('utm_campaign') || urlParams.get('campaign');
+          
+          if (source) {
+            let orderSource = source.toLowerCase();
+            if (medium) orderSource += `_${medium.toLowerCase()}`;
+            if (campaign) orderSource += `_${campaign.toLowerCase()}`;
+            return orderSource;
+          }
+          
+          // كشف المصدر من referrer
+          const referrer = document.referrer.toLowerCase();
+          if (referrer.includes('facebook.com')) return 'facebook_ad';
+          if (referrer.includes('instagram.com')) return 'instagram_ad';
+          if (referrer.includes('tiktok.com')) return 'tiktok_ad';
+          if (referrer.includes('whatsapp.com')) return 'whatsapp_message';
+          if (referrer.includes('google.com')) return 'website_direct';
+          if (referrer.includes('twitter.com') || referrer.includes('x.com')) return 'other';
+          if (referrer.includes('telegram.org')) return 'other';
+          
+          return 'landing_page'; // القيمة الافتراضية
+        };
+
+        const detectedOrderSource = getOrderSource();
+        console.log('📊 Order source detected:', detectedOrderSource);
+
         const orderData = {
           ...data,
           landingPageId: landingPage?.id,
@@ -1828,14 +1877,15 @@ export default function LandingPageView() {
           colorCount: selectedColorIds.length,
           shapeCount: selectedShapeIds.length,
           sizeCount: selectedSizeIds.length,
-          test: 'test'
+          test: 'test',
+          orderSource: detectedOrderSource // إضافة مصدر الطلب
         };
         
         
         
         // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
         const timestamp = Date.now();
-        const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+        const uniqueExternalId = createStableExternalId(product.id, data);
         
         // إعداد بيانات InitiateCheckout عبر PixelTracker
         const checkoutData = {
@@ -1844,7 +1894,7 @@ export default function LandingPageView() {
           content_ids: [product.id],
           content_type: 'product',
           value: parseFloat(offerPrice.toString()),
-          currency: 'USD',
+          currency: 'IQD',
           num_items: quantity,
           customer_name: data.customerName,
           customer_phone: data.customerPhone,
@@ -1868,7 +1918,7 @@ export default function LandingPageView() {
       if (landingPage?.platformId && product) {
         // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
         const timestamp = Date.now();
-        const uniqueExternalId = `user_${product.id}_${timestamp.toString().slice(-8)}`;
+        const uniqueExternalId = createStableExternalId(product.id, newOrder);
         
         const leadData = {
           content_name: product.name,
@@ -1876,7 +1926,7 @@ export default function LandingPageView() {
           content_ids: [product.id],
           content_type: 'product',
           value: parseFloat(newOrder.totalAmount?.toString() || '0'),
-          currency: 'USD',
+          currency: 'IQD',
           customer_name: newOrder.customerName,
           customer_phone: newOrder.customerPhone,
           external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق

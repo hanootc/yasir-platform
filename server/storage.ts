@@ -546,6 +546,9 @@ export class DatabaseStorage implements IStorage {
     const postponedOrders = await db.select({ count: sql`count(*)` }).from(landingPageOrders)
       .where(sql`${landingPageOrders.platformId} = ${platformId} AND ${landingPageOrders.status} = 'postponed'`);
     
+    const returnedOrders = await db.select({ count: sql`count(*)` }).from(landingPageOrders)
+      .where(sql`${landingPageOrders.platformId} = ${platformId} AND ${landingPageOrders.status} = 'returned'`);
+    
     // حساب إجمالي المبيعات من الطلبات المؤكدة والمشحونة والمسلمة فقط
     const revenueResult = await db.select({ total: sql`sum(CAST(${landingPageOrders.totalAmount} AS DECIMAL))` })
       .from(landingPageOrders)
@@ -572,6 +575,7 @@ export class DatabaseStorage implements IStorage {
       refundedOrders: parseInt(refundedOrders[0]?.count as string) || 0,
       noAnswerOrders: parseInt(noAnswerOrders[0]?.count as string) || 0,
       postponedOrders: parseInt(postponedOrders[0]?.count as string) || 0,
+      returnedOrders: parseInt(returnedOrders[0]?.count as string) || 0,
       totalRevenue: parseFloat(revenueResult[0]?.total as string) || 0,
     };
 
@@ -588,7 +592,7 @@ export class DatabaseStorage implements IStorage {
           COUNT(*) as orders,
           SUM(total_amount) as revenue
         FROM landing_page_orders 
-        WHERE platform_id = ${platformId}
+        WHERE platform_id = ${platformId} AND status IN ('confirmed', 'shipped', 'delivered')
         GROUP BY customer_governorate
         ORDER BY orders DESC`
       );
@@ -612,7 +616,7 @@ export class DatabaseStorage implements IStorage {
           lpo.id, lpo.order_number, lpo.customer_name, lpo.customer_phone, 
           lpo.customer_governorate, lpo.customer_address, lpo.total_amount, lpo.discount_amount,
           lpo.status, lpo.created_at, lpo.platform_id, lpo.offer, lpo.notes, lpo.quantity,
-          lpo.landing_page_id, 
+          lpo.landing_page_id, lpo.order_source, lpo.source_details,
           COALESCE(lpo.product_id, lp.product_id) as product_id, 
           p.name as product_name, p.image_urls as product_image_urls,
           lpo.selected_color_ids, lpo.selected_shape_ids, lpo.selected_size_ids,
@@ -636,7 +640,7 @@ export class DatabaseStorage implements IStorage {
           o.id, o.order_number::text as order_number, o.customer_name, o.customer_phone,
           o.customer_governorate, o.customer_address, o.total::text as total_amount, 
           o.discount_amount::text as discount_amount, o.status, o.created_at, o.platform_id,
-          oi.offer, o.notes, oi.quantity, null as landing_page_id,
+          oi.offer, o.notes, oi.quantity, null as landing_page_id, o.order_source, o.source_details,
           oi.product_id, p.name as product_name, p.image_urls as product_image_urls,
           oi.selected_color_ids, oi.selected_shape_ids, oi.selected_size_ids,
           oi.selected_color_id, oi.selected_shape_id, oi.selected_size_id,
@@ -678,6 +682,8 @@ export class DatabaseStorage implements IStorage {
         type: row.order_type || 'landing_page',
         offer: row.offer,
         notes: row.notes,
+        orderSource: row.order_source,
+        sourceDetails: row.source_details,
         quantity: parseInt(row.quantity || "1"), // إضافة حقل الكمية
         productId: row.product_id,
         productName: row.product_name,
@@ -1583,6 +1589,8 @@ export class DatabaseStorage implements IStorage {
             selectedShape: firstItem?.product_shapes?.shapeName || null,
             selectedSize: firstItem?.product_sizes?.sizeName || null,
             selectedSizeValue: firstItem?.product_sizes?.sizeValue || null,
+            orderSource: order.orderSource,
+            sourceDetails: order.sourceDetails,
             type: 'regular'
           };
         })
@@ -1625,6 +1633,8 @@ export class DatabaseStorage implements IStorage {
             productName: productInfo?.name || null,
             productImage: productInfo?.imageUrls || null,
             productPrice: productInfo?.price || null,
+            orderSource: lpOrder.orderSource,
+            sourceDetails: lpOrder.sourceDetails,
             type: 'landing_page'
           };
         })
@@ -1731,7 +1741,8 @@ export class DatabaseStorage implements IStorage {
         customerEmail: null,
         tax: "0",
         shipping: "0", 
-        total: landingOrder.totalAmount || "0"
+        total: landingOrder.totalAmount || "0",
+        sourceDetails: landingOrder.sourceDetails || null
       } as Order;
     }
     return undefined;
@@ -2102,36 +2113,95 @@ export class DatabaseStorage implements IStorage {
   // Get next sequential order number
   async getNextOrderNumber(): Promise<number> {
     try {
-      // Get the count of all regular orders
+      // الحصول على أعلى رقم طلب من جدول الطلبات العادية
       const [regularResult] = await db
-        .select({ count: sql<number>`cast(count(*) as int)` })
+        .select({ maxOrderNumber: sql<number>`cast(coalesce(max(cast(order_number as integer)), 0) as int)` })
         .from(orders);
         
-      // Get the count of all landing page orders  
+      // الحصول على أعلى رقم طلب من جدول طلبات صفحات الهبوط
       const [lpResult] = await db
-        .select({ count: sql<number>`cast(count(*) as int)` })
+        .select({ maxOrderNumber: sql<number>`cast(coalesce(max(cast(order_number as integer)), 0) as int)` })
         .from(landingPageOrders);
         
-      const totalOrders = (regularResult?.count || 0) + (lpResult?.count || 0);
-      return totalOrders + 1;
+      // أخذ أعلى رقم من الجدولين
+      const maxRegular = regularResult?.maxOrderNumber || 0;
+      const maxLandingPage = lpResult?.maxOrderNumber || 0;
+      const maxOrderNumber = Math.max(maxRegular, maxLandingPage);
+      
+      console.log('📊 Order numbering:', {
+        maxRegular,
+        maxLandingPage,
+        nextOrderNumber: maxOrderNumber + 1
+      });
+      
+      return maxOrderNumber + 1;
     } catch (error) {
       console.error('Error getting next order number:', error);
-      return 1;
+      // في حالة الخطأ، استخدم timestamp لضمان الفرادة
+      return Date.now() % 1000000; // آخر 6 أرقام من timestamp
     }
   }
 
   async createLandingPageOrder(order: InsertLandingPageOrder): Promise<LandingPageOrder> {
-    const sequentialNumber = await this.getNextOrderNumber();
-    const orderNumber = sequentialNumber.toString();
+    let attempts = 0;
+    const maxAttempts = 3;
     
-    const [newOrder] = await db
-      .insert(landingPageOrders)
-      .values({
-        ...order,
-        orderNumber,
-      })
-      .returning();
-    return newOrder;
+    while (attempts < maxAttempts) {
+      try {
+        const sequentialNumber = await this.getNextOrderNumber();
+        const orderNumber = sequentialNumber.toString();
+        
+        console.log(`🔄 Attempting to create order with number: ${orderNumber} (attempt ${attempts + 1})`);
+        
+        const [newOrder] = await db
+          .insert(landingPageOrders)
+          .values({
+            ...order,
+            orderNumber,
+          })
+          .returning();
+        
+        console.log(`✅ Successfully created order with number: ${orderNumber}`);
+        return newOrder;
+        
+      } catch (error: any) {
+        attempts++;
+        
+        // إذا كان الخطأ متعلق بتكرار رقم الطلب
+        if (error.message?.includes('duplicate key value violates unique constraint') && 
+            error.message?.includes('order_number')) {
+          
+          console.warn(`⚠️ Order number conflict detected, retrying... (attempt ${attempts}/${maxAttempts})`);
+          
+          if (attempts >= maxAttempts) {
+            // في المحاولة الأخيرة، استخدم timestamp فريد
+            const timestampNumber = Date.now().toString().slice(-8);
+            const fallbackOrderNumber = `${timestampNumber}`;
+            
+            console.log(`🔄 Using fallback order number: ${fallbackOrderNumber}`);
+            
+            const [newOrder] = await db
+              .insert(landingPageOrders)
+              .values({
+                ...order,
+                orderNumber: fallbackOrderNumber,
+              })
+              .returning();
+            
+            return newOrder;
+          }
+          
+          // انتظار قصير قبل المحاولة مرة أخرى
+          await new Promise(resolve => setTimeout(resolve, 100 * attempts));
+          continue;
+        }
+        
+        // إذا كان خطأ آخر، ارمي الخطأ
+        throw error;
+      }
+    }
+    
+    throw new Error('Failed to create order after maximum attempts');
   }
 
   async updateOrderStatus(id: string, status: string): Promise<any> {

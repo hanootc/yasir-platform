@@ -123,8 +123,12 @@ const orderSourceLabels: { [key: string]: string } = {
   tiktok_ad: 'إعلان TikTok',
   facebook_ad: 'إعلان Facebook',
   instagram_ad: 'إعلان Instagram',
+  facebook_comment: 'تعليق فيس',
+  instagram_comment: 'تعليق انستى',
+  facebook_messenger: 'ماسنجر فيس',
+  instagram_messenger: 'ماسنجر انستى',
   website_direct: 'موقع مباشر',
-  whatsapp_message: 'رسالة واتساب',
+  whatsapp_message: 'رسالة WhatsApp',
   phone_call: 'مكالمة هاتفية',
   other: 'أخرى'
 };
@@ -136,6 +140,10 @@ const orderSourceColors: { [key: string]: string } = {
   tiktok_ad: 'bg-black text-white border-gray-800',
   facebook_ad: 'bg-blue-600 text-white border-blue-700',
   instagram_ad: 'bg-gradient-to-r from-purple-500 to-pink-500 text-white border-purple-600',
+  facebook_comment: 'bg-blue-500 text-white border-blue-600',
+  instagram_comment: 'bg-pink-500 text-white border-pink-600',
+  facebook_messenger: 'bg-blue-400 text-white border-blue-500',
+  instagram_messenger: 'bg-purple-500 text-white border-purple-600',
   website_direct: 'bg-green-100 text-green-800 border-green-200',
   whatsapp_message: 'bg-green-500 text-white border-green-600',
   phone_call: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -149,6 +157,10 @@ const orderSourceIcons: { [key: string]: string } = {
   tiktok_ad: 'fab fa-tiktok',
   facebook_ad: 'fab fa-facebook',
   instagram_ad: 'fab fa-instagram',
+  facebook_comment: 'fas fa-comment',
+  instagram_comment: 'fas fa-comment',
+  facebook_messenger: 'fab fa-facebook-messenger',
+  instagram_messenger: 'fas fa-envelope',
   website_direct: 'fas fa-laptop',
   whatsapp_message: 'fab fa-whatsapp',
   phone_call: 'fas fa-phone',
@@ -852,8 +864,8 @@ export default function PlatformOrders() {
         );
       
       case 'orderSource':
-        // تحديد مصدر الطلب: landing_page للطلبات من صفحات الهبوط، manual للطلبات العادية
-        const orderSource = order.orderSource || (order.orderType === 'landing_page' ? 'landing_page' : 'manual');
+        // استخدام مصدر الطلب الحقيقي من البيانات
+        const orderSource = order.orderSource || 'manual';
         return (
           <div className="flex items-center justify-center gap-1">
             <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border ${orderSourceColors[orderSource] || orderSourceColors.other}`}>
@@ -1177,6 +1189,52 @@ export default function PlatformOrders() {
     }).filter((order): order is any => order !== null);
     setSelectedOrdersForPrint(ordersWithProducts);
     setShowPrintModal(true);
+  };
+
+  // دالة حذف الطلبات المحددة
+  const deleteOrdersMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      const response = await fetch('/api/platform/orders/bulk-delete', {
+        method: 'DELETE',
+        body: JSON.stringify({ orderIds }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'فشل في حذف الطلبات');
+      }
+      
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "تم الحذف بنجاح",
+        description: `تم حذف ${selectedOrders.length} طلب بنجاح`,
+      });
+      setSelectedOrders([]);
+      queryClient.invalidateQueries({ queryKey: ['/api/platform/orders'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في الحذف",
+        description: error.message || "فشل في حذف الطلبات",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteSelectedOrders = () => {
+    if (selectedOrders.length === 0) return;
+    
+    const confirmMessage = `هل أنت متأكد من حذف ${selectedOrders.length} طلب؟ هذا الإجراء لا يمكن التراجع عنه.`;
+    
+    if (window.confirm(confirmMessage)) {
+      deleteOrdersMutation.mutate(selectedOrders);
+    }
   };
 
   // Checkbox functions
@@ -2238,6 +2296,29 @@ export default function PlatformOrders() {
                         <i className="fas fa-refresh text-xs"></i>
                         إعادة ترتيب الحقول
                       </Button>
+
+                      {/* Delete Selected Orders Button */}
+                      {selectedOrders.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDeleteSelectedOrders}
+                          disabled={deleteOrdersMutation.isPending}
+                          className="platform-button bg-red-50 hover:bg-red-100 text-red-700 dark:text-white dark:bg-red-900 dark:hover:bg-red-800 border-red-300 dark:border-red-600 flex items-center gap-1 h-7 px-2 text-xs"
+                          title="حذف الطلبات المحددة"
+                          data-testid="button-delete-selected-orders"
+                        >
+                          {deleteOrdersMutation.isPending ? (
+                            <i className="fas fa-spinner fa-spin text-xs"></i>
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
+                          حذف المحدد
+                          <span className="bg-red-600 text-white rounded-full px-1.5 py-0.5 text-xs mr-1 min-w-[18px] h-[18px] flex items-center justify-center">
+                            {selectedOrders.length}
+                          </span>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>

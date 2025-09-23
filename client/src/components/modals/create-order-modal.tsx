@@ -15,6 +15,17 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 
+// تعريف مصادر الطلبات
+const orderSources = [
+  { id: 'manual', label: 'طلب يدوي', icon: 'fas fa-hand-pointer', color: 'bg-gray-100 text-gray-800' },
+  { id: 'facebook_comment', label: 'طلب فيس تعليق', icon: 'fab fa-facebook', color: 'bg-blue-100 text-blue-800' },
+  { id: 'instagram_comment', label: 'انستى تعليق', icon: 'fab fa-instagram', color: 'bg-pink-100 text-pink-800' },
+  { id: 'facebook_messenger', label: 'ماسنجر فيس', icon: 'fab fa-facebook-messenger', color: 'bg-blue-100 text-blue-800' },
+  { id: 'instagram_messenger', label: 'ماسنجر انستغرام', icon: 'fab fa-instagram', color: 'bg-purple-100 text-purple-800' },
+  { id: 'whatsapp_message', label: 'واتساب', icon: 'fab fa-whatsapp', color: 'bg-green-100 text-green-800' },
+  { id: 'phone_call', label: 'طلب اتصال', icon: 'fas fa-phone', color: 'bg-yellow-100 text-yellow-800' },
+];
+
 const createOrderSchema = z.object({
   customerName: z.string().min(1, "اسم العميل مطلوب"),
   customerPhone: z.string().min(1, "رقم الهاتف مطلوب"),
@@ -22,6 +33,8 @@ const createOrderSchema = z.object({
   customerGovernorate: z.string().min(1, "المحافظة مطلوبة"),
   discount: z.number().min(0, "الخصم يجب أن يكون صفر أو أكثر").optional(),
   notes: z.string().optional(),
+  orderSource: z.string().optional(),
+  sourceDetails: z.string().optional(),
 });
 
 type CreateOrderForm = z.infer<typeof createOrderSchema>;
@@ -37,6 +50,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
     { productId: "", quantity: 1, offer: "", selectedColorIds: [], selectedShapeIds: [], selectedSizeIds: [], selectedColorId: "", selectedShapeId: "", selectedSizeId: "" }
   ]);
   const [sendWhatsAppMessage, setSendWhatsAppMessage] = useState(true);
+  const [selectedOrderSource, setSelectedOrderSource] = useState<string>('manual');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -70,6 +84,8 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       customerGovernorate: "",
       discount: 0,
       notes: "",
+      orderSource: "manual",
+      sourceDetails: "",
     },
   });
 
@@ -80,13 +96,10 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       
       try {
         let result;
-        if (platformId) {
-          console.log("Using platform endpoint:", `/api/platforms/${platformId}/orders`);
-          result = await apiRequest(`/api/platforms/${platformId}/orders`, "POST", data);
-        } else {
-          console.log("Using general endpoint:", "/api/orders");
-          result = await apiRequest("/api/orders", "POST", data);
-        }
+        // Use landing page orders endpoint (it works better for manual orders)
+        console.log("Using landing page orders endpoint:", "/api/landing-page-orders");
+        console.log("Platform ID (for reference):", platformId);
+        result = await apiRequest("/api/landing-page-orders", "POST", data);
         
         console.log("Order creation API response:", result);
         console.log("=== END ORDER CREATION DEBUG ===");
@@ -98,13 +111,12 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       }
     },
     onSuccess: async (data) => {
+      // Invalidate orders queries
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       if (platformId) {
-        queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/orders`] });
         queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/stats`] });
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      }
+      } 
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       
       // إرسال رسالة واتساب إذا تم تحديد الخيار
       console.log("WhatsApp sending check:", { sendWhatsAppMessage, dataId: data?.id, fullData: data });
@@ -234,11 +246,39 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       return;
     }
 
+    // تحويل البيانات لتتوافق مع orders schema
+    const totalAmount = validItems.reduce((sum, item) => {
+      // محاولة استخراج السعر من النص
+      const priceMatch = item.offer?.match(/(\d+)/);
+      const price = priceMatch ? parseInt(priceMatch[1]) : 25000;
+      return sum + (price * item.quantity);
+    }, 0) || 25000;
+
     const orderData = {
-      ...data,
-      items: validItems,
-      discount: data.discount || 0,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      customerGovernorate: data.customerGovernorate,
+      customerAddress: data.customerAddress,
+      platformId: platformId,
+      landingPageId: "3c7840d8-8297-469f-a32a-452040c0451e", // استخدام landing page موجود
+      offer: validItems.length > 0 ? validItems[0].offer || "طلب يدوي" : "طلب يدوي",
+      quantity: validItems.reduce((sum, item) => sum + item.quantity, 0) || 1,
+      totalAmount: totalAmount,
+      subtotal: totalAmount,
+      discountAmount: data.discount || 0,
+      deliveryFee: 0,
+      notes: data.notes || '',
+      orderSource: selectedOrderSource,
+      sourceDetails: data.sourceDetails || '',
+      // إضافة خيارات المنتج إذا كانت متوفرة
+      selectedColorIds: validItems.length > 0 ? validItems[0].selectedColorIds || [] : [],
+      selectedShapeIds: validItems.length > 0 ? validItems[0].selectedShapeIds || [] : [],
+      selectedSizeIds: validItems.length > 0 ? validItems[0].selectedSizeIds || [] : [],
     };
+    
+    console.log('🔍 Order data being sent:', orderData);
+    console.log('📊 Selected order source:', selectedOrderSource);
+    console.log('📝 Source details:', data.sourceDetails);
     
     createOrderMutation.mutate(orderData);
   };
@@ -744,6 +784,71 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                 </div>
               </div>
             </div>
+
+            {/* Order Source Selection */}
+            <div className="space-y-4">
+              <FormLabel className="text-base font-semibold text-white dark:text-gray-200">مصدر الطلب</FormLabel>
+              <div className="grid grid-cols-2 gap-3">
+                {orderSources.map((source) => (
+                  <button
+                    key={source.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedOrderSource(source.id);
+                      form.setValue('orderSource', source.id);
+                    }}
+                    className={`group p-3 rounded-lg border-2 transition-all duration-200 flex items-center gap-3 ${
+                      selectedOrderSource === source.id
+                        ? 'border-primary-500 bg-primary-500/10 text-primary-400 dark:border-primary-400 dark:bg-primary-400/20 dark:text-primary-300'
+                        : 'border-gray-600 hover:border-gray-500 bg-gray-800/50 text-gray-300 hover:text-white dark:border-gray-600 dark:hover:border-gray-500 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:text-white'
+                    }`}
+                  >
+                    <i className={`${source.icon} text-lg ${
+                      selectedOrderSource === source.id 
+                        ? 'text-primary-400 dark:text-primary-300' 
+                        : 'text-gray-400 group-hover:text-gray-200'
+                    }`}></i>
+                    <span className={`text-sm font-medium ${
+                      selectedOrderSource === source.id 
+                        ? 'text-primary-400 dark:text-primary-300' 
+                        : 'text-gray-300 group-hover:text-white'
+                    }`}>{source.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Source Details */}
+            {selectedOrderSource !== 'manual' && (
+              <FormField
+                control={form.control}
+                name="sourceDetails"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {selectedOrderSource.includes('comment') ? 'اسم المعلق' :
+                       selectedOrderSource.includes('messenger') ? 'اسم المستخدم' :
+                       selectedOrderSource === 'whatsapp_message' ? 'رقم الهاتف' :
+                       selectedOrderSource === 'phone_call' ? 'رقم الهاتف' :
+                       'تفاصيل إضافية'}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={
+                          selectedOrderSource.includes('comment') ? 'أدخل اسم المعلق...' :
+                          selectedOrderSource.includes('messenger') ? 'أدخل اسم المستخدم...' :
+                          selectedOrderSource === 'whatsapp_message' ? 'أدخل رقم الهاتف...' :
+                          selectedOrderSource === 'phone_call' ? 'أدخل رقم الهاتف...' :
+                          'أدخل التفاصيل...'
+                        }
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Notes */}
             <FormField

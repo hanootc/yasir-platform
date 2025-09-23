@@ -116,6 +116,26 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     return `${type}_${fixedTimestamp}_${Math.floor(fixedTimestamp / 1000).toString().slice(-4)}`;
   };
 
+  // إنشاء معرف خارجي ثابت ومستقر للمستخدم
+  const createStableExternalId = (data: any): string => {
+    // استخدام بيانات ثابتة للمستخدم لإنشاء معرف مستقر
+    const phone = data?.customer_phone || data?.phone_number || '';
+    const email = data?.customer_email || data?.email || '';
+    const productId = data?.product_id || data?.content_ids?.[0] || '';
+    
+    // إنشاء hash بسيط من البيانات الثابتة
+    const stableData = `${phone}_${email}_${productId}`.replace(/[^a-zA-Z0-9]/g, '');
+    
+    if (stableData.length > 3) {
+      // استخدام أول وآخر أحرف + طول النص لإنشاء معرف ثابت
+      const hash = stableData.slice(0, 4) + stableData.slice(-4) + stableData.length.toString();
+      return `user_${hash}`;
+    }
+    
+    // fallback للمعرف الديناميكي إذا لم تتوفر بيانات كافية
+    return `user_${Date.now().toString().slice(-8)}`;
+  };
+
   // تم حذف useEffect القديم نهائياً - الاعتماد فقط على useEffect الجديد مع sessionStorage
 
   // تم حذف useEffect القديم - الاعتماد فقط على useEffect الجديد مع sessionStorage
@@ -322,8 +342,8 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       return null;
     };
     
-    // تحويل المبلغ من الدينار العراقي إلى الدولار إذا كانت القيمة موجودة
-    const convertedValue = data?.value ? convertIQDToUSD(data.value) : data?.value;
+    // إرسال القيمة كما هي بدون تحويل لتطابق الكتالوج
+    const originalValue = data?.value;
     
     // تنظيف وتوحيد content_ids لضمان المطابقة مع الكتالوج
     const normalizeContentIds = (ids: any): string[] => {
@@ -341,8 +361,8 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       content_category: data?.content_category || data?.product_category,
       content_ids: contentIds.length > 0 ? contentIds : undefined,
       content_type: 'product', // إضافة content_type لتحسين المطابقة
-      value: convertedValue,
-      currency: 'USD', // دائماً USD بعد التحويل
+      value: originalValue,
+      currency: data?.currency || 'IQD', // إرسال العملة الأصلية لتطابق الكتالوج
       num_items: data?.quantity || 1,
       email: data?.customer_email,
       phone_number: data?.customer_phone,
@@ -351,7 +371,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       city: data?.customer_city,
       state: data?.customer_state,
       country: data?.customer_country || 'IQ',
-      external_id: data?.external_id,
+      external_id: data?.external_id || createStableExternalId(data),
       event_id: eventId,
       event_time: Math.floor(Date.now() / 1000),
       action_source: 'website',
@@ -624,17 +644,17 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     const contentId = eventData?.content_ids?.[0] || eventData?.product_id || 'unknown';
     const eventKey = `pixel_${eventType}_${contentId}_${platformId}`;
     
-    // تعطيل نظام منع التكرار مؤقتاً للاختبار
-    // const sessionKey = `session_${eventKey}`;
-    // if (sessionStorage.getItem(sessionKey)) {
-    //   console.log('⚠️ تم تجاهل الحدث المكرر في هذه الجلسة:', eventType, 'للمنتج:', contentId);
-    //   setHasExecuted(true);
-    //   return;
-    // }
+    // نظام منع التكرار المُفعل - يمنع إرسال نفس الحدث مرتين في الجلسة الواحدة
+    const sessionKey = `session_${eventKey}`;
+    if (sessionStorage.getItem(sessionKey)) {
+      console.log('⚠️ تم تجاهل الحدث المكرر في هذه الجلسة:', eventType, 'للمنتج:', contentId);
+      setHasExecuted(true);
+      return;
+    }
     
     // تسجيل الحدث في sessionStorage (فقط للجلسة الحالية)
-    // sessionStorage.setItem(sessionKey, Date.now().toString());
-    // setHasExecuted(true); // تعطيل مؤقت للاختبار
+    sessionStorage.setItem(sessionKey, Date.now().toString());
+    setHasExecuted(true);
     
     // إنشاء event_id متطابق - استخدام _eventId إذا كان متوفراً (للـ Purchase) أو إنشاء جديد
     const presetEventId = (eventData as any)?._eventId;
@@ -646,9 +666,25 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     if (pixelSettings.facebookPixelId) {
       loadFacebookPixel(pixelSettings.facebookPixelId);
       setTimeout(() => {
-        trackFacebookEvent(eventType, eventData, eventId);
-        // إرسال إلى Server-Side API بعد تأخير قصير
-        sendToServerSideAPI(platformId, eventType, eventData, eventId);
+        // إضافة Facebook Cookies إلى eventData قبل الإرسال
+        const getFBCookie = (name: string) => {
+          const cookies = document.cookie.split(';');
+          for (let cookie of cookies) {
+            const [key, value] = cookie.trim().split('=');
+            if (key === name) return decodeURIComponent(value);
+          }
+          return null;
+        };
+
+        const enrichedEventData = {
+          ...eventData,
+          fbp: getFBCookie('_fbp'),
+          fbc: getFBCookie('_fbc')
+        };
+
+        trackFacebookEvent(eventType, enrichedEventData, eventId);
+        // إرسال إلى Server-Side API مع البيانات المحسنة
+        sendToServerSideAPI(platformId, eventType, enrichedEventData, eventId);
       }, 100);
     }
     

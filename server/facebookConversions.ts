@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import { logServerPixelEvent } from './pixelDiagnostics';
 
 interface FacebookConversionEvent {
   event_name: string;
@@ -68,7 +69,15 @@ export async function sendFacebookConversion(
       url,
       eventCount: events.length,
       pixelId,
-      testMode: process.env.NODE_ENV === 'development'
+      testMode: process.env.NODE_ENV === 'development',
+      events: events.map(event => ({
+        event_name: event.event_name,
+        event_id: event.event_id,
+        has_user_data: !!event.user_data && Object.keys(event.user_data).length > 0,
+        has_custom_data: !!event.custom_data && Object.keys(event.custom_data).length > 0,
+        user_data_fields: event.user_data ? Object.keys(event.user_data) : [],
+        custom_data_fields: event.custom_data ? Object.keys(event.custom_data) : []
+      }))
     });
 
     const response = await fetch(url, {
@@ -83,15 +92,79 @@ export async function sendFacebookConversion(
     const result = await response.json() as any;
     
     if (!response.ok) {
-      console.error('❌ Facebook Conversions API error:', result);
+      console.error('❌ Facebook Conversions API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: result,
+        pixelId,
+        eventCount: events.length
+      });
+      
+      // تسجيل الأحداث الفاشلة في نظام التشخيص
+      events.forEach(event => {
+        logServerPixelEvent(
+          event.event_name,
+          event.event_id,
+          event.user_data?.external_id,
+          pixelId,
+          false, // فشل الإرسال
+          `HTTP ${response.status}: ${response.statusText}`
+        );
+      });
+      
       return false;
     }
 
-    console.log('✅ Facebook Conversions API success:', result);
+    // تحليل النتيجة لفهم معدل النجاح
+    const eventsReceived = result?.events_received || 0;
+    const messagesReceived = result?.messages || [];
+    
+    console.log('✅ Facebook Conversions API success:', {
+      events_received: eventsReceived,
+      events_sent: events.length,
+      success_rate: `${eventsReceived}/${events.length}`,
+      messages: messagesReceived,
+      fbtrace_id: result?.fbtrace_id
+    });
+    
+    // تحذير إذا لم يتم استلام جميع الأحداث
+    if (eventsReceived < events.length) {
+      console.warn('⚠️ Facebook Conversions API: Not all events were received', {
+        sent: events.length,
+        received: eventsReceived,
+        messages: messagesReceived
+      });
+    }
+    
+    // تسجيل الأحداث في نظام التشخيص
+    events.forEach(event => {
+      logServerPixelEvent(
+        event.event_name,
+        event.event_id,
+        event.user_data?.external_id,
+        pixelId,
+        true, // نجح الإرسال
+        undefined
+      );
+    });
+    
     return true;
 
   } catch (error) {
     console.error('💥 Facebook Conversions API request failed:', error);
+    
+    // تسجيل الأحداث الفاشلة بسبب خطأ في الشبكة
+    events.forEach(event => {
+      logServerPixelEvent(
+        event.event_name,
+        event.event_id,
+        event.user_data?.external_id,
+        pixelId,
+        false, // فشل الإرسال
+        `Network Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    });
+    
     return false;
   }
 }
@@ -105,6 +178,16 @@ export function createFacebookConversionEvent(
 ): FacebookConversionEvent {
   // استخدام event_id من العميل (مطلوب لمنع التكرار)
   const eventId = eventData.event_id;
+  
+  console.log('🔧 Creating Facebook Conversion Event:', {
+    eventType,
+    eventId,
+    hasEventId: !!eventId,
+    hasExternalId: !!eventData.external_id,
+    hasCustomerData: !!(eventData.customer_email || eventData.customer_phone),
+    hasValue: eventData.value !== undefined,
+    currency: eventData.currency
+  });
   
   if (!eventId) {
     console.warn('⚠️ Facebook Conversions API: Missing event_id - this may cause duplicate events');
@@ -169,17 +252,13 @@ export function createFacebookConversionEvent(
   const customData: any = {};
   
   if (eventData.value !== undefined) {
-    // تحويل من الدينار العراقي للدولار الأمريكي إذا كانت العملة IQD
-    let convertedValue = eventData.value;
-    if (eventData.currency === 'IQD') {
-      convertedValue = convertedValue / 1310; // Convert IQD to USD
-      console.log('💰 Facebook API: Converting value from IQD to USD:', eventData.value, '->', convertedValue);
-    }
-    customData.value = convertedValue;
+    // إرسال القيمة كما هي بدون تحويل لتطابق الكتالوج
+    customData.value = eventData.value;
+    console.log('💰 Facebook API: Sending original value to match catalog:', eventData.value, eventData.currency);
   }
   
-  // دائماً إرسال USD لـ Facebook API
-  customData.currency = 'USD';
+  // إرسال العملة الأصلية لتطابق الكتالوج
+  customData.currency = eventData.currency || 'IQD';
   
   // تنظيف وتوحيد content_ids لضمان المطابقة مع الكتالوج
   if (eventData.content_ids) {
@@ -222,13 +301,29 @@ export function createFacebookConversionEvent(
     customData.user_external_id = eventData.external_id; // +14.5% تحسين
   }
 
-  return {
+  const finalEvent: FacebookConversionEvent = {
     event_name: eventType,
     event_time: Math.floor(Date.now() / 1000),
     user_data: hashedUserData,
     custom_data: Object.keys(customData).length > 0 ? customData : undefined,
     event_source_url: eventData.event_source_url,
-    action_source: 'website',
+    action_source: 'website' as const,
     event_id: eventId
   };
+
+  console.log('📋 Facebook Conversion Event Summary:', {
+    event_name: finalEvent.event_name,
+    event_id: finalEvent.event_id,
+    user_data_count: Object.keys(hashedUserData).length,
+    custom_data_count: Object.keys(customData).length,
+    has_external_id: !!hashedUserData.external_id,
+    has_fbp: !!hashedUserData.fbp,
+    has_fbc: !!hashedUserData.fbc,
+    has_email: !!hashedUserData.em,
+    has_phone: !!hashedUserData.ph,
+    value: customData.value,
+    currency: customData.currency
+  });
+
+  return finalEvent;
 }

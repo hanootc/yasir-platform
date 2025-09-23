@@ -5598,6 +5598,28 @@ ${platform?.platformName || 'متجرنا'}`;
       
       console.log("💰 Final calculated totals:", { subtotal, deliveryFee, total });
 
+      // كشف مصدر الطلب إذا لم يكن محدد
+      let detectedOrderSource = orderData.orderSource;
+      if (!detectedOrderSource) {
+        const refererHeader = req.headers.referer || req.headers.referrer;
+        const referer = Array.isArray(refererHeader) ? refererHeader[0] : refererHeader || '';
+        console.log('🔍 Detecting order source from referer:', referer);
+        
+        if (referer) {
+          const refererLower = referer.toLowerCase();
+          if (refererLower.includes('facebook.com')) detectedOrderSource = 'facebook_ad';
+          else if (refererLower.includes('instagram.com')) detectedOrderSource = 'instagram_ad';
+          else if (refererLower.includes('tiktok.com')) detectedOrderSource = 'tiktok_ad';
+          else if (refererLower.includes('whatsapp.com')) detectedOrderSource = 'whatsapp_message';
+          else if (refererLower.includes('google.com')) detectedOrderSource = 'website_direct';
+          else detectedOrderSource = 'other';
+        } else {
+          detectedOrderSource = 'landing_page';
+        }
+        
+        console.log('📊 Order source detected:', detectedOrderSource);
+      }
+
       // Add platform ID and calculated totals to order data
       const orderDataWithCalculations = {
         ...orderData,
@@ -5608,6 +5630,7 @@ ${platform?.platformName || 'متجرنا'}`;
         discountAmount: discountAmount.toString(),
         deliveryFee: deliveryFee.toString(),
         quantity: orderData.quantity || 1, // الكمية من العرض المختار
+        orderSource: detectedOrderSource, // إضافة مصدر الطلب المكتشف
         // خيارات المنتج المحددة
         selectedColorIds: orderData.selectedColorIds || [],
         selectedShapeIds: orderData.selectedShapeIds || [],
@@ -5628,6 +5651,33 @@ ${platform?.platformName || 'متجرنا'}`;
         
         console.log('🌐 Platform subdomain:', platformSubdomain, 'for platform:', landingPage.platformId);
         
+        // استخراج Facebook Cookies من الطلب
+        let fbc = '';
+        let fbp = '';
+        
+        // محاولة استخراج الكوكيز من headers
+        if (req.headers.cookie) {
+          const cookies = req.headers.cookie.split(';').reduce((acc: any, cookie: string) => {
+            const [key, value] = cookie.trim().split('=');
+            if (key && value) {
+              acc[key] = decodeURIComponent(value);
+            }
+            return acc;
+          }, {});
+          
+          fbc = cookies['_fbc'] || '';
+          fbp = cookies['_fbp'] || '';
+        }
+        
+        // استخراج من body إذا كانت موجودة
+        if (orderData.fbc && !fbc) fbc = orderData.fbc;
+        if (orderData.fbp && !fbp) fbp = orderData.fbp;
+        
+        console.log('🍪 Lead Event - Facebook Cookies:', { 
+          fbc: fbc ? `Found: ${fbc.substring(0, 20)}...` : 'Missing', 
+          fbp: fbp ? `Found: ${fbp.substring(0, 20)}...` : 'Missing'
+        });
+
         // إعداد بيانات حدث Lead
         const leadEventData = {
           content_name: orderData.productName || 'منتج',
@@ -5650,7 +5700,12 @@ ${platform?.platformName || 'متجرنا'}`;
           facebook_login_id: orderData.facebook_login_id || `order_${newOrder.id}`,
           login_id: orderData.login_id || orderData.facebook_login_id || `order_${newOrder.id}`,
           action_source: 'website',
-          event_source_url: req.headers.referer || `https://sanadi.pro/${platformSubdomain}/${landingPage.customUrl}`
+          event_source_url: req.headers.referer || `https://sanadi.pro/${platformSubdomain}/${landingPage.customUrl}`,
+          // إضافة Facebook Cookies
+          fbc: fbc,
+          fbp: fbp,
+          // إضافة event_id لمنع التكرار
+          event_id: orderData.event_id || `lead_${newOrder.id}_${Date.now().toString().slice(-8)}`
         };
         
         // إرسال إلى Facebook Conversions API
@@ -17020,11 +17075,270 @@ ${platform?.platformName || 'متجرنا'}`;
       
     } catch (error) {
       console.error('💥 Facebook Conversions API endpoint error:', error);
-      res.status(500).json({ 
-        success: false, 
-        message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
+
+  // Bulk delete orders endpoint
+  app.delete('/api/platform/orders/bulk-delete', requirePlatformAuthWithFallback, async (req, res) => {
+    try {
+      const platformSession = (req.session as any)?.platform;
+      if (!platformSession?.platformId) {
+        return res.status(401).json({ message: "Platform authentication required" });
+      }
+
+      const { orderIds } = req.body;
+      
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "Order IDs are required" });
+      }
+
+      const platformId = platformSession.platformId;
+      
+      console.log('🗑️ Bulk deleting orders:', {
+        platformId,
+        orderCount: orderIds.length,
+        orderIds: orderIds.slice(0, 5) // عرض أول 5 معرفات فقط للسجل
       });
+
+      // التحقق من أن جميع الطلبات تنتمي للمنصة
+      const ordersToDelete = await db.select({
+        id: landingPageOrders.id,
+        orderNumber: landingPageOrders.orderNumber,
+        customerName: landingPageOrders.customerName,
+        status: landingPageOrders.status
+      })
+      .from(landingPageOrders)
+      .where(and(
+        eq(landingPageOrders.platformId, platformId),
+        inArray(landingPageOrders.id, orderIds)
+      ));
+
+      if (ordersToDelete.length === 0) {
+        return res.status(404).json({ message: "لم يتم العثور على طلبات للحذف" });
+      }
+
+      if (ordersToDelete.length !== orderIds.length) {
+        return res.status(400).json({ 
+          message: `تم العثور على ${ordersToDelete.length} طلب فقط من أصل ${orderIds.length} طلب مطلوب حذفه` 
+        });
+      }
+
+      // حذف الطلبات
+      const deleteResult = await db.delete(landingPageOrders)
+        .where(and(
+          eq(landingPageOrders.platformId, platformId),
+          inArray(landingPageOrders.id, orderIds)
+        ));
+
+      console.log('✅ Orders deleted successfully:', {
+        deletedCount: ordersToDelete.length,
+        orders: ordersToDelete.map(o => ({ id: o.id, orderNumber: o.orderNumber, customerName: o.customerName, status: o.status }))
+      });
+
+      // تسجيل النشاط
+      try {
+        await storage.createActivity({
+          type: "orders_bulk_deleted",
+          description: `تم حذف ${ordersToDelete.length} طلب`,
+          entityType: "order",
+          entityId: orderIds[0], // أول طلب كمرجع
+          platformId: platformId,
+          metadata: {
+            deletedOrdersCount: ordersToDelete.length,
+            deletedOrders: ordersToDelete.map(o => ({ 
+              id: o.id, 
+              orderNumber: o.orderNumber, 
+              customerName: o.customerName,
+              status: o.status 
+            }))
+          }
+        });
+      } catch (activityError) {
+        console.error('Failed to log activity:', activityError);
+        // لا نرجع خطأ للعميل - الحذف تم بنجاح
+      }
+
+      res.json({ 
+        success: true, 
+        message: `تم حذف ${ordersToDelete.length} طلب بنجاح`,
+        deletedCount: ordersToDelete.length,
+        deletedOrders: ordersToDelete.map(o => ({ 
+          id: o.id, 
+          orderNumber: o.orderNumber, 
+          customerName: o.customerName 
+        }))
+      });
+
+    } catch (error) {
+      console.error("Error deleting orders:", error);
+      res.status(500).json({ 
+        message: "فشل في حذف الطلبات", 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
+  // Facebook Catalog CSV Feed - منفصل وآمن
+  app.get('/facebook-catalog/:platformId.csv', async (req, res) => {
+    try {
+      // Set CSV headers
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="facebook-catalog.csv"');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
+      const { platformId } = req.params;
+      
+      // التحقق من وجود المنصة
+      const platform = await storage.getPlatform(platformId);
+      if (!platform) {
+        return res.status(404).json({ error: 'Platform not found' });
+      }
+
+      // جلب منتجات هذه المنصة فقط
+      const products = await storage.getProductsByPlatform(platformId);
+      
+      // CSV Header
+      const csvHeader = [
+        'id',
+        'title', 
+        'description',
+        'availability',
+        'condition',
+        'price',
+        'link',
+        'image_link',
+        'brand',
+        'google_product_category',
+        'product_type',
+        'additional_image_link'
+      ].join(',');
+
+      // Start CSV content
+      let csvContent = csvHeader + '\n';
+
+      // Process each product
+      for (const product of products) {
+        try {
+          // Get category data for Google Product Category
+          let googleCategory = 'Home & Garden > Household Supplies'; // default
+          if (product.categoryId) {
+            try {
+              const category = await storage.getCategory(product.categoryId);
+              if (category?.googleCategory) {
+                googleCategory = category.googleCategory;
+              }
+            } catch (err) {
+              // Use default category if error
+            }
+          }
+
+          // Build product URL
+          const productSlug = product.name
+            .replace(/[^\u0600-\u06FF\w\s-]/g, '') // Keep Arabic, English, numbers, spaces, hyphens
+            .replace(/\s+/g, '-') // Replace spaces with hyphens
+            .toLowerCase();
+          
+          // Use platform slug or fallback to platform name
+          const platformSlug = (platform as any).slug || platform.platformName.toLowerCase().replace(/\s+/g, '-');
+          const productUrl = `https://sanadi.pro/${platformSlug}/${productSlug}-${product.id.slice(-6)}`;
+
+          // Get main image from product imageUrls field
+          let imageUrl = '';
+          if (product.imageUrls && product.imageUrls.length > 0) {
+            const mainImage = product.imageUrls[0];
+            imageUrl = mainImage.startsWith('http') 
+              ? mainImage 
+              : `https://sanadi.pro${mainImage.startsWith('/') ? '' : '/'}${mainImage}`;
+          }
+
+          // Get additional images from imageUrls array
+          let additionalImages = '';
+          if (product.imageUrls && product.imageUrls.length > 1) {
+            const additionalImageUrls = product.imageUrls.slice(1, 4).map((img: string) => 
+              img.startsWith('http') 
+                ? img 
+                : `https://sanadi.pro${img.startsWith('/') ? '' : '/'}${img}`
+            );
+            additionalImages = additionalImageUrls.join(',');
+          }
+
+          // Clean and escape CSV values
+          const escapeCSV = (value: string) => {
+            if (!value) return '';
+            // Replace quotes with double quotes and wrap in quotes if contains comma or quote
+            const cleaned = value.toString().replace(/"/g, '""');
+            return cleaned.includes(',') || cleaned.includes('"') || cleaned.includes('\n') 
+              ? `"${cleaned}"` 
+              : cleaned;
+          };
+
+          // Build CSV row
+          const csvRow = [
+            escapeCSV(product.id),
+            escapeCSV(product.name || ''),
+            escapeCSV(product.description || product.name || ''),
+            'in stock', // availability
+            'new', // condition
+            escapeCSV(`${product.price || 0} IQD`),
+            escapeCSV(productUrl),
+            escapeCSV(imageUrl),
+            escapeCSV(platform.platformName || 'Sanadi'),
+            escapeCSV(googleCategory),
+            escapeCSV('Product'),
+            escapeCSV(additionalImages)
+          ].join(',');
+
+          csvContent += csvRow + '\n';
+        } catch (productError) {
+          console.error('Error processing product:', product.id, productError);
+          continue;
+        }
+      }
+
+      // Send CSV content
+      res.send(csvContent);
+
+    } catch (error) {
+      console.error('Error generating Facebook catalog CSV:', error);
+      res.status(500).json({ 
+        error: 'Failed to generate catalog feed',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Pixel Diagnostics endpoint - لعرض تقرير تشخيص البكسل
+  app.get('/api/pixel-diagnostics/:platformId', async (req, res) => {
+    try {
+      const { platformId } = req.params;
+      const { hours = '24' } = req.query;
+      
+      // استيراد نظام التشخيص
+      const { pixelDiagnostics } = await import('./pixelDiagnostics');
+      
+      // إنشاء التقرير
+      const timeRange = parseInt(hours as string) || 24;
+      const report = pixelDiagnostics.generateDiagnosticReport(timeRange);
+      const successAnalysis = pixelDiagnostics.analyzeEventSuccess(timeRange);
+      const externalIdAnalysis = pixelDiagnostics.analyzeExternalIdMatching(timeRange);
+      
+      res.json({
+        success: true,
+        platformId,
+        timeRangeHours: timeRange,
+        report,
+        analytics: {
+          success: successAnalysis,
+          externalId: externalIdAnalysis
+        }
+      });
+      
+    } catch (error) {
+      console.error('💥 Pixel Diagnostics endpoint error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
     }
   });
 

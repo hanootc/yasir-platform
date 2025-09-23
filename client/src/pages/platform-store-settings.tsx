@@ -12,7 +12,7 @@ import PlatformSidebar from "@/components/PlatformSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
-import { Store, Layout, Grid3X3, List, LayoutGrid, Check, Upload, Image } from "lucide-react";
+import { Store, Layout, Grid3X3, List, LayoutGrid, Check, Upload, Image, ExternalLink, Copy, Facebook } from "lucide-react";
 
 const storeTemplates = [
   {
@@ -451,6 +451,92 @@ export default function PlatformStoreSettings() {
                   <p className="text-xs text-gray-500 mt-2">
                     الأحجام المدعومة: JPG, PNG, GIF (الحد الأقصى: 5MB)
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Facebook Catalog Integration */}
+          <Card className="mt-6 theme-border bg-theme-primary-lighter">
+            <CardHeader>
+              <CardTitle className="text-xl text-theme-primary flex items-center gap-2">
+                <Facebook className="w-5 h-5" />
+                ربط كتالوج بفيسبوك
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Catalog URL Display */}
+                <div>
+                  <Label className="text-sm font-medium text-theme-primary mb-2 block">
+                    رابط كتالوج المنتجات:
+                  </Label>
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border theme-border">
+                    <code className="flex-1 text-sm text-gray-700 dark:text-gray-300 break-all">
+                      {`https://sanadi.pro/facebook-catalog/${platformSession?.platformId}.csv`}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`https://sanadi.pro/facebook-catalog/${platformSession?.platformId}.csv`);
+                        toast({
+                          title: "تم النسخ",
+                          description: "تم نسخ رابط الكتالوج بنجاح",
+                        });
+                      }}
+                      className="border-theme-primary text-theme-primary hover:bg-theme-primary-light"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    كيفية ربط الكتالوج بفيسبوك:
+                  </h4>
+                  <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
+                    <li>انسخ الرابط أعلاه</li>
+                    <li>اذهب إلى Facebook Business Manager</li>
+                    <li>اختر Commerce Manager → Catalog</li>
+                    <li>أضف Data Feed جديد</li>
+                    <li>الصق الرابط واختر التحديث اليومي</li>
+                  </ol>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={() => window.open('https://business.facebook.com/products/catalogs/new', '_blank')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    فتح Facebook Business Manager
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(`https://sanadi.pro/facebook-catalog/${platformSession?.platformId}.csv`, '_blank')}
+                    className="border-theme-primary text-theme-primary hover:bg-theme-primary-light flex items-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    معاينة الكتالوج
+                  </Button>
+                </div>
+
+                {/* Benefits */}
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                  <h4 className="font-medium text-green-900 dark:text-green-100 mb-2">
+                    فوائد ربط الكتالوج:
+                  </h4>
+                  <ul className="text-sm text-green-800 dark:text-green-200 space-y-1">
+                    <li>• إنشاء إعلانات ديناميكية للمنتجات</li>
+                    <li>• استهداف العملاء الذين زاروا منتجاتك</li>
+                    <li>• عرض المنتجات في Facebook Shop</li>
+                    <li>• تفعيل التسوق في Instagram</li>
+                    <li>• ربط كتالوج WhatsApp Business</li>
+                  </ul>
                 </div>
               </div>
             </CardContent>
