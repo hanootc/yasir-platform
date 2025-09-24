@@ -55,25 +55,11 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
   const queryClient = useQueryClient();
 
   const { data: products = [] } = useQuery({
-    queryKey: platformId ? [`/api/platforms/${platformId}/products`] : ["/api/products"],
+    queryKey: platformId ? [`/api/products?platformId=${platformId}`] : ["/api/products"],
     enabled: !!platformId,
   }) as { data: any[] };
 
-  // جلب الألوان والأشكال والأحجام
-  const { data: colors = [] } = useQuery({
-    queryKey: [`/api/platforms/${platformId}/colors`],
-    enabled: !!platformId,
-  }) as { data: any[] };
-
-  const { data: shapes = [] } = useQuery({
-    queryKey: [`/api/platforms/${platformId}/shapes`],
-    enabled: !!platformId,
-  }) as { data: any[] };
-
-  const { data: sizes = [] } = useQuery({
-    queryKey: [`/api/platforms/${platformId}/sizes`],
-    enabled: !!platformId,
-  }) as { data: any[] };
+  // الألوان والأشكال والأحجام تأتي مع بيانات المنتجات
 
   const form = useForm<CreateOrderForm>({
     resolver: zodResolver(createOrderSchema),
@@ -254,13 +240,20 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
       return sum + (price * item.quantity);
     }, 0) || 25000;
 
+    // الحصول على بيانات المنتج الأول
+    const firstProduct = validItems.length > 0 && validItems[0].productId ? 
+      products?.find((p: any) => p.id === validItems[0].productId) : null;
+
     const orderData = {
       customerName: data.customerName,
       customerPhone: data.customerPhone,
       customerGovernorate: data.customerGovernorate,
       customerAddress: data.customerAddress,
       platformId: platformId,
-      landingPageId: "3c7840d8-8297-469f-a32a-452040c0451e", // استخدام landing page موجود
+      landingPageId: null, // الطلبات اليدوية لا تحتاج landing page محددة
+      productId: validItems.length > 0 ? validItems[0].productId : null, // إضافة معرف المنتج
+      productName: firstProduct?.name || null, // إضافة اسم المنتج
+      productImageUrls: firstProduct?.imageUrls || [], // إضافة صور المنتج
       offer: validItems.length > 0 ? validItems[0].offer || "طلب يدوي" : "طلب يدوي",
       quantity: validItems.reduce((sum, item) => sum + item.quantity, 0) || 1,
       totalAmount: totalAmount,

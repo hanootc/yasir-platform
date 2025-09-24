@@ -125,6 +125,8 @@ export default function ProductLanding() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrderForm, setShowOrderForm] = useState(false);
+  const [addressLeadEventData, setAddressLeadEventData] = useState<any>(null);
+
   const [formData, setFormData] = useState<OrderFormData>({
     customerName: '',
     customerPhone: '',
@@ -141,6 +143,32 @@ export default function ProductLanding() {
   const [variantErrors, setVariantErrors] = useState<string[]>([]);
 
   const { toast } = useToast();
+
+  // دالة لإرسال حدث Lead عند الكتابة في حقل العنوان التفصيلي
+  const handleAddressFieldChange = (value: string) => {
+    if (value.length >= 5 && product) {
+      const timestamp = Date.now();
+      const leadData = {
+        content_name: product.name,
+        content_category: "General",
+        content_ids: [product.id],
+        content_type: "product",
+        value: parseFloat(product.price?.toString() || "0"),
+        currency: "IQD",
+        customer_first_name: formData.customerName?.split(" ")[0] || "",
+        customer_last_name: formData.customerName?.split(" ").slice(1).join(" ") || "",
+        customer_phone: formData.customerPhone || "",
+        customer_city: value,
+        customer_state: formData.customerGovernorate || "",
+        customer_country: "IQ",
+        external_id: `product_${product.id}_${timestamp}`,
+        _timestamp: timestamp
+      };
+      console.log("🏠 Product Landing Address Lead Event:", leadData);
+      setAddressLeadEventData(leadData);
+      setTimeout(() => setAddressLeadEventData(null), 1000);
+    }
+  };
 
   // Get selected offer quantity
   const getSelectedOfferQuantity = (): number => {
@@ -392,6 +420,8 @@ export default function ProductLanding() {
       // إرسال الطلب
       const orderResponse = await apiRequest('/api/landing-page-orders', 'POST', {
         productId: product.id,
+        productName: product.name, // إضافة اسم المنتج
+        productImageUrls: product.imageUrls || [], // إضافة صور المنتج
         landingPageId: landingPage.id,
         customerName: formData.customerName,
         customerPhone: formData.customerPhone,
@@ -1006,7 +1036,10 @@ export default function ProductLanding() {
                 <Textarea
                   id="customerAddress"
                   value={formData.customerAddress}
-                  onChange={(e) => setFormData({...formData, customerAddress: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, customerAddress: e.target.value});
+                    handleAddressFieldChange(e.target.value);
+                  }}
                   placeholder="أدخل عنوانك التفصيلي (المنطقة، الشارع، رقم البيت)"
                   rows={3}
                 />

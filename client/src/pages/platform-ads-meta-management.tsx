@@ -109,7 +109,7 @@ const getDateRangeOptions = (): DateRangeOption[] => {
     {
       value: 'all',
       label: 'طوال المدة',
-      startDate: subDays(today, 365), // خر سنة
+      startDate: subDays(today, 365), // آخر سنة
       endDate: today
     }
   ];
@@ -247,7 +247,7 @@ export default function PlatformAdsMetaManagement() {
       landingPageUrl: "",
       displayName: "",
       adText: "",
-      callToAction: "BOOK_NOW",
+      callToAction: "BOOK_TRAVEL",
       
       // Media files
       videoUrl: "",
@@ -303,7 +303,7 @@ export default function PlatformAdsMetaManagement() {
   }, [selectedAccount, completeCampaignForm]);
 
 
-  // إزالة الاتساب من أي قيم مفوظة
+  // إزالة الواتساب من أي قيم محفوظة
   useEffect(() => {
     const currentDestinations = completeCampaignForm.getValues('messageDestinations') || [];
     const filteredDestinations = currentDestinations.filter(dest => dest !== 'WHATSAPP');
@@ -312,7 +312,7 @@ export default function PlatformAdsMetaManagement() {
     }
   }, []);
 
-  // دالة لملء البياات تلقائياً عند اختيار المنتج
+  // دالة لملء البيانات تلقائياً عند اختيار المنتج
   const handleProductSelect = async (productId: string) => {
     const selectedProduct = products?.find((p: any) => p.id === productId);
     if (selectedProduct) {
@@ -321,29 +321,29 @@ export default function PlatformAdsMetaManagement() {
       // ملء الأسماء
       form.setValue('campaignName', `حملة ${selectedProduct.name}`);
       form.setValue('adSetName', `مجموعة ${selectedProduct.name}`);
-      form.setValue('adName', `إلان ${selectedProduct.name}`);
+      form.setValue('adName', `إعلان ${selectedProduct.name}`);
       form.setValue('displayName', selectedProduct.name);
       
-      // ملء نص الإلان من وصف المنتج
+      // ملء نص الإعلان من وصف المنتج
       if (selectedProduct.description) {
         form.setValue('adText', selectedProduct.description);
       }
       
-      // جلب صفحة الهبوط اخاصة بالمنتج ومل الرابط
+      // جلب صفحة الهبوط الخاصة بالمنتج وملء الرابط
       try {
         const response = await fetch(`/api/platform-products/${productId}/landing-pages`);
         if (response.ok) {
           const landingPages = await response.json();
           if (landingPages && landingPages.length > 0) {
-            const landingPage = landingPages[0]; // أخذ أو صفحة هبوط
+            const landingPage = landingPages[0]; // أخذ أول صفحة هبوط
             const platformSubdomain = landingPage.platform?.subdomain || '';
-            // استخدام ومين الموقع الحاي مع النطاق الفرعي في المسار
+            // استخدام دومين الموقع الحالي مع النطاق الفرعي في المسار
             const landingPageUrl = `${window.location.origin}/${platformSubdomain}/${landingPage.customUrl || landingPage.id}`;
             form.setValue('landingPageUrl', landingPageUrl);
           }
         }
       } catch (error) {
-        console.warn('فشل ف جلب صفحة الهبوط لمنتج:', error);
+        console.warn('فشل في جلب صفحة الهبوط للمنتج:', error);
       }
     }
   };
@@ -351,9 +351,9 @@ export default function PlatformAdsMetaManagement() {
   // Create complete campaign mutation
   const createCompleteCampaignMutation = useMutation({
     mutationFn: async (data: CompleteMetaCampaign) => {
-      console.log('🎯 إرسل بيانات إنشاء حملة Meta الكاملة:', data);
+      console.log('🎯 إرسال بيانات إنشاء حملة Meta الكاملة:', data);
       
-      // حذف landingPageUrl من حملات الرائل
+      // حذف landingPageUrl من حملات الرسائل
       const cleanData = { ...data };
       if (data.objective === 'OUTCOME_TRAFFIC') {
         delete cleanData.landingPageUrl;
@@ -470,7 +470,7 @@ export default function PlatformAdsMetaManagement() {
         displayName: "",
         adText: "",
         adDescription: "",
-        callToAction: "BOOK_NOW",
+        callToAction: "BOOK_TRAVEL",
         
         // Media files
         videoUrl: "",
@@ -848,6 +848,38 @@ export default function PlatformAdsMetaManagement() {
       }
     }
   }, [pixels, pages, completeCampaignForm]);
+
+  // ضمان تعيين callToAction عند فتح المودال
+  useEffect(() => {
+    if (createCampaignOpen) {
+      // تأخير قصير لضمان تحميل المودال
+      setTimeout(() => {
+        const currentObjective = completeCampaignForm.getValues('objective') || 'OUTCOME_SALES';
+        const currentCallToAction = completeCampaignForm.getValues('callToAction');
+        
+        console.log('🔍 فحص القيم الحالية:', { currentObjective, currentCallToAction });
+        
+        // إذا كان callToAction فارغ أو غير صحيح، قم بتعيينه
+        if (!currentCallToAction) {
+          if (currentObjective === 'OUTCOME_TRAFFIC') {
+            completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE', { shouldValidate: true });
+          } else {
+            completeCampaignForm.setValue('callToAction', 'BOOK_TRAVEL', { shouldValidate: true });
+          }
+          
+          // إجبار إعادة رسم المكون بطرق متعددة
+          completeCampaignForm.trigger('callToAction');
+          
+          // إجبار إعادة رسم النموذج بالكامل
+          setTimeout(() => {
+            completeCampaignForm.trigger();
+          }, 50);
+          
+          console.log('✅ تم تعيين callToAction:', completeCampaignForm.getValues('callToAction'));
+        }
+      }, 200);
+    }
+  }, [createCampaignOpen, completeCampaignForm]);
 
   // جلب الحملات للحساب المختار
   const { data: campaigns, isLoading: campaignsLoading } = useQuery({
@@ -1783,7 +1815,7 @@ export default function PlatformAdsMetaManagement() {
                                   displayName: "",
                                   adText: "",
                                   adDescription: "",
-                                  callToAction: "MESSAGE_PAGE", // افتراضي للرائل
+                                  callToAction: "BOOK_TRAVEL", // افتراضي للمبيعات (OUTCOME_SALES)
                                   
                                   // Media files
                                   videoUrl: "",
@@ -1825,10 +1857,23 @@ export default function PlatformAdsMetaManagement() {
                                   }
                                 });
                                 
+                                // ضمان تعيين callToAction الصحيح حسب الهدف - مع تأخير لضمان التطبيق
+                                setTimeout(() => {
+                                  const currentObjective = completeCampaignForm.getValues('objective');
+                                  if (currentObjective === 'OUTCOME_TRAFFIC') {
+                                    completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE');
+                                  } else if (currentObjective === 'OUTCOME_SALES') {
+                                    completeCampaignForm.setValue('callToAction', 'BOOK_TRAVEL');
+                                  }
+                                  // إجبار إعادة رسم المكون
+                                  completeCampaignForm.trigger('callToAction');
+                                }, 100);
+                                
                                 console.log('🎯 تم إعداد المودال مع القيم الافتراضية:');
                                 console.log('📄 الصفحة:', firstPage?.name, firstPage?.id);
                                 console.log('🎯 البكسل:', firstPixel?.name, firstPixel?.id);
                                 console.log('🌍 الاستهداف: العراق');
+                                console.log('🎯 إجراء النقر:', completeCampaignForm.getValues('callToAction'));
                               }
                               setCreateCampaignOpen(open);
                             }}>
@@ -1911,7 +1956,7 @@ export default function PlatformAdsMetaManagement() {
                                                     ))}
                                                   </SelectContent>
                                                 </Select>
-                                                <FormDescription>سيتم ملء يانات الحملة تلقئياً من معلومات المنتج</FormDescription>
+                                                <FormDescription>سيتم ملء بيانات الحملة تلقائياً من معلومات المنتج</FormDescription>
                                                 <FormMessage />
                                               </FormItem>
                                             )}
@@ -1983,7 +2028,7 @@ export default function PlatformAdsMetaManagement() {
                                                       if (value === 'OUTCOME_TRAFFIC') {
                                                         completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE');
                                                       } else if (value === 'OUTCOME_SALES') {
-                                                        completeCampaignForm.setValue('callToAction', 'BOOK_NOW');
+                                                        completeCampaignForm.setValue('callToAction', 'BOOK_TRAVEL');
                                                       }
                                                     }} value={field.value || "OUTCOME_SALES"} defaultValue="OUTCOME_SALES">
                                                       <FormControl>
@@ -2116,7 +2161,7 @@ export default function PlatformAdsMetaManagement() {
                                         )}
                                       </div>
                                       
-                                      {/* قسم بياات المجموعة الإعانية */}
+                                      {/* قسم بيانات المجموعة الإعلانية */}
                                       <div className="form-section bg-theme-primary-light border theme-border rounded-lg mt-4">
                                         <h3 
                                           className={`text-base font-medium mb-2 flex items-center justify-between cursor-pointer hover:bg-gray-900/95 border-gray-700 backdrop-blur-sm p-2 rounded transition-colors ${
@@ -2139,7 +2184,7 @@ export default function PlatformAdsMetaManagement() {
                                             ) : (
                                               <span className="bg-theme-gradient text-white text-xs px-2 py-1 rounded-full ml-2 theme-shadow">2</span>
                                             )}
-                                            بياات المجموعة الإعانية
+                                            بيانات المجموعة الإعلانية
                                             {adSetCompleted && (
                                               <CheckCircle className="h-4 w-4 ml-2 text-green-600 dark:text-green-400" />
                                             )}
@@ -2198,7 +2243,7 @@ export default function PlatformAdsMetaManagement() {
                                                     <Select onValueChange={field.onChange} value={field.value}>
                                                       <FormControl>
                                                         <SelectTrigger className="theme-input">
-                                                          <SelectValue placeholder="اختر استرايجية المزايدة" />
+                                                          <SelectValue placeholder="اختر استراتيجية المزايدة" />
                                                         </SelectTrigger>
                                                       </FormControl>
                                                       <SelectContent className="bg-black border-gray-700">
@@ -2526,7 +2571,7 @@ export default function PlatformAdsMetaManagement() {
                                                           ))}
                                                         </div>
                                                       </div>
-                                                      <FormDescription>اختر ولاية أو أكثر للاستهداف</FormDescription>
+                                                      <FormDescription>اختر محافظة أو أكثر للاستهداف</FormDescription>
                                                       <FormMessage />
                                                     </FormItem>
                                                   )}
@@ -3130,7 +3175,7 @@ export default function PlatformAdsMetaManagement() {
                                                 name="adDescription"
                                                 render={({ field }) => (
                                                   <FormItem>
-                                                    <FormLabel className="text-theme-primary">وصف الإعلا</FormLabel>
+                                                    <FormLabel className="text-theme-primary">وصف الإعلان</FormLabel>
                                                     <FormControl>
                                                       <Textarea 
                                                         {...field}
@@ -3140,7 +3185,7 @@ export default function PlatformAdsMetaManagement() {
                                                       />
                                                     </FormControl>
                                                     <FormDescription className="text-orange-500 font-medium">
-                                                      ⚠️ 7 كمات كحد أقصى (اختاري)
+                                                      ⚠️ 7 كلمات كحد أقصى (اختياري)
                                                     </FormDescription>
                                                     <FormMessage />
                                                   </FormItem>
@@ -3156,7 +3201,7 @@ export default function PlatformAdsMetaManagement() {
                                                 render={({ field }) => (
                                                   <FormItem>
                                                     <FormLabel className="text-theme-primary">إجرء نقر الزبون</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value} defaultValue="BOOK_NOW">
+                                                    <Select onValueChange={field.onChange} value={field.value || "BOOK_TRAVEL"} defaultValue="BOOK_TRAVEL">
                                                       <FormControl>
                                                         <SelectTrigger className="theme-input">
                                                           <SelectValue placeholder="اختر إجراء النقر" />
@@ -3170,9 +3215,9 @@ export default function PlatformAdsMetaManagement() {
                                                           </>
                                                         ) : (
                                                           <>
+                                                            <SelectItem value="BOOK_TRAVEL">حجز الآن</SelectItem>
                                                             <SelectItem value="SHOP_NOW">تسوق الآن</SelectItem>
                                                             <SelectItem value="LEARN_MORE">اعرف المزيد</SelectItem>
-                                                            <SelectItem value="BOOK_TRAVEL">حجز الآن</SelectItem>
                                                             <SelectItem value="SIGN_UP">سجل اآن</SelectItem>
                                                             <SelectItem value="CONTACT_US">اتصل بنا</SelectItem>
                                                           </>
@@ -3399,10 +3444,10 @@ export default function PlatformAdsMetaManagement() {
                                                   <div className="text-center space-y-1">
                                                     <div className="flex items-center justify-center gap-1">
                                                       <MessageCircle className="h-4 w-4 text-theme-primary" />
-                                                      <h3 className="text-sm font-bold text-theme-primary">وجهات ارسائل</h3>
+                                                      <h3 className="text-sm font-bold text-theme-primary">وجهات الرسائل</h3>
                                                     </div>
                                                     <p className="text-xs text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-                                                      اختر التطبيقات التي تريد استقبال ارسائل من خلالها
+                                                      اختر التطبيقات التي تريد استقبال الرسائل من خلالها
                                                     </p>
                                                   </div>
                                                   
@@ -3931,7 +3976,7 @@ export default function PlatformAdsMetaManagement() {
                                             size="sm" 
                                             variant="outline" 
                                             className="theme-border hover:bg-theme-primary-light"
-                                            title="عرض اإحصائيات"
+                                            title="عرض الإحصائيات"
                                           >
                                             <BarChart3 className="h-4 w-4" />
                                           </Button>
@@ -4071,7 +4116,7 @@ export default function PlatformAdsMetaManagement() {
                               {
                                 (adSetsError as any)?.message?.includes('User request limit reached') ||
                                 (adSetsError as any)?.message?.includes('يحتوي الحساب الإعلاني')
-                                  ? 'تم الوصول إلى حد طلبات Facebook API. النظام يحاول تلقئياً إعادة المحالة. الرجاء الانتظار قليلاً.'
+                                  ? 'تم الوصول إلى حد طلبات Facebook API. النظام يحاول تلقائياً إعادة المحاولة. الرجاء الانتظار قليلاً.'
                                   : (adSetsError as any)?.message || 'فشل في جلب المجموعات الإعلانية'
                               }
                             </AlertDescription>
@@ -4236,13 +4281,13 @@ export default function PlatformAdsMetaManagement() {
                                                 const purchases = getActionValue(insights, 'purchase') || 0;
                                                 const messaging = getActionValue(insights, 'onsite_conversion.messaging_conversation_started_7d') || 0;
                                                 
-                                                // عرض شراء إذا ود
+                                                // عرض شراء إذا وجد
                                                 if (purchases > 0) {
                                                   return 'شراء عبر الويب';
                                                 } 
                                                 // وإلا عرض محادثات إذا وجدت
                                                 else if (messaging > 0) {
-                                                  return 'محاثات';
+                                                  return 'محادثات';
                                                 } 
                                                 // لا يوجد بيانات
                                                 else {
@@ -4471,8 +4516,8 @@ export default function PlatformAdsMetaManagement() {
                             <AlertDescription>
                               {
                                 (adsError as any)?.message?.includes('User request limit reached')
-                                  ? 'تم الوصول إل حد طلبات Facebook API. النظام يحاول تلقائياً إعادة المحاولة. الرجاء الانتظر قليلاً.'
-                                  : (adsError as any)?.message || 'فشل ف جلب الإعلانات'
+                                  ? 'تم الوصول إلى حد طلبات Facebook API. النظام يحاول تلقائياً إعادة المحاولة. الرجاء الانتظار قليلاً.'
+                                  : (adsError as any)?.message || 'فشل في جلب الإعلانات'
                               }
                             </AlertDescription>
                           </Alert>

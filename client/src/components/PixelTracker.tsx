@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, forwardRef, useState, useRef } from 'react';
+import { useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { convertIQDToUSD } from '@/lib/utils';
 
@@ -53,9 +53,6 @@ declare global {
 
 export default function PixelTracker({ platformId, eventType, eventData }: PixelTrackerProps) {
   
-  // نظام منع الإرسال المتكرر باستخدام localStorage
-  const [hasExecuted, setHasExecuted] = useState(false);
-  
   // جلب إعدادات البكسلات من قاعدة البيانات
   const { data: pixelSettings, isLoading, error } = useQuery<PixelSettings>({
     queryKey: [`/api/platforms/${platformId}/ad-platform-settings`],
@@ -68,9 +65,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   if (isLoading) {
   }
   
-  if (error) {
-    console.error('❌ PixelTracker: خطأ في تحميل إعدادات الـ Pixels:', error);
-  }
 
   // تحويل رقم الهاتف إلى صيغة E.164
   const formatPhoneToE164 = (phone: string): string => {
@@ -144,27 +138,29 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
 
   // حذف useEffect القديم نهائياً
 
-  // تحميل Facebook Pixel
-  const loadFacebookPixel = (pixelId: string) => {
+  // تحميل Facebook Pixel مع إخفاء التحذيرات
+  const loadFacebookPixel = (pixelId: string, initData?: any) => {
     
-    // التحقق من وجود script فيسبوك مسبقاً
-    const existingScript = document.querySelector('script[src*="fbevents.js"]');
-    const existingPixelData = document.querySelector(`[data-fb-pixel-id="${pixelId}"]`);
-    
-    if (existingScript && existingPixelData) {
+    // فحص مطلق - إذا كان fbq موجود، لا تحمل أبداً
+    if (window.fbq) {
+      console.log('🔍 Facebook Pixel already exists - skipping load');
       return;
     }
     
-    // إذا كان fbq موجود، أضف الـ pixel ID الجديد فقط
-    if (window.fbq && existingScript) {
-      window.fbq('init', pixelId);
-      // إضافة علامة لتتبع الـ pixel المحمل
-      const marker = document.createElement('div');
-      marker.setAttribute('data-fb-pixel-id', pixelId);
-      marker.style.display = 'none';
-      document.head.appendChild(marker);
+    // فحص إضافي للـ script
+    if (document.querySelector('script[src*="fbevents.js"]')) {
+      console.log('🔍 Facebook Pixel script already exists - skipping load');
       return;
     }
+    
+    // فحص global flag
+    if ((window as any).__fbPixelLoaded) {
+      console.log('🔍 Facebook Pixel flag set - skipping load');
+      return;
+    }
+    
+    console.log('🔍 Loading Facebook Pixel for the first time');
+    
     
     
     // إنشاء Facebook Pixel Script الأصلي - طريقة Facebook الرسمية
@@ -187,8 +183,25 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       }
     })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
     
-    // تهيئة الـ pixel
-    window.fbq('init', pixelId);
+    // تهيئة الـ pixel (مرة واحدة فقط)
+    if (!document.querySelector(`[data-fb-pixel-initialized="${pixelId}"]`)) {
+      // تهيئة البكسل مع advanced matching data إذا كانت متوفرة
+      if (initData && Object.keys(initData).length > 0) {
+        console.log('🔍 Facebook Pixel initialized with Advanced Matching:', Object.keys(initData));
+        window.fbq('init', pixelId, initData);
+      } else {
+        console.log('🔍 Facebook Pixel initialized without Advanced Matching');
+        window.fbq('init', pixelId);
+      }
+      
+      // إضافة علامة لمنع تهيئة البكسل مرة أخرى
+      const initMarker = document.createElement('div');
+      initMarker.setAttribute('data-fb-pixel-initialized', pixelId);
+      initMarker.style.display = 'none';
+      document.head.appendChild(initMarker);
+    } else {
+      console.log('🔍 Facebook Pixel already initialized for:', pixelId);
+    }
     
     // إضافة علامة لتتبع الـ pixel المحمل
     const marker = document.createElement('div');
@@ -197,8 +210,15 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     document.head.appendChild(marker);
     
     
-    // إرسال PageView تلقائياً
-    window.fbq('track', 'PageView');
+    // إرسال PageView تلقائياً (مرة واحدة فقط)
+    if (!document.querySelector(`[data-fb-pageview-sent="${pixelId}"]`)) {
+      window.fbq('track', 'PageView');
+      // إضافة علامة لمنع إرسال PageView مرة أخرى
+      const pageviewMarker = document.createElement('div');
+      pageviewMarker.setAttribute('data-fb-pageview-sent', pixelId);
+      pageviewMarker.style.display = 'none';
+      document.head.appendChild(pageviewMarker);
+    }
     
     // إضافة noscript للمتصفحات التي لا تدعم JavaScript
     if (!document.querySelector('noscript img[src*="facebook.com/tr"]')) {
@@ -207,15 +227,9 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       document.head.appendChild(noscript);
     }
     
-    // تأكيد التحميل
-    setTimeout(() => {
-      console.log('📘 Facebook Pixel: Load verification', {
-        fbqExists: typeof window.fbq,
-        scriptsCount: document.querySelectorAll('script[src*="fbevents"]').length,
-        pixelMarkers: document.querySelectorAll('[data-fb-pixel-id]').length,
-        pixelId: pixelId
-      });
-    }, 1000);
+    // تعيين العلامة global لمنع التحميل المتكرر
+    (window as any).__fbPixelLoaded = true;
+    
   };
 
   // تحميل TikTok Pixel بالطريقة الطبيعية الصحيحة
@@ -301,11 +315,20 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   };
 
   // تتبع أحداث Facebook
-  const trackFacebookEvent = (eventType: string, data?: any, sharedEventId?: string) => {
+  const trackFacebookEvent = (eventType: string, data?: any, sharedEventId?: string, customAdvancedMatching?: any) => {
     
     if (!window.fbq) {
-      console.error('📘 Facebook Pixel: ❌ FBQ NOT AVAILABLE - PIXEL NOT LOADED');
       return;
+    }
+    
+    // منع إرسال نفس الحدث مرتين باستخدام event_id
+    if (sharedEventId) {
+      const sentEventKey = `fb_event_sent_${sharedEventId}`;
+      if ((window as any)[sentEventKey]) {
+        console.log('🔍 Facebook Event already sent, skipping:', eventType, sharedEventId);
+        return;
+      }
+      (window as any)[sentEventKey] = true;
     }
     
 
@@ -325,7 +348,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     // التحقق من أن الحدث صالح لـ Facebook
     const validFBEvents = ['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase', 'Lead', 'CompleteRegistration', 'Search'];
     if (!validFBEvents.includes(fbEvent)) {
-      console.warn('📘 Facebook Pixel: Unknown event type', eventType);
       return;
     }
 
@@ -354,32 +376,50 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       return [String(ids).trim()].filter(id => id.length > 0);
     };
     
-    const contentIds = normalizeContentIds(data?.content_ids || data?.product_id || data?.content_id);
+    // استخدام معرف المنتج الصحيح (رقمي) بدلاً من UUID للكتالوج
+    let contentIds = normalizeContentIds(data?.content_ids || data?.product_id || data?.content_id);
     
+    // إذا كان المعرف UUID، حاول استخراج المعرف الرقمي من البيانات
+    if (contentIds.length > 0 && contentIds[0].includes('-')) {
+      // إذا كان لدينا معرف رقمي في البيانات، استخدمه
+      if (data?.numeric_product_id) {
+        contentIds = [String(data.numeric_product_id)];
+      } else if (data?.sku) {
+        contentIds = [String(data.sku)];
+      }
+      // يمكن إضافة المزيد من المحاولات لاستخراج المعرف الصحيح
+    }
+    
+    // تحويل العملة لـ Facebook (يدعم USD فقط للعملات غير المدعومة)
+    const fbCurrency = data?.currency === 'IQD' ? 'USD' : (data?.currency || 'USD');
+    const fbValue = data?.currency === 'IQD' ? (originalValue / 1320) : originalValue; // تحويل تقريبي IQD إلى USD
+    
+    // فصل البيانات: event data (آمنة) + advanced matching (شخصية - ستُشفر تلقائياً)
     const eventData = {
       content_name: data?.content_name || data?.product_name,
       content_category: data?.content_category || data?.product_category,
       content_ids: contentIds.length > 0 ? contentIds : undefined,
-      content_type: 'product', // إضافة content_type لتحسين المطابقة
-      value: originalValue,
-      currency: data?.currency || 'IQD', // إرسال العملة الأصلية لتطابق الكتالوج
+      content_type: 'product',
+      value: fbValue,
+      currency: fbCurrency,
       num_items: data?.quantity || 1,
-      email: data?.customer_email,
-      phone_number: data?.customer_phone,
-      first_name: data?.customer_first_name,
-      last_name: data?.customer_last_name,
-      city: data?.customer_city,
-      state: data?.customer_state,
-      country: data?.customer_country || 'IQ',
-      external_id: data?.external_id || createStableExternalId(data),
-      event_id: eventId,
-      event_time: Math.floor(Date.now() / 1000),
-      action_source: 'website',
-      event_source_url: window.location.href,
-      user_agent: navigator.userAgent,
-      fbp: getFBCookie('_fbp'),
-      fbc: getFBCookie('_fbc')
+      // إزالة البيانات الشخصية من event data
     };
+
+    // البيانات الشخصية للـ Advanced Matching (ستُشفر تلقائياً بواسطة Facebook)
+    const advancedMatchingData: any = customAdvancedMatching || {};
+    
+    // إذا لم يتم تمرير customAdvancedMatching، استخدم البيانات من data
+    if (!customAdvancedMatching) {
+      if (data?.customer_email) advancedMatchingData.em = data.customer_email;
+      if (data?.customer_phone) advancedMatchingData.ph = data.customer_phone;
+      if (data?.customer_first_name) advancedMatchingData.fn = data.customer_first_name;
+      if (data?.customer_last_name) advancedMatchingData.ln = data.customer_last_name;
+      if (data?.customer_city) advancedMatchingData.ct = data.customer_city;
+      if (data?.customer_state) advancedMatchingData.st = data.customer_state;
+      if (data?.customer_country) advancedMatchingData.country = data.customer_country || 'iq';
+      if (data?.external_id) advancedMatchingData.external_id = data.external_id;
+    }
 
     // إزالة القيم undefined
     const cleanEventData = Object.fromEntries(
@@ -387,11 +427,35 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     );
 
     
+    console.log('📤 Sending to Client-Side Pixel:', {
+      eventType: fbEvent,
+      eventID: sharedEventId,
+      content_ids: cleanEventData.content_ids,
+      value: cleanEventData.value,
+      currency: cleanEventData.currency,
+      hasAdvancedMatching: Object.keys(advancedMatchingData).length > 0,
+      advancedMatchingFields: Object.keys(advancedMatchingData),
+      advancedMatchingData: advancedMatchingData,
+      customAdvancedMatching: customAdvancedMatching
+    });
+    
     // تأكد من تحميل fbq أولاً
     if (typeof window.fbq === 'function') {
-      window.fbq('track', fbEvent, cleanEventData);
-    } else {
-      console.error('📘 Facebook Pixel: fbq is not a function');
+      // إرسال الحدث مع Advanced Matching Data منفصلة
+      const trackingOptions: any = {
+        eventID: sharedEventId
+      };
+      
+      // إضافة Advanced Matching إلى tracking options
+      if (Object.keys(advancedMatchingData).length > 0) {
+        Object.assign(trackingOptions, advancedMatchingData);
+      }
+      
+      console.log('🚀 Final fbq call - Event:', fbEvent);
+      console.log('🚀 Final fbq call - EventData:', cleanEventData);
+      console.log('🚀 Final fbq call - TrackingOptions:', trackingOptions);
+      
+      window.fbq('track', fbEvent, cleanEventData, trackingOptions);
     }
     
     // ملاحظة: تم إزالة الإرسال المكرر لـ Server-Side API هنا
@@ -401,7 +465,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   // تتبع أحداث TikTok بطريقة طبيعية وصحيحة
   const trackTikTokEvent = (eventType: string, data?: any) => {
     if (!window.ttq) {
-      console.warn('🎬 TikTok Pixel: ttq not available');
       return;
     }
 
@@ -420,7 +483,6 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
 
     const tikTokEvent = eventMap[eventType];
     if (!tikTokEvent) {
-      console.warn(`🎬 TikTok Pixel: Unsupported event type: ${eventType}`);
       return;
     }
 
@@ -486,7 +548,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       sendToTikTokAPI(tikTokEvent, cleanEventData, data);
       
     } catch (error) {
-      console.error('🎬 TikTok Pixel: Error tracking event:', error);
+      // خطأ صامت
     }
   };
 
@@ -519,7 +581,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
         })
       });
     } catch (error) {
-      console.warn('🎬 TikTok API: Failed to send event:', error);
+      // خطأ صامت
     }
   };
 
@@ -607,6 +669,23 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       const standardEventType = fbEventMap[eventType] || eventType;
       
       
+      const serverEventData = {
+        ...eventData,
+        event_id: eventId,
+        event_source_url: window.location.href
+      };
+      
+      console.log('🔄 Sending to Server-Side API:', {
+        eventType: standardEventType,
+        eventId,
+        external_id: serverEventData.external_id,
+        content_ids: serverEventData.content_ids,
+        value: serverEventData.value,
+        currency: serverEventData.currency,
+        customer_phone: serverEventData.customer_phone ? '[REDACTED]' : undefined,
+        customer_email: serverEventData.customer_email ? '[REDACTED]' : undefined
+      });
+      
       const response = await fetch('/api/facebook-conversions', {
         method: 'POST',
         headers: {
@@ -615,11 +694,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
         body: JSON.stringify({
           platformId,
           eventType: standardEventType,
-          eventData: {
-            ...eventData,
-            event_id: eventId,
-            event_source_url: window.location.href
-          },
+          eventData: serverEventData,
           userAgent: navigator.userAgent,
           clientIP: undefined // سيتم استخراجه في الخادم
         })
@@ -628,33 +703,137 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       const result = await response.json();
       
       if (response.ok) {
+        // نجح الإرسال
       } else {
-        console.error('❌ Server-Side API: فشل في إرسال الحدث:', result);
+        // فشل الإرسال
       }
     } catch (error) {
-      console.error('💥 Server-Side API: خطأ في الإرسال:', error);
+      // خطأ في الإرسال
     }
   };
 
   // تنفيذ الأحداث عند تغيير eventType أو eventData
   useEffect(() => {
-    if (!pixelSettings || isLoading || !eventType || hasExecuted) return;
+    if (!pixelSettings || isLoading || !eventType) return;
     
-    // إنشاء مفتاح فريد باستخدام بيانات مستقرة
-    const contentId = eventData?.content_ids?.[0] || eventData?.product_id || 'unknown';
-    const eventKey = `pixel_${eventType}_${contentId}_${platformId}`;
+    // منع تشغيل useEffect المتعدد للبكسل نفسه
+    const pixelId = pixelSettings.facebookPixelId;
+    const effectKey = `pixeltracker_${eventType}_${pixelId}_${Date.now()}`;
     
-    // نظام منع التكرار المُفعل - يمنع إرسال نفس الحدث مرتين في الجلسة الواحدة
-    const sessionKey = `session_${eventKey}`;
-    if (sessionStorage.getItem(sessionKey)) {
-      console.log('⚠️ تم تجاهل الحدث المكرر في هذه الجلسة:', eventType, 'للمنتج:', contentId);
-      setHasExecuted(true);
+    // فحص إذا كان هذا البكسل يعمل بالفعل
+    if (pixelId && window.fbq && document.querySelector(`[data-fb-pixel-initialized="${pixelId}"]`)) {
+      // البكسل محمل ومهيأ، لكن تحقق من وجود بيانات عميل جديدة
+      const hasCustomerData = eventData?.customer_email || eventData?.customer_phone || 
+                             eventData?.customer_first_name || eventData?.customer_last_name;
+      
+      if (hasCustomerData && !document.querySelector(`[data-fb-customer-data-sent="${pixelId}"]`)) {
+        // إعادة تهيئة البكسل مع بيانات العميل الجديدة
+        const customerAdvancedMatching: any = {};
+        if (eventData?.external_id) customerAdvancedMatching.external_id = eventData.external_id;
+        if (eventData?.customer_email) customerAdvancedMatching.em = eventData.customer_email;
+        if (eventData?.customer_phone) customerAdvancedMatching.ph = eventData.customer_phone;
+        if (eventData?.customer_first_name) customerAdvancedMatching.fn = eventData.customer_first_name;
+        if (eventData?.customer_last_name) customerAdvancedMatching.ln = eventData.customer_last_name;
+        if (eventData?.customer_city) customerAdvancedMatching.ct = eventData.customer_city;
+        if (eventData?.customer_state) customerAdvancedMatching.st = eventData.customer_state;
+        if (eventData?.customer_country) customerAdvancedMatching.country = eventData.customer_country || 'iq';
+        
+        console.log('🔄 Updating Facebook Pixel with Customer Data:', Object.keys(customerAdvancedMatching));
+        // إرسال حدث خاص لتحديث Advanced Matching
+        window.fbq('track', 'PageView', {}, customerAdvancedMatching);
+        
+        // إضافة علامة لمنع إعادة الإرسال
+        const customerDataMarker = document.createElement('div');
+        customerDataMarker.setAttribute('data-fb-customer-data-sent', pixelId);
+        customerDataMarker.style.display = 'none';
+        document.head.appendChild(customerDataMarker);
+      }
+      
+      console.log('🔍 Pixel already loaded, sending event only:', eventType);
+      
+      // إنشاء event_id مرة واحدة فقط
+      const contentId = eventData?.content_ids?.[0] || eventData?.product_id || 'unknown';
+      const presetEventId = (eventData as any)?._eventId;
+      const timestamp = (eventData as any)?._timestamp || Date.now();
+      const eventId = presetEventId || `${eventType}_${contentId}_${timestamp.toString().slice(-8)}`;
+      
+      // منع إرسال نفس الحدث مرتين
+      const sentEventKey = `useeffect_event_sent_${eventId}`;
+      if ((window as any)[sentEventKey]) {
+        console.log('🔍 UseEffect Event already processed, skipping:', eventType, eventId);
+        return;
+      }
+      (window as any)[sentEventKey] = true;
+      
+      console.log('🔍 Processing Event (Pixel Already Loaded):', {
+        eventType,
+        eventId,
+        contentId,
+        timestamp,
+        external_id: eventData?.external_id,
+        note: 'external_id will be sent via Server-Side API only (pixel already initialized)'
+      });
+      
+      setTimeout(() => {
+        const getFBCookie = (name: string) => {
+          const cookies = document.cookie.split(';');
+          for (let cookie of cookies) {
+            const [key, value] = cookie.trim().split('=');
+            if (key === name) return decodeURIComponent(value);
+          }
+          return null;
+        };
+
+        const enrichedEventData = {
+          ...eventData,
+          fbp: getFBCookie('_fbp'),
+          fbc: getFBCookie('_fbc')
+        };
+
+        // إضافة Advanced Matching للحدث إذا كانت بيانات العميل متوفرة
+        const eventAdvancedMatching: any = {};
+        if (eventData?.external_id) eventAdvancedMatching.external_id = eventData.external_id;
+        if (eventData?.customer_email) eventAdvancedMatching.em = eventData.customer_email;
+        if (eventData?.customer_phone) eventAdvancedMatching.ph = eventData.customer_phone;
+        if (eventData?.customer_first_name) eventAdvancedMatching.fn = eventData.customer_first_name;
+        if (eventData?.customer_last_name) eventAdvancedMatching.ln = eventData.customer_last_name;
+        if (eventData?.customer_city) eventAdvancedMatching.ct = eventData.customer_city;
+        if (eventData?.customer_state) eventAdvancedMatching.st = eventData.customer_state;
+        if (eventData?.customer_country) eventAdvancedMatching.country = eventData.customer_country || 'iq';
+        
+        console.log('🔍 Event Advanced Matching Data:');
+        console.log(eventAdvancedMatching);
+        
+        // إرسال الحدث مع Advanced Matching محدث
+        trackFacebookEvent(eventType, enrichedEventData, eventId, eventAdvancedMatching);
+        sendToServerSideAPI(platformId, eventType, enrichedEventData, eventId);
+      }, 100);
+      
       return;
     }
     
-    // تسجيل الحدث في sessionStorage (فقط للجلسة الحالية)
-    sessionStorage.setItem(sessionKey, Date.now().toString());
-    setHasExecuted(true);
+    // تشخيص خاص لحدث Lead
+    if (eventType === 'lead') {
+      console.log('🎯 PixelTracker: Processing Lead Event', {
+        eventType,
+        eventData,
+        platformId,
+        hasPixelSettings: !!pixelSettings,
+        facebookPixelId: pixelSettings.facebookPixelId
+      });
+    }
+    
+    // تشخيص لمشكلة التكرار
+    console.log('🔍 PixelTracker Loading:', {
+      eventType,
+      platformId,
+      fbqExists: !!window.fbq,
+      fbPixelLoaded: !!(window as any).__fbPixelLoaded,
+      pixelId: pixelSettings.facebookPixelId
+    });
+    
+    // إنشاء مفتاح فريد باستخدام بيانات مستقرة
+    const contentId = eventData?.content_ids?.[0] || eventData?.product_id || 'unknown';
     
     // إنشاء event_id متطابق - استخدام _eventId إذا كان متوفراً (للـ Purchase) أو إنشاء جديد
     const presetEventId = (eventData as any)?._eventId;
@@ -662,9 +841,35 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     const eventId = presetEventId || `${eventType}_${contentId}_${timestamp.toString().slice(-8)}`;
     
     
-    // تحميل وتنفيذ Facebook Pixel
+    // تحميل وتنفيذ Facebook Pixel (مرة واحدة فقط)
     if (pixelSettings.facebookPixelId) {
-      loadFacebookPixel(pixelSettings.facebookPixelId);
+      // إعداد Advanced Matching data للتهيئة (جميع البيانات المتاحة لأفضل مطابقة)
+      const initAdvancedMatching: any = {};
+      if (eventData?.external_id) initAdvancedMatching.external_id = eventData.external_id;
+      if (eventData?.customer_email) initAdvancedMatching.em = eventData.customer_email;
+      if (eventData?.customer_phone) initAdvancedMatching.ph = eventData.customer_phone;
+      if (eventData?.customer_first_name) initAdvancedMatching.fn = eventData.customer_first_name;
+      if (eventData?.customer_last_name) initAdvancedMatching.ln = eventData.customer_last_name;
+      if (eventData?.customer_city) initAdvancedMatching.ct = eventData.customer_city;
+      if (eventData?.customer_state) initAdvancedMatching.st = eventData.customer_state;
+      if (eventData?.customer_country) initAdvancedMatching.country = eventData.customer_country || 'iq';
+      
+      console.log('🔍 Available eventData for Advanced Matching:', {
+        external_id: eventData?.external_id,
+        customer_email: eventData?.customer_email ? '[PRESENT]' : '[MISSING]',
+        customer_phone: eventData?.customer_phone ? '[PRESENT]' : '[MISSING]',
+        customer_first_name: eventData?.customer_first_name ? '[PRESENT]' : '[MISSING]',
+        customer_last_name: eventData?.customer_last_name ? '[PRESENT]' : '[MISSING]',
+        customer_city: eventData?.customer_city ? '[PRESENT]' : '[MISSING]',
+        customer_state: eventData?.customer_state ? '[PRESENT]' : '[MISSING]',
+        customer_country: eventData?.customer_country ? '[PRESENT]' : '[MISSING]'
+      });
+      
+      console.log('🔍 Final initAdvancedMatching object:', initAdvancedMatching);
+      
+      // تحميل البكسل مع Advanced Matching data
+      loadFacebookPixel(pixelSettings.facebookPixelId, initAdvancedMatching);
+      
       setTimeout(() => {
         // إضافة Facebook Cookies إلى eventData قبل الإرسال
         const getFBCookie = (name: string) => {

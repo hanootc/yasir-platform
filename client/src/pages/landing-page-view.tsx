@@ -504,8 +504,6 @@ export default function LandingPageView() {
     };
   }, []);
 
-  const [viewContentSent, setViewContentSent] = useState(false);
-  const viewContentSentRef = useRef(false);
   const [viewContentPixelData, setViewContentPixelData] = useState<any>(null);
   const [selectedOffer, setSelectedOffer] = useState<string>("");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -520,8 +518,51 @@ export default function LandingPageView() {
   const [addToCartPixelData, setAddToCartPixelData] = useState<any>(null);
   const [initiateCheckoutData, setInitiateCheckoutData] = useState<any>(null);
   const [leadEventData, setLeadEventData] = useState<any>(null);
+  const [addressLeadEventData, setAddressLeadEventData] = useState<any>(null);
 
-
+  // دالة لإرسال حدث Lead عند الكتابة في حقل العنوان التفصيلي
+  const handleAddressFieldChange = (value: string) => {
+    // إرسال حدث Lead فقط إذا كان النص أكثر من 5 أحرف (يعني العميل بدأ يكتب عنوان حقيقي)
+    if (value.length >= 5 && landingPage?.platformId && product) {
+      const timestamp = Date.now();
+      const uniqueExternalId = createStableExternalId(product.id, { customerPhone: value.slice(0, 10) });
+      
+      const leadData = {
+        content_name: product.name,
+        content_category: getGoogleProductCategory(product),
+        content_ids: [product.id],
+        content_type: 'product',
+        value: parseFloat(product.price?.toString() || '0'),
+        currency: 'IQD',
+        // بيانات Advanced Matching
+        customer_first_name: form.getValues('customerName')?.split(' ')[0] || '',
+        customer_last_name: form.getValues('customerName')?.split(' ').slice(1).join(' ') || '',
+        customer_phone: form.getValues('customerPhone') || '',
+        customer_city: value, // العنوان المكتوب
+        customer_state: form.getValues('customerGovernorate') || '',
+        customer_country: 'IQ',
+        external_id: uniqueExternalId,
+        _timestamp: timestamp
+      };
+      
+      console.log('🏠 Address Lead Event Data Created:', leadData);
+      
+      {addressLeadEventData && landingPage?.platformId && (
+        <PixelTracker
+          key="address-lead"
+          platformId={landingPage.platformId}
+          eventType="lead"
+          eventData={addressLeadEventData}
+        />
+      )}
+      setAddressLeadEventData(leadData);
+      
+      // إعادة تعيين البيانات بعد ثانية واحدة لتجنب الإرسال المتكرر
+      setTimeout(() => {
+        setAddressLeadEventData(null);
+      }, 1000);
+    }
+  };
 
   const [showFixedButton, setShowFixedButton] = useState(true);
   const { toast } = useToast();
@@ -1103,11 +1144,9 @@ export default function LandingPageView() {
     enabled: !!landingPage?.productId,
   });
 
-  // إرسال ViewContent عند توفر البيانات - مرة واحدة فقط عبر PixelTracker
+  // إرسال ViewContent عند توفر البيانات عبر PixelTracker
   useEffect(() => {
-    if (landingPage && product && !viewContentSentRef.current) {
-      viewContentSentRef.current = true;
-      setViewContentSent(true);
+    if (landingPage && product) {
       
       // إنشاء معرفات ثابتة ومتطابقة بين Pixel و API
       const timestamp = Date.now();
@@ -1864,6 +1903,8 @@ export default function LandingPageView() {
           ...data,
           landingPageId: landingPage?.id,
           productId: landingPage?.productId,
+          productName: (product as any)?.name || landingPage.title, // إضافة اسم المنتج
+          productImageUrls: (product as any)?.imageUrls || [], // إضافة صور المنتج
           quantity: quantity, // إضافة الكمية المحسوبة
           price: offerPrice, // إضافة السعر
           totalAmount: offerPrice, // إضافة المبلغ الإجمالي
@@ -1927,16 +1968,27 @@ export default function LandingPageView() {
           content_type: 'product',
           value: parseFloat(newOrder.totalAmount?.toString() || '0'),
           currency: 'IQD',
-          customer_name: newOrder.customerName,
+          // بيانات Advanced Matching فقط - لا نرسل حقول مخصصة مع الحدث
+          customer_email: newOrder.customerEmail || '',
           customer_phone: newOrder.customerPhone,
-          external_id: uniqueExternalId, // معرف خارجي ثابت ومتطابق
-          landing_page_id: landingPage.id,
-          product_id: product.id,
-          order_id: newOrder.id,
+          customer_first_name: newOrder.customerName?.split(' ')[0] || '',
+          customer_last_name: newOrder.customerName?.split(' ').slice(1).join(' ') || '',
+          external_id: uniqueExternalId,
           // إضافة timestamp للاستخدام في PixelTracker
           _timestamp: timestamp
         };
         
+        console.log('🎯 Lead Event Data Created:', leadData);
+      
+      {/* Address Lead Event */}
+      {addressLeadEventData && landingPage?.platformId && (
+        <PixelTracker
+          key="address-lead"
+          platformId={landingPage.platformId}
+          eventType="lead"
+          eventData={addressLeadEventData}
+        />
+      )}
         setLeadEventData(leadData);
       }
 
@@ -6780,6 +6832,16 @@ export default function LandingPageView() {
       )}
       
       {/* Lead Event */}
+      
+      {/* Address Lead Event */}
+      {addressLeadEventData && landingPage?.platformId && (
+        <PixelTracker
+          key="address-lead"
+          platformId={landingPage.platformId}
+          eventType="lead"
+          eventData={addressLeadEventData}
+        />
+      )}
       {leadEventData && landingPage?.platformId && (
         <PixelTracker
           key="lead"

@@ -5491,33 +5491,47 @@ ${platform?.platformName || 'متجرنا'}`;
       
       // Validate required fields
       if (!orderData.customerName || !orderData.customerPhone || !orderData.customerGovernorate || 
-          !orderData.customerAddress || !orderData.offer || !orderData.landingPageId) {
+          !orderData.customerAddress || !orderData.offer) {
         console.error("Missing required fields:", {
           customerName: !!orderData.customerName,
           customerPhone: !!orderData.customerPhone,
           customerGovernorate: !!orderData.customerGovernorate,
           customerAddress: !!orderData.customerAddress,
           offer: !!orderData.offer,
-          landingPageId: !!orderData.landingPageId
+          landingPageId: !!orderData.landingPageId,
+          platformId: !!orderData.platformId
         });
         return res.status(400).json({ message: "بيانات مطلوبة مفقودة" });
       }
 
       // Get landing page to extract platform ID and calculate total
-      // Try to get by ID first, then by customUrl if not found
-      let landingPage = await storage.getLandingPage(orderData.landingPageId);
-      if (!landingPage) {
-        landingPage = await storage.getLandingPageByCustomUrl(orderData.landingPageId);
-      }
-      if (!landingPage) {
-        console.error("❌ Landing page not found for ID/customUrl:", orderData.landingPageId);
-        return res.status(400).json({ message: "صفحة الهبوط غير موجودة" });
-      }
+      // For manual orders, landingPageId might be null, so use platformId directly
+      let landingPage = null;
+      let platformId = orderData.platformId;
       
-      console.log("✅ Found landing page:", landingPage.id, "for customUrl:", orderData.landingPageId);
+      if (orderData.landingPageId) {
+        // Try to get by ID first, then by customUrl if not found
+        landingPage = await storage.getLandingPage(orderData.landingPageId);
+        if (!landingPage) {
+          landingPage = await storage.getLandingPageByCustomUrl(orderData.landingPageId);
+        }
+        if (!landingPage) {
+          console.error("❌ Landing page not found for ID/customUrl:", orderData.landingPageId);
+          return res.status(400).json({ message: "صفحة الهبوط غير موجودة" });
+        }
+        platformId = landingPage.platformId;
+        console.log("✅ Found landing page:", landingPage.id, "for customUrl:", orderData.landingPageId);
+      } else {
+        // Manual order - use platformId directly
+        if (!platformId) {
+          console.error("❌ No platformId provided for manual order");
+          return res.status(400).json({ message: "معرف المنصة مطلوب للطلبات اليدوية" });
+        }
+        console.log("✅ Manual order for platform:", platformId);
+      }
 
       // Get delivery settings first
-      const deliverySettings = await storage.getDeliverySettings(landingPage.platformId);
+      const deliverySettings = await storage.getDeliverySettings(platformId);
       let deliveryFee = 0;
       
       if (deliverySettings && orderData.customerGovernorate) {
@@ -5623,8 +5637,10 @@ ${platform?.platformName || 'متجرنا'}`;
       // Add platform ID and calculated totals to order data
       const orderDataWithCalculations = {
         ...orderData,
-        landingPageId: landingPage.id, // استخدام ID الفعلي للصفحة بدلاً من customUrl
-        platformId: landingPage.platformId,
+        landingPageId: landingPage?.id || null, // استخدام ID الفعلي للصفحة أو null للطلبات اليدوية
+        platformId: platformId,
+        productName: orderData.productName || null, // حفظ اسم المنتج
+        productImageUrls: orderData.productImageUrls || [], // حفظ صور المنتج
         subtotal: subtotal.toString(),
         totalAmount: total.toString(),
         discountAmount: discountAmount.toString(),
@@ -5646,10 +5662,10 @@ ${platform?.platformName || 'متجرنا'}`;
         console.log('🎆 إرسال حدث Lead إلى Server-Side API');
         
         // الحصول على بيانات المنصة للـ subdomain الصحيح
-        const platform = await storage.getPlatform(landingPage.platformId);
+        const platform = await storage.getPlatform(platformId);
         const platformSubdomain = platform?.subdomain || platform?.customDomain || 'hanoot';
         
-        console.log('🌐 Platform subdomain:', platformSubdomain, 'for platform:', landingPage.platformId);
+        console.log('🌐 Platform subdomain:', platformSubdomain, 'for platform:', platformId);
         
         // استخراج Facebook Cookies من الطلب
         let fbc = '';
@@ -5678,15 +5694,15 @@ ${platform?.platformName || 'متجرنا'}`;
           fbp: fbp ? `Found: ${fbp.substring(0, 20)}...` : 'Missing'
         });
 
-        // إعداد بيانات حدث Lead
+        // إعداد بيانات حدث Lead - فقط الحقول المعيارية لـ Facebook
         const leadEventData = {
           content_name: orderData.productName || 'منتج',
           content_category: 'General',
-          content_ids: [orderData.productId || landingPage.productId],
+          content_ids: [orderData.productId || landingPage?.productId || 'manual_order'],
+          content_type: 'product',
           value: parseFloat(newOrder.totalAmount || '0'),
           currency: 'IQD',
-          transaction_id: newOrder.id,
-          order_number: newOrder.orderNumber,
+          // بيانات Advanced Matching فقط
           customer_email: orderData.customerEmail || '',
           customer_phone: newOrder.customerPhone,
           customer_first_name: orderData.customerName?.split(' ')[0] || '',
@@ -5694,13 +5710,9 @@ ${platform?.platformName || 'متجرنا'}`;
           customer_city: newOrder.customerAddress,
           customer_state: newOrder.customerGovernorate,
           customer_country: 'IQ',
-          landing_page_id: newOrder.landingPageId,
-          product_id: orderData.productId || landingPage.productId,
           external_id: orderData.external_id || newOrder.customerPhone || newOrder.id,
-          facebook_login_id: orderData.facebook_login_id || `order_${newOrder.id}`,
-          login_id: orderData.login_id || orderData.facebook_login_id || `order_${newOrder.id}`,
           action_source: 'website',
-          event_source_url: req.headers.referer || `https://sanadi.pro/${platformSubdomain}/${landingPage.customUrl}`,
+          event_source_url: req.headers.referer || `https://sanadi.pro/${platformSubdomain}/${landingPage?.customUrl || 'manual'}`,
           // إضافة Facebook Cookies
           fbc: fbc,
           fbp: fbp,
@@ -5715,7 +5727,7 @@ ${platform?.platformName || 'متجرنا'}`;
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            platformId: landingPage.platformId,
+            platformId: platformId,
             eventType: 'lead',
             eventData: leadEventData,
             userAgent: req.headers['user-agent'],
@@ -7764,14 +7776,15 @@ ${platform?.platformName || 'متجرنا'}`;
         console.log(`📱 إنشاء الإعلان ${i + 1}/${videos.length} للفيديو: ${video.fileName}`);
 
         try {
-          // تحضير creative data حسب نوع الحملة
+          // تحضير creative data حسب نفس منطق buildAdCreative
           const creativeData: any = {
             name: `${campaignData.campaignName} - كريتيف ${i + 1}`,
             object_story_spec: {
               page_id: campaignData.pageId,
-              video_data: {
-                video_id: video.videoId,
-                message: campaignData.adText || `${campaignData.displayName}`,
+              link_data: {
+                name: campaignData.displayName,        // العنوان (Headline)
+                message: campaignData.adText,          // النص الأساسي (Primary Text)
+                description: campaignData.adDescription, // الوصف (Description)
                 call_to_action: campaignData.objective === 'OUTCOME_TRAFFIC' ? {
                   type: 'MESSAGE_PAGE'
                 } : {
@@ -7780,9 +7793,18 @@ ${platform?.platformName || 'متجرنا'}`;
                     link: campaignData.landingPageUrl
                   }
                 }
+              },
+              video_data: {
+                video_id: video.videoId
               }
             }
           };
+          
+          console.log(`🔍 Creative ${i + 1} البيانات:`, {
+            displayName: campaignData.displayName,
+            adText: campaignData.adText,
+            adDescription: campaignData.adDescription
+          });
           
           // إضافة Advantage+ Creative إذا كان مفعلاً
           if (advantageCreative) {

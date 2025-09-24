@@ -217,10 +217,19 @@ export default function PlatformRegistration() {
       console.log('🔄 Creating payment for:', platformData);
       setPaymentLoading(true);
       
-      const response = await apiRequest('/api/payments/zaincash/create', {
+      const response = await fetch('/api/payments/zaincash/create', {
         method: 'POST',
-        body: platformData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(platformData)
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       
       console.log('✅ Payment API response:', data);
@@ -312,9 +321,12 @@ export default function PlatformRegistration() {
 
   const registerPlatform = useMutation({
     mutationFn: async (data: InsertPlatform) => {
-      const response = await apiRequest('/api/platforms', {
+      const response = await fetch('/api/platforms', {
         method: 'POST',
-        body: data
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
       });
       
       if (!response.ok) {
@@ -445,7 +457,7 @@ export default function PlatformRegistration() {
         password: data.password,
         contactEmail: data.contactEmail,
         contactPhone: data.contactPhone,
-        description: data.description || 'منصة تجارية جديدة',
+        description: 'منصة تجارية جديدة',
         logoUrl: logoUrl || null,
         subscriptionPlan: selectedPlan as any
       };

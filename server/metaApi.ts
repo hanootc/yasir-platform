@@ -560,16 +560,15 @@ export class MetaMarketingAPI {
     console.log('📰 إنشاء إعلان Meta:', JSON.stringify(requestData, null, 2));
     return this.makeRequest(`/act_${this.adAccountId}/ads`, 'POST', requestData);
   }
-
   // إنشاء Ad Creative
   async createAdCreative(creativeData: {
     name: string;
     object_story_spec: any;
-    degrees_of_freedom_spec?: any;
   }) {
     console.log('🎨 إنشاء Ad Creative:', JSON.stringify(creativeData, null, 2));
     return this.makeRequest(`/act_${this.adAccountId}/adcreatives`, 'POST', creativeData);
   }
+
 
   // جلب الصفحات المرتبطة بالحساب
   async getPages() {
@@ -888,6 +887,13 @@ export class MetaMarketingAPI {
       }
 
       // 5. إنشاء Ad Creative
+      console.log('🔍 بيانات Creative في createCompleteCampaign:', {
+        displayName: data.displayName,
+        adText: data.adText,
+        adDescription: data.adDescription,
+        callToAction: data.callToAction
+      });
+      
       const creativeData = await this.buildAdCreative({
         name: `${data.adName} Creative`,
         pageId: data.pageId,
@@ -968,6 +974,9 @@ export class MetaMarketingAPI {
   }) {
     console.log('🏗️ بدء buildAdCreative مع البيانات:', {
       name: data.name,
+      displayName: data.displayName,
+      adText: data.adText,
+      adDescription: data.adDescription,
       callToAction: data.callToAction,
       messageDestinations: data.messageDestinations,
       pageId: data.pageId
@@ -1004,12 +1013,13 @@ export class MetaMarketingAPI {
           instagram_actor_id: instagramActorId 
         }),
         link_data: {
-          message: data.adText,
           call_to_action: {
             type: data.callToAction,
-            ...(data.landingPageUrl && { value: { link: data.landingPageUrl } })
-          },
-          name: data.displayName,
+            value: {
+              ...(data.landingPageUrl && { link: data.landingPageUrl }),
+              ...(data.adDescription && { link_description: data.adDescription })
+            }
+          }
         }
       }
     };
@@ -1026,19 +1036,38 @@ export class MetaMarketingAPI {
       if (!data.thumbnailUrl) {
         throw new Error('يجب وجود thumbnail URL للفيديو - لا نقبل صور افتراضية!');
       }
+      // الحل المضمون: استخدام link_data مع video_data معاً
+      // تحديث link_data بالعنوان والوصف والنص
+      console.log('🔍 قبل تحديث link_data:', {
+        'displayName': data.displayName,
+        'adDescription': data.adDescription,
+        'adText': data.adText
+      });
+      
+      creative.object_story_spec.link_data.name = data.displayName;        // العنوان
+      creative.object_story_spec.link_data.description = data.adDescription; // الوصف
+      creative.object_story_spec.link_data.message = data.adText;           // النص الأساسي
+      
+      console.log('🔍 بعد تحديث link_data:', creative.object_story_spec.link_data);
+
+      // إضافة video_data مع الاحتفاظ بـ link_data
       creative.object_story_spec.video_data = {
         video_id: data.videoId,
-        message: data.adText, // النص الأساسي
-        title: data.displayName, // العنوان
-        link_description: data.adDescription || data.adText, // الوصف المنفصل أو النص الأساسي كبديل
-        call_to_action: creative.object_story_spec.link_data.call_to_action,
         // استخدام thumbnail URL الحقيقي من الفيديو فقط - لا صور افتراضية!
         ...(data.thumbnailUrl ? { image_url: data.thumbnailUrl } : {}),
         // Instagram actor ID إذا كان متوفراً
         ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {})
       };
-      console.log('✅ تم إعداد video_data - الفيديو مرفوع مع thumbnail مخصص من الفيديو نفسه');
-      delete creative.object_story_spec.link_data;
+      
+      // لا نحذف link_data - نحتاجها للعنوان والوصف والنص!
+      
+      console.log('📝 بيانات الإعلان النهائية:', {
+        'العنوان (link_data.name)': data.displayName,
+        'النص الأساسي (link_data.message)': data.adText,
+        'الوصف (link_data.description)': data.adDescription,
+        'call_to_action': data.callToAction
+      });
+      console.log('✅ تم استخدام link_data مع video_data - الطريقة الرسمية');
     } else if (data.adFormat === 'SINGLE_IMAGE' && data.imageHash) {
       creative.object_story_spec.link_data.image_hash = data.imageHash;
     }

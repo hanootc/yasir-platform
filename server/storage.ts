@@ -459,14 +459,14 @@ export class DatabaseStorage implements IStorage {
   // إنشاء التصنيفات الافتراضية لمنصة جديدة
   async createDefaultCategories(platformId: string): Promise<void> {
     const defaultCategories = [
-      { name: 'أجهزة منزلية', description: 'أجهزة كهربائية ومنزلية', icon: 'home' },
-      { name: 'أدوات مطبخ', description: 'أدوات ومعدات المطبخ والطبخ', icon: 'utensils' },
-      { name: 'ديكور منزلي', description: 'مستلزمات تزيين وديكور المنزل', icon: 'sparkles' },
-      { name: 'أدوات تنظيف', description: 'مواد ومعدات التنظيف المنزلي', icon: 'wrench' },
-      { name: 'منسوجات منزلية', description: 'مفارش وستائر وملابس منزلية', icon: 'shirt' },
-      { name: 'أدوات حديقة', description: 'مستلزمات العناية بالحديقة والنباتات', icon: 'trees' },
-      { name: 'الأطفال والأسرة', description: 'منتجات الأطفال ومستلزمات الأسرة', icon: 'baby' },
-      { name: 'صحة ورياضة', description: 'أدوات الصحة واللياقة البدنية', icon: 'heart-pulse' }
+      { name: 'أجهزة منزلية', description: 'أجهزة كهربائية ومنزلية', icon: 'home', googleCategory: 'Home & Garden > Household Appliances' },
+      { name: 'أدوات مطبخ', description: 'أدوات ومعدات المطبخ والطبخ', icon: 'utensils', googleCategory: 'Home & Garden > Kitchen & Dining' },
+      { name: 'ديكور منزلي', description: 'مستلزمات تزيين وديكور المنزل', icon: 'sparkles', googleCategory: 'Home & Garden > Decor' },
+      { name: 'أدوات تنظيف', description: 'مواد ومعدات التنظيف المنزلي', icon: 'wrench', googleCategory: 'Home & Garden > Household Supplies' },
+      { name: 'منسوجات منزلية', description: 'مفارش وستائر وملابس منزلية', icon: 'shirt', googleCategory: 'Home & Garden > Linens & Bedding' },
+      { name: 'أدوات حديقة', description: 'مستلزمات العناية بالحديقة والنباتات', icon: 'trees', googleCategory: 'Home & Garden > Lawn & Garden' },
+      { name: 'الأطفال والأسرة', description: 'منتجات الأطفال ومستلزمات الأسرة', icon: 'baby', googleCategory: 'Baby & Toddler > Baby Care' },
+      { name: 'صحة ورياضة', description: 'أدوات الصحة واللياقة البدنية', icon: 'heart-pulse', googleCategory: 'Sporting Goods > Fitness & Recreation' }
     ];
 
     const categoriesToInsert = defaultCategories.map(cat => ({
@@ -618,7 +618,12 @@ export class DatabaseStorage implements IStorage {
           lpo.status, lpo.created_at, lpo.platform_id, lpo.offer, lpo.notes, lpo.quantity,
           lpo.landing_page_id, lpo.order_source, lpo.source_details,
           COALESCE(lpo.product_id, lp.product_id) as product_id, 
-          p.name as product_name, p.image_urls as product_image_urls,
+          COALESCE(NULLIF(lpo.product_name, ''), p.name) as product_name, 
+          CASE 
+            WHEN lpo.product_image_urls IS NOT NULL AND lpo.product_image_urls != '[]'::jsonb AND jsonb_array_length(lpo.product_image_urls) > 0
+            THEN lpo.product_image_urls 
+            ELSE to_jsonb(COALESCE(p.image_urls, ARRAY[]::text[])) 
+          END as product_image_urls,
           lpo.selected_color_ids, lpo.selected_shape_ids, lpo.selected_size_ids,
           lpo.selected_color_id, lpo.selected_shape_id, lpo.selected_size_id,
           pc.color_name, pc.color_code, pc.color_image_url,
@@ -2110,7 +2115,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Get next sequential order number
+  // Get next sequential order number (global - deprecated)
   async getNextOrderNumber(): Promise<number> {
     try {
       // الحصول على أعلى رقم طلب من جدول الطلبات العادية
@@ -2142,13 +2147,47 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getNextOrderNumberForPlatform(platformId: string): Promise<number> {
+    try {
+      // الحصول على أعلى رقم طلب من جدول الطلبات العادية لهذه المنصة
+      const [regularResult] = await db
+        .select({ maxOrderNumber: sql<number>`cast(coalesce(max(cast(order_number as integer)), 0) as int)` })
+        .from(orders)
+        .where(eq(orders.platformId, platformId));
+        
+      // الحصول على أعلى رقم طلب من جدول طلبات صفحات الهبوط لهذه المنصة
+      const [lpResult] = await db
+        .select({ maxOrderNumber: sql<number>`cast(coalesce(max(cast(order_number as integer)), 0) as int)` })
+        .from(landingPageOrders)
+        .where(eq(landingPageOrders.platformId, platformId));
+        
+      // أخذ أعلى رقم من الجدولين لهذه المنصة
+      const maxRegular = regularResult?.maxOrderNumber || 0;
+      const maxLandingPage = lpResult?.maxOrderNumber || 0;
+      const maxOrderNumber = Math.max(maxRegular, maxLandingPage);
+      
+      console.log(`📊 Platform ${platformId} order numbering:`, {
+        maxRegular,
+        maxLandingPage,
+        nextOrderNumber: maxOrderNumber + 1
+      });
+      
+      return maxOrderNumber + 1;
+    } catch (error) {
+      console.error(`Error getting next order number for platform ${platformId}:`, error);
+      // في حالة الخطأ، ابدأ من 1
+      return 1;
+    }
+  }
+
   async createLandingPageOrder(order: InsertLandingPageOrder): Promise<LandingPageOrder> {
     let attempts = 0;
     const maxAttempts = 3;
     
     while (attempts < maxAttempts) {
       try {
-        const sequentialNumber = await this.getNextOrderNumber();
+        // استخدام الدالة الجديدة التي تحسب الرقم لكل منصة منفصلة
+        const sequentialNumber = await this.getNextOrderNumberForPlatform(order.platformId);
         const orderNumber = sequentialNumber.toString();
         
         console.log(`🔄 Attempting to create order with number: ${orderNumber} (attempt ${attempts + 1})`);

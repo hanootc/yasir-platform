@@ -415,14 +415,17 @@ export default function ThankYouPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-400 via-blue-500 to-purple-600 py-8 px-4">
-      {/* تتبع البكسلات لحدث الشراء المكتمل - فقط للطلبات الجديدة */}
-      {order && trackPurchaseEvent() && order.status === 'pending' && !localStorage.getItem(`pixel_tracked_${orderId}`) && (
-        <PixelTracker 
-          platformId={order.platformId}
-          eventType="purchase"
-          eventData={trackPurchaseEvent()!}
-        />
-      )}
+      {/* تتبع البكسلات لحدث الشراء المكتمل */}
+      {(() => {
+        const purchaseEventData = order ? trackPurchaseEvent() : null;
+        return purchaseEventData && (
+          <PixelTracker 
+            platformId={order.platformId}
+            eventType="purchase"
+            eventData={purchaseEventData}
+          />
+        );
+      })()}
       
       <div className="max-w-4xl mx-auto space-y-6">
         

@@ -886,9 +886,12 @@ export default function PlatformOrders() {
       
       case 'createdAt':
         return (
-          <span className="text-xs text-theme-primary">
-            {formatEnglishNumbers(new Date(order.createdAt).toLocaleDateString('ar-IQ'))}
-          </span>
+          <div className="flex items-center justify-center gap-1">
+            <i className="fas fa-calendar-alt text-xs text-theme-primary dark:text-white"></i>
+            <span className="text-xs text-theme-primary dark:text-white">
+              {formatEnglishNumbers(new Date(order.createdAt).toLocaleDateString('ar-IQ'))}
+            </span>
+          </div>
         );
       
       default:
@@ -1996,22 +1999,24 @@ export default function PlatformOrders() {
                       إضافة طلب يدوي
                     </Button>
                     
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium text-gray-700 whitespace-nowrap">من تاريخ:</label>
+                    <div className="flex items-center justify-center gap-2">
+                      <i className="fas fa-calendar-alt text-sm text-theme-primary dark:text-white"></i>
+                      <label className="text-sm font-medium text-theme-primary dark:text-white whitespace-nowrap">من تاريخ:</label>
                       <Input
                         type="date"
                         value={dateFrom}
                         onChange={(e) => setDateFrom(e.target.value)}
-                        className="w-32 platform-input"
+                        className="platform-input"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium text-gray-700 whitespace-nowrap">إلى تاريخ:</label>
+                    <div className="flex items-center justify-center gap-2">
+                      <i className="fas fa-calendar-alt text-sm text-theme-primary dark:text-white"></i>
+                      <label className="text-sm font-medium text-theme-primary dark:text-white whitespace-nowrap">إلى تاريخ:</label>
                       <Input
                         type="date"
                         value={dateTo}
                         onChange={(e) => setDateTo(e.target.value)}
-                        className="w-32 platform-input"
+                        className="platform-input"
                       />
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -2450,7 +2455,7 @@ export default function PlatformOrders() {
                                 title={!column.fixed ? 'اسحب لإعادة ترتيب العمود' : ''}
                               >
                                 <div className="flex items-center justify-center gap-1">
-                                  <i className={`${column.icon} text-xs text-theme-primary`}></i>
+                                  <i className={`${column.icon} text-xs text-theme-primary dark:text-white`}></i>
                                   <span>{column.label}</span>
                                 </div>
                               </th>

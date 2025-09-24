@@ -43,8 +43,8 @@ export class ZainCashService {
   
   constructor(testMode: boolean = true) {
     this.isTestMode = true;
-    // ZainCash test integration enabled - using real test credentials
-    this.forceSimulation = false; // Disabled to use real ZainCash test API
+    // Force simulation mode due to ZainCash API access issues
+    this.forceSimulation = true; // Enable simulation for development
   }
 
   /**
@@ -164,7 +164,7 @@ export class ZainCashService {
         // Create a simulated transaction response for development  
         const simulatedTransactionId = `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const baseUrl = 'https://sanadi.pro';
-        const paymentUrl = `${baseUrl}/platform-registration?payment_simulation=true&transaction_id=${simulatedTransactionId}&order_id=${data.orderId}`;
+        const paymentUrl = `${baseUrl}/register-platform?payment_simulation=true&transaction_id=${simulatedTransactionId}&order_id=${encodeURIComponent(data.orderId)}`;
         
         return {
           success: true,
@@ -288,8 +288,8 @@ export class ZainCashService {
         
         // Create a simulated transaction response for development
         const simulatedTransactionId = `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const baseUrl = process.env.DOMAIN ? `https://${process.env.DOMAIN}` : 'http://localhost:5000';
-        const paymentUrl = `${baseUrl}/platform-registration?payment_simulation=true&transaction_id=${simulatedTransactionId}&order_id=${data.orderId}`;
+        const baseUrl = 'https://sanadi.pro';
+        const paymentUrl = `${baseUrl}/register-platform?payment_simulation=true&transaction_id=${simulatedTransactionId}&order_id=${encodeURIComponent(data.orderId)}`;
         
         return {
           success: true,

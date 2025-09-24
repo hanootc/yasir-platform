@@ -668,6 +668,10 @@ export const landingPageOrders = pgTable("landing_page_orders", {
   quantity: integer("quantity").notNull().default(1), // الكمية المطلوبة
   notes: text("notes"),
   
+  // بيانات المنتج المحفوظة وقت الطلب
+  productName: varchar("product_name"), // اسم المنتج وقت الطلب
+  productImageUrls: jsonb("product_image_urls").default([]), // صور المنتج وقت الطلب
+  
   // خيارات المنتج المحددة (متعددة)
   selectedColorIds: jsonb("selected_color_ids").default([]),
   selectedShapeIds: jsonb("selected_shape_ids").default([]),
