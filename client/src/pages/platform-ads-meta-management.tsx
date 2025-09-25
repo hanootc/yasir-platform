@@ -439,10 +439,10 @@ export default function PlatformAdsMetaManagement() {
       setCreateCampaignOpen(false);
       setSuccessDialogOpen(true);
       
-      // رفرش الصفحة بعد 3 ثواني
+      // رفرش الصفحة بعد 10 دقائق
       setTimeout(() => {
         window.location.reload();
-      }, 3000);
+      }, 600000);
       completeCampaignForm.reset({
         // Product data
         productId: "",
