@@ -564,6 +564,7 @@ export class MetaMarketingAPI {
   async createAdCreative(creativeData: {
     name: string;
     object_story_spec: any;
+    degrees_of_freedom_spec?: any;
   }) {
     console.log('🎨 إنشاء Ad Creative:', JSON.stringify(creativeData, null, 2));
     return this.makeRequest(`/act_${this.adAccountId}/adcreatives`, 'POST', creativeData);
