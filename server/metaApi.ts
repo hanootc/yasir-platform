@@ -558,7 +558,15 @@ export class MetaMarketingAPI {
     };
 
     console.log('📰 إنشاء إعلان Meta:', JSON.stringify(requestData, null, 2));
-    return this.makeRequest(`/act_${this.adAccountId}/ads`, 'POST', requestData);
+    
+    try {
+      const result = await this.makeRequest(`/act_${this.adAccountId}/ads`, 'POST', requestData);
+      console.log('✅ نجح إنشاء الإعلان:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ فشل إنشاء الإعلان:', error);
+      throw error;
+    }
   }
   // إنشاء Ad Creative
   async createAdCreative(creativeData: {
@@ -567,7 +575,15 @@ export class MetaMarketingAPI {
     degrees_of_freedom_spec?: any;
   }) {
     console.log('🎨 إنشاء Ad Creative:', JSON.stringify(creativeData, null, 2));
-    return this.makeRequest(`/act_${this.adAccountId}/adcreatives`, 'POST', creativeData);
+    
+    try {
+      const result = await this.makeRequest(`/act_${this.adAccountId}/adcreatives`, 'POST', creativeData);
+      console.log('✅ نجح إنشاء Ad Creative:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ فشل إنشاء Ad Creative:', error);
+      throw error;
+    }
   }
 
 
@@ -826,6 +842,13 @@ export class MetaMarketingAPI {
         adSetIds.push(adSetResult.id);
         console.log('✅ تم إنشاء مجموعة الإعلان:', adSetResult.id);
       }
+      
+      console.log('🔍 حالة Ad Sets بعد الإنشاء:', {
+        adSetIds: adSetIds,
+        count: adSetIds.length,
+        isMessagingCampaign: isMessagingCampaign,
+        messageDestinations: messageDestinations
+      });
 
       // 4. رفع الوسائط وإنشاء الإعلان
       let videoId: string | undefined = undefined;
@@ -917,6 +940,17 @@ export class MetaMarketingAPI {
       // 6. إنشاء الإعلانات لكل ad set
       const adIds: string[] = [];
       
+      console.log('🔍 بدء إنشاء الإعلانات:', {
+        adSetIds: adSetIds,
+        adSetCount: adSetIds.length,
+        creativeId: creativeId
+      });
+      
+      if (adSetIds.length === 0) {
+        console.error('❌ لا توجد Ad Sets لإنشاء الإعلانات!');
+        throw new Error('فشل في إنشاء Ad Sets - لا يمكن إنشاء الإعلانات');
+      }
+      
       for (let i = 0; i < adSetIds.length; i++) {
         const adSetId = adSetIds[i];
         const isMultiple = adSetIds.length > 1;
@@ -924,14 +958,26 @@ export class MetaMarketingAPI {
           `${data.adName} - ${messageDestinations[i] === 'MESSENGER' ? 'ماسنجر' : 'إنستقرام'}` : 
           data.adName;
         
-        const adResult = await this.createAd({
-          name: adName,
-          adset_id: adSetId,
-          creative: { creative_id: creativeId }
+        console.log(`🎯 إنشاء إعلان ${i + 1}/${adSetIds.length}:`, {
+          adName: adName,
+          adSetId: adSetId,
+          creativeId: creativeId
         });
+        
+        try {
+          const adResult = await this.createAd({
+            name: adName,
+            adset_id: adSetId,
+            creative: { creative_id: creativeId },
+            status: 'ACTIVE'
+          });
 
-        adIds.push(adResult.id);
-        console.log(`✅ تم إنشاء الإعلان (${adName}):`, adResult.id);
+          adIds.push(adResult.id);
+          console.log(`✅ تم إنشاء الإعلان (${adName}):`, adResult.id);
+        } catch (error) {
+          console.error(`❌ فشل إنشاء الإعلان (${adName}):`, error);
+          throw error;
+        }
       }
 
       return {
