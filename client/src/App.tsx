@@ -52,6 +52,8 @@ import CreateJournalEntry from "@/pages/create-journal-entry";
 import JournalEntries from "@/pages/journal-entries";
 import FinancialReports from "@/pages/financial-reports";
 import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
+import DataDeletion from "@/pages/data-deletion";
 import SubscriptionExpired from "@/pages/subscription-expired";
 import PlatformReports from "@/pages/platform-reports";
 import ProductLanding from "@/pages/product-landing";
@@ -164,6 +166,10 @@ function Router() {
       <Route path="/employee-dashboard" component={EmployeeDashboard} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/privacy/:slug" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/terms/:slug" component={TermsOfService} />
+      <Route path="/data-deletion" component={DataDeletion} />
+      <Route path="/delete-data" component={DataDeletion} />
       <Route path="/product/:slug" component={LandingPageView} />
       <Route path="/profile" component={Profile} />
       <Route path="/platform-settings" component={PlatformSettings} />

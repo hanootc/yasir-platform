@@ -239,10 +239,16 @@ export function createFacebookConversionEvent(
   
   if (eventData.fbc) {
     hashedUserData.fbc = eventData.fbc;
+    console.log('🔍 FBC VALUE FOUND:', eventData.fbc);
+  } else {
+    console.log('❌ FBC VALUE MISSING');
   }
   
   if (eventData.fbp) {
     hashedUserData.fbp = eventData.fbp;
+    console.log('🔍 FBP VALUE FOUND:', eventData.fbp);
+  } else {
+    console.log('❌ FBP VALUE MISSING');
   }
 
   // معرف تسجيل الدخول لفيسبوك - سيتم إضافته إلى custom_data لاحقاً

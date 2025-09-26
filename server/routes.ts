@@ -42,6 +42,7 @@ import {
   employees,
   employeeSessions,
   employeePermissions,
+  dataDeletionRequests,
   deliverySettings,
   insertDeliverySettingsSchema,
   zainCashPayments,
@@ -5690,8 +5691,8 @@ ${platform?.platformName || 'متجرنا'}`;
         if (orderData.fbp && !fbp) fbp = orderData.fbp;
         
         console.log('🍪 Lead Event - Facebook Cookies:', { 
-          fbc: fbc ? `Found: ${fbc.substring(0, 20)}...` : 'Missing', 
-          fbp: fbp ? `Found: ${fbp.substring(0, 20)}...` : 'Missing'
+          fbc: fbc ? `FULL VALUE: ${fbc}` : 'Missing', 
+          fbp: fbp ? `FULL VALUE: ${fbp}` : 'Missing'
         });
 
         // إعداد بيانات حدث Lead - فقط الحقول المعيارية لـ Facebook
@@ -6516,7 +6517,14 @@ ${platform?.platformName || 'متجرنا'}`;
 
   app.get('/api/platform-ads/meta/callback', async (req, res) => {
     try {
-      const { code, state } = req.query;
+      const { code, state, error_code, error_message } = req.query;
+      
+      // معالجة أخطاء OAuth من Meta
+      if (error_code || error_message) {
+        console.error('Meta OAuth Error:', { error_code, error_message });
+        const decodedMessage = decodeURIComponent(error_message?.toString() || 'خطأ غير معروف');
+        return res.status(400).send(`خطأ في ربط حساب Meta: ${decodedMessage}`);
+      }
       
       if (!code) {
         return res.status(400).send('Authorization code missing');
@@ -7539,7 +7547,61 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // ==================== DATA DELETION REQUEST API ====================
+  
+  app.post('/api/data-deletion-request', async (req, res) => {
+    try {
+      const { email, phone, reason, additionalInfo } = req.body;
+      
+      if (!email && !phone) {
+        return res.status(400).json({ 
+          error: 'يجب إدخال البريد الإلكتروني أو رقم الهاتف على الأقل' 
+        });
+      }
+
+      // حفظ طلب حذف البيانات في قاعدة البيانات
+      const deletionRequest = await db
+        .insert(dataDeletionRequests)
+        .values({
+          id: crypto.randomUUID(),
+          email: email || null,
+          phone: phone || null,
+          reason: reason || null,
+          additionalInfo: additionalInfo || null,
+          status: 'pending',
+          requestDate: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+
+      console.log('📝 طلب حذف بيانات جديد:', {
+        id: deletionRequest[0].id,
+        email: email || 'غير محدد',
+        phone: phone || 'غير محدد',
+        reason: reason || 'غير محدد'
+      });
+
+      // إرسال إشعار بالبريد الإلكتروني (اختياري)
+      // يمكن إضافة خدمة البريد الإلكتروني هنا
+
+      res.json({
+        success: true,
+        message: 'تم استلام طلبك بنجاح. سنقوم بمعالجته خلال 30 يوماً.',
+        requestId: deletionRequest[0].id
+      });
+
+    } catch (error) {
+      console.error('❌ خطأ في معالجة طلب حذف البيانات:', error);
+      res.status(500).json({
+        error: 'حدث خطأ في معالجة طلبك. يرجى المحاولة مرة أخرى.',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // ==================== META CAMPAIGN CREATION APIs ====================
+
 
   // إنشاء حملة Meta كاملة
   app.post('/api/meta/campaigns/complete', ensurePlatformSession, async (req: any, res) => {
@@ -7617,6 +7679,17 @@ ${platform?.platformName || 'متجرنا'}`;
       const result = await metaApi.createCompleteCampaign(finalCampaignData);
 
       console.log('🎉 تم إنشاء حملة Meta الكاملة بنجاح!');
+      
+      // فحص: لا تنجح الحملة إذا لم يتم إنشاء أي إعلانات
+      if (!result.ads || result.ads.length === 0) {
+        console.error('❌ فشل الحملة: لم يتم إنشاء أي إعلانات');
+        return res.status(400).json({
+          success: false,
+          error: 'فشل في إنشاء الحملة - لم يتم إنشاء أي إعلانات بنجاح',
+          message: 'يجب إنشاء إعلان واحد على الأقل لنجاح الحملة',
+          result
+        });
+      }
       
       res.json({
         success: true,
@@ -7707,7 +7780,15 @@ ${platform?.platformName || 'متجرنا'}`;
         willSet: campaignData.targeting?.advantageAudience ? 1 : 0
       });
       
-      // إعداد targeting بشكل صحيح لـ Meta API
+      // 🔍 تشخيص الحملة
+      console.log('🔍 تشخيص الحملة:');
+      console.log('- نوع الحملة:', campaignData.objective);
+      console.log('- Advantage+ Placements مطلوب:', campaignData.placements?.advantagePlacements);
+      console.log('- المنصات المطلوبة:', campaignData.placements?.publisherPlatforms);
+      console.log('- مواضع Facebook المطلوبة:', campaignData.placements?.facebookPlacements);
+      console.log('- الأجهزة المطلوبة:', campaignData.placements?.devicePlatforms);
+
+      // إعداد targeting بشكل صحيح لـ Meta API باستخدام دوال metaApi
       const { advantageAudience, advantageCreative, geoLocations, ageMin, ageMax, ...restTargeting } = campaignData.targeting || {};
       
       // فحص Advantage+ Creative
@@ -7716,15 +7797,8 @@ ${platform?.platformName || 'متجرنا'}`;
         advantageCreativeType: typeof advantageCreative
       });
       
-      const processedTargeting = {
-        ...restTargeting,
-        geo_locations: geoLocations || { countries: ['IQ'] },
-        age_min: ageMin || 18,
-        age_max: ageMax || 65,
-        targeting_automation: {
-          advantage_audience: advantageAudience ? 1 : 0  // تفعيل/تعطيل Advantage+ Audience حسب اختيار المستخدم
-        }
-      };
+      // 🔥 استخدام buildTargeting من metaApi لإضافة المواضع
+      const processedTargeting = await metaApi.buildTargeting(campaignData.targeting || {}, campaignData.placements);
       
       // تم إزالة الحقول غير المطلوبة باستخدام destructuring
 
@@ -7781,22 +7855,22 @@ ${platform?.platformName || 'متجرنا'}`;
             name: `${campaignData.campaignName} - كريتيف ${i + 1}`,
             object_story_spec: {
               page_id: campaignData.pageId,
-              link_data: {
-                name: campaignData.displayName,        // العنوان (Headline)
+              // للفيديو، نستخدم video_data مع جميع النصوص والـ call_to_action
+              video_data: {
+                video_id: video.videoId,
                 message: campaignData.adText,          // النص الأساسي (Primary Text)
-                description: campaignData.adDescription, // الوصف (Description)
+                title: campaignData.displayName,       // العنوان (Headline)
+                link_description: campaignData.adDescription, // الوصف (Description)
                 call_to_action: campaignData.objective === 'OUTCOME_TRAFFIC' ? {
                   type: 'MESSAGE_PAGE'
                 } : {
-                  type: campaignData.callToAction || 'LEARN_MORE',
+                  type: campaignData.callToAction === 'BOOK_TRAVEL' ? 'SHOP_NOW' : (campaignData.callToAction || 'SHOP_NOW'),
                   value: {
-                    link: campaignData.landingPageUrl
+                    link: campaignData.landingPageUrl || 'https://sanadi.pro'
                   }
                 }
-              },
-              video_data: {
-                video_id: video.videoId
               }
+              // لا ننشئ link_data منفصل للفيديو
             }
           };
           
@@ -7864,6 +7938,22 @@ ${platform?.platformName || 'متجرنا'}`;
 
       console.log('🎉 تم إنشاء الحملة مع عدة إعلانات بنجاح!');
       console.log(`📊 النتائج: ${createdAds.length}/${videos.length} إعلانات تم إنشاؤها بنجاح`);
+      
+      // فحص: لا تنجح الحملة إذا لم يتم إنشاء أي إعلانات
+      if (createdAds.length === 0) {
+        console.error('❌ فشل الحملة: لم يتم إنشاء أي إعلانات');
+        return res.status(400).json({
+          success: false,
+          error: 'فشل في إنشاء الحملة - لم يتم إنشاء أي إعلانات بنجاح',
+          message: 'يجب إنشاء إعلان واحد على الأقل لنجاح الحملة',
+          result: {
+            campaign: result.campaign,
+            adSet: result.adSet,
+            ads: [],
+            summary: result.summary
+          }
+        });
+      }
       
       res.json({
         success: true,
@@ -13673,8 +13763,8 @@ ${platform?.platformName || 'متجرنا'}`;
       if (eventData.fbp && !fbp) fbp = eventData.fbp;
 
       console.log('🍪 Facebook Cookie Data:', { 
-        fbc: fbc ? `Found: ${fbc.substring(0, 20)}...` : 'Missing', 
-        fbp: fbp ? `Found: ${fbp.substring(0, 20)}...` : 'Missing',
+        fbc: fbc ? `FULL VALUE: ${fbc}` : 'Missing', 
+        fbp: fbp ? `FULL VALUE: ${fbp}` : 'Missing',
         clientIP: clientIP ? `Found: ${clientIP}` : 'Missing',
         userAgent: userAgent ? `Found: ${userAgent.substring(0, 50)}...` : 'Missing',
         cookieHeader: req.headers.cookie ? 'Present' : 'Missing',

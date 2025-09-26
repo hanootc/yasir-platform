@@ -247,7 +247,7 @@ export default function PlatformAdsMetaManagement() {
       landingPageUrl: "",
       displayName: "",
       adText: "",
-      callToAction: "BOOK_TRAVEL",
+      callToAction: "SHOP_NOW",
       
       // Media files
       videoUrl: "",
@@ -267,7 +267,7 @@ export default function PlatformAdsMetaManagement() {
       
       // Targeting
       targeting: {
-        genders: ["1", "2"], // جميع الأجناس
+        genders: ["1"], // رجال فقط كافتراضي
         ageMin: 18,
         ageMax: 65,
         geoLocations: {
@@ -283,11 +283,12 @@ export default function PlatformAdsMetaManagement() {
       
       // Placements - مواضع الإعلان
       placements: {
+        advantagePlacements: false, // Advantage+ Placements معطل افتراضياً للتحكم اليدوي
         devicePlatforms: ["mobile"], // الأجهزة المحمولة افتراضياً
         publisherPlatforms: ["facebook", "instagram"], // Facebook و Instagram افتراضياً
         facebookPlacements: ["feed", "story"], // تغذية وقصص فيسبوك
         instagramPlacements: ["stream", "story", "reels"], // تغذية وقصص وريلز إنستغرام
-        operatingSystems: ["iOS", "Android"], // iOS و Android افتراضياً
+        operatingSystems: ["all_mobile"], // جميع الأجهزة المحمولة افتراضياً
         connectionTypes: ["wifi", "cellular", "broadband"], // جميع أنواع الاتصال افتراضياً
         audienceNetwork: [], // اختياري - شبكة الجمهور
         advancedOptions: ["exclude_threads"] // استبعاد Threads افتراضياً
@@ -470,7 +471,7 @@ export default function PlatformAdsMetaManagement() {
         displayName: "",
         adText: "",
         adDescription: "",
-        callToAction: "BOOK_TRAVEL",
+        callToAction: "SHOP_NOW",
         
         // Media files
         videoUrl: "",
@@ -864,7 +865,7 @@ export default function PlatformAdsMetaManagement() {
           if (currentObjective === 'OUTCOME_TRAFFIC') {
             completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE', { shouldValidate: true });
           } else {
-            completeCampaignForm.setValue('callToAction', 'BOOK_TRAVEL', { shouldValidate: true });
+            completeCampaignForm.setValue('callToAction', 'SHOP_NOW', { shouldValidate: true });
           }
           
           // إجبار إعادة رسم المكون بطرق متعددة
@@ -1815,7 +1816,7 @@ export default function PlatformAdsMetaManagement() {
                                   displayName: "",
                                   adText: "",
                                   adDescription: "",
-                                  callToAction: "BOOK_TRAVEL", // افتراضي للمبيعات (OUTCOME_SALES)
+                                  callToAction: "SHOP_NOW", // افتراضي للمبيعات (OUTCOME_SALES)
                                   
                                   // Media files
                                   videoUrl: "",
@@ -1830,7 +1831,7 @@ export default function PlatformAdsMetaManagement() {
                                   
                                   // Targeting - العراق كافتراضي
                                   targeting: {
-                                    genders: ["1", "2"],
+                                    genders: ["1"], // رجال فقط كافتراضي
                                     ageMin: 18,
                                     ageMax: 65,
                                     geoLocations: {
@@ -1848,9 +1849,9 @@ export default function PlatformAdsMetaManagement() {
                                   placements: {
                                     devicePlatforms: ["mobile"], // الأجهزة المحمولة افتراضياً
                                     publisherPlatforms: ["facebook", "instagram"],
-                                    facebookPlacements: ["feed", "right_hand_column", "instant_article"],
+                                    facebookPlacements: ["feed", "video_feeds", "facebook_reels"],
                                     instagramPlacements: ["stream", "story", "reels"],
-                                    operatingSystems: ["iOS", "Android"], // iOS و Android افتراضياً
+                                    operatingSystems: ["all_mobile"], // جميع الأجهزة المحمولة افتراضياً
                                     connectionTypes: ["wifi", "cellular", "broadband"], // جميع أنواع الاتصال افتراضياً
                                     audienceNetwork: [], // اختياري - شبكة الجمهور
                                     advancedOptions: ["exclude_threads"] // استبعاد Threads افتراضياً
@@ -1863,7 +1864,7 @@ export default function PlatformAdsMetaManagement() {
                                   if (currentObjective === 'OUTCOME_TRAFFIC') {
                                     completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE');
                                   } else if (currentObjective === 'OUTCOME_SALES') {
-                                    completeCampaignForm.setValue('callToAction', 'BOOK_TRAVEL');
+                                    completeCampaignForm.setValue('callToAction', 'SHOP_NOW');
                                   }
                                   // إجبار إعادة رسم المكون
                                   completeCampaignForm.trigger('callToAction');
@@ -1918,6 +1919,15 @@ export default function PlatformAdsMetaManagement() {
                                         ...formData,
                                         adAccountId: selectedAccount
                                       };
+                                      
+                                      // طباعة بيانات المواضع للتأكد من الإرسال
+                                      console.log('🎯 بيانات المواضع المرسلة:', {
+                                        placements: dataToSend.placements,
+                                        devicePlatforms: dataToSend.placements?.devicePlatforms,
+                                        publisherPlatforms: dataToSend.placements?.publisherPlatforms,
+                                        facebookPlacements: dataToSend.placements?.facebookPlacements,
+                                        instagramPlacements: dataToSend.placements?.instagramPlacements
+                                      });
                                       
                                       createCompleteCampaignMutation.mutate(dataToSend);
                                     }} className="compact-form">
@@ -2028,7 +2038,7 @@ export default function PlatformAdsMetaManagement() {
                                                       if (value === 'OUTCOME_TRAFFIC') {
                                                         completeCampaignForm.setValue('callToAction', 'MESSAGE_PAGE');
                                                       } else if (value === 'OUTCOME_SALES') {
-                                                        completeCampaignForm.setValue('callToAction', 'BOOK_TRAVEL');
+                                                        completeCampaignForm.setValue('callToAction', 'SHOP_NOW');
                                                       }
                                                     }} value={field.value || "OUTCOME_SALES"} defaultValue="OUTCOME_SALES">
                                                       <FormControl>
@@ -2415,6 +2425,42 @@ export default function PlatformAdsMetaManagement() {
                                               />
                                             </div>
                                             
+                                            {/* Advantage+ Placements */}
+                                            <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-600/50 rounded-lg p-4">
+                                              <FormField
+                                                control={completeCampaignForm.control}
+                                                name="placements.advantagePlacements"
+                                                render={({ field }) => (
+                                                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                    <FormControl>
+                                                      <Checkbox
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                        className="mt-1"
+                                                      />
+                                                    </FormControl>
+                                                    <div className="space-y-2 leading-none">
+                                                      <FormLabel className="text-sm font-medium text-purple-300 cursor-pointer">
+                                                        🎯 تفعيل Advantage+ للمواضع (موصى به)
+                                                      </FormLabel>
+                                                      <div className="bg-purple-900/30 border border-purple-700/50 rounded p-3 mt-2">
+                                                        <p className="text-xs text-purple-300 mb-2">
+                                                          📈 <strong>يمكن أن يقلل التكلفة لكل نتيجة بنسبة 10-15%</strong>
+                                                        </p>
+                                                        <p className="text-xs text-purple-200">
+                                                          يستخدم الذكاء الاصطناعي لاختيار أفضل المواضع تلقائياً عبر Facebook و Instagram لتحقيق أفضل النتائج.
+                                                        </p>
+                                                        <div className="flex items-center mt-2 text-xs text-purple-300">
+                                                          <Info className="w-3 h-3 ml-1" />
+                                                          عند التفعيل، سيتم تجاهل المواضع المحددة يدوياً
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </FormItem>
+                                                )}
+                                              />
+                                            </div>
+                                            
                                             {/* Geographic Targeting */}
                                             <div className="space-y-4">
                                               <h4 className="text-sm font-medium text-theme-primary mb-2">الاستهداف الجغرافي للعراق</h4>
@@ -2524,14 +2570,14 @@ export default function PlatformAdsMetaManagement() {
                                                         <div className="grid grid-cols-4 gap-2">
                                                           {[
                                                             { id: "Baghdad", name: "محافظة بغداد" },
-                                                            { id: "Basra", name: "محافظة لبصرة" },
+                                                            { id: "Basra", name: "محافظةالبصرة" },
                                                             { id: "Nineveh", name: "محافظة نينوى" },
-                                                            { id: "Erbil", name: "محافظة ربيل" },
+                                                            { id: "Erbil", name: "محافظة أربيل" },
                                                             { id: "Sulaymaniyah", name: "محافظة السليمانية" },
                                                             { id: "Kirkuk", name: "محافظة كركوك" },
-                                                            { id: "Najaf", name: "محافظة الجف" },
+                                                            { id: "Najaf", name: "محافظة النجف" },
                                                             { id: "Karbala", name: "محافظة كربلاء" },
-                                                            { id: "Babylon", name: "محافظة ببل" },
+                                                            { id: "Babylon", name: "محافظة بابل" },
                                                             { id: "Diyala", name: "مافظة ديالى" },
                                                             { id: "Anbar", name: "محافظة الأنبار" },
                                                             { id: "Saladin", name: "حافظة صلاح الدين" },
@@ -2540,7 +2586,7 @@ export default function PlatformAdsMetaManagement() {
                                                             { id: "Maysan", name: "محافظة ميسان" },
                                                             { id: "Dhi_Qar", name: "محافظة ذي قار" },
                                                             { id: "Muthanna", name: "محافظة المثنى" },
-                                                            { id: "Dohuk", name: "محافظة دهك" }
+                                                            { id: "Dohuk", name: "محافظة دهوك" }
                                                           ].map((region) => (
                                                             <button
                                                               key={region.id}
@@ -2680,7 +2726,7 @@ export default function PlatformAdsMetaManagement() {
                                                   name="placements.devicePlatforms"
                                                   render={({ field }) => (
                                                     <FormItem className="space-y-2">
-                                                      <FormLabel className="text-theme-primary block">الأجهزة المستهدة</FormLabel>
+                                                      <FormLabel className="text-theme-primary block">الأجهزة المستهدفة</FormLabel>
                                                       <FormControl>
                                                         <Popover>
                                                           <PopoverTrigger asChild>
@@ -2808,7 +2854,7 @@ export default function PlatformAdsMetaManagement() {
                                                   control={completeCampaignForm.control}
                                                   name="placements.operatingSystems"
                                                   render={({ field }) => (
-                                                    <FormItem className="space-y-2">
+                                                    <FormItem className="space-y-2 relative z-10">
                                                       <FormLabel className="text-theme-primary block">أنظمة التشغيل</FormLabel>
                                                       <FormControl>
                                                         <Popover>
@@ -2820,38 +2866,50 @@ export default function PlatformAdsMetaManagement() {
                                                             >
                                                               <span className="truncate">
                                                                 {field.value?.length === 0 ? "اختر الأنظمة" :
-                                                                 field.value?.length === 1 && field.value.includes('iOS') ? "🍎 iOS" :
-                                                                 field.value?.length === 1 && field.value.includes('Android') ? "🤖 Android" :
-                                                                 field.value?.length === 2 ? "🍎🤖 جميع الأنظمة" :
+                                                                 field.value?.includes('all_mobile') ? "📱 الجميع" :
+                                                                 field.value?.length === 1 && field.value.includes('iOS') ? "🍎 iOS فقط" :
+                                                                 field.value?.length === 1 && field.value.includes('Android') ? "🤖 Android فقط" :
+                                                                 field.value?.length === 2 && field.value.includes('iOS') && field.value.includes('Android') ? "🍎🤖 iOS + Android" :
                                                                  `${field.value?.length || 0} محدد`}
                                                               </span>
                                                               <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                             </Button>
                                                           </PopoverTrigger>
-                                                          <PopoverContent className="w-[200px] p-0 bg-black border-gray-700" align="start">
+                                                          <PopoverContent className="w-[280px] p-0 bg-black border-gray-700 z-[100]" align="start" side="top">
                                                             <div className="p-2 space-y-2">
                                                               {[
-                                                                { value: "iOS" as const, label: "🍎 iOS" },
-                                                                { value: "Android" as const, label: "🤖 Android" }
+                                                                { value: "all_mobile" as const, label: "📱 جميع الأجهزة المحمولة", desc: "iOS + Android" },
+                                                                { value: "iOS" as const, label: "🍎 iOS فقط", desc: "iPhone, iPad, iPod" },
+                                                                { value: "Android" as const, label: "🤖 Android فقط", desc: "جميع أجهزة Android" }
                                                               ].map((os) => (
                                                                 <label
                                                                   key={os.value}
-                                                                  className="flex items-center space-x-2 cursor-pointer hover:bg-gray-800/50 p-2 rounded"
+                                                                  className="flex flex-col cursor-pointer hover:bg-gray-800/50 p-2 rounded"
                                                                 >
-                                                                  <input
-                                                                    type="checkbox"
-                                                                    className="ml-2"
-                                                                    checked={field.value?.includes(os.value) || false}
-                                                                    onChange={(e) => {
-                                                                      const current = field.value || [];
-                                                                      if (e.target.checked) {
-                                                                        field.onChange([...current.filter(v => v !== os.value), os.value]);
-                                                                      } else {
-                                                                        field.onChange(current.filter(v => v !== os.value));
-                                                                      }
-                                                                    }}
-                                                                  />
-                                                                  <span className="text-gray-200">{os.label}</span>
+                                                                  <div className="flex items-center space-x-2">
+                                                                    <input
+                                                                      type="checkbox"
+                                                                      className="ml-2"
+                                                                      checked={field.value?.includes(os.value) || false}
+                                                                      onChange={(e) => {
+                                                                        const current = field.value || [];
+                                                                        if (e.target.checked) {
+                                                                          // إذا تم اختيار "جميع الأجهزة"، امسح الخيارات الأخرى
+                                                                          if (os.value === 'all_mobile') {
+                                                                            field.onChange(['all_mobile']);
+                                                                          } else {
+                                                                            // إذا تم اختيار iOS أو Android، امسح "جميع الأجهزة"
+                                                                            const filtered = current.filter(v => v !== 'all_mobile' && v !== os.value);
+                                                                            field.onChange([...filtered, os.value]);
+                                                                          }
+                                                                        } else {
+                                                                          field.onChange(current.filter(v => v !== os.value));
+                                                                        }
+                                                                      }}
+                                                                    />
+                                                                    <span className="text-gray-200 font-medium">{os.label}</span>
+                                                                  </div>
+                                                                  <span className="text-xs text-gray-400 mr-6">{os.desc}</span>
                                                                 </label>
                                                               ))}
                                                             </div>
@@ -2924,7 +2982,9 @@ export default function PlatformAdsMetaManagement() {
                                                 />
                                               </div>
                                               
-                                              {/* مواضع المنصات المحددة */}
+
+                                              {/* مواضع المنصات المحددة - تظهر فقط عند عدم تفعيل Advantage+ */}
+                                              {!completeCampaignForm.watch('placements.advantagePlacements') && (
                                               <div className="grid grid-cols-2 gap-4 mt-4">
                                                 {/* مواضع Facebook - يظهر فقط عند اخيار Facebook */}
                                                 {completeCampaignForm.watch('placements.publisherPlatforms')?.includes('facebook') && (
@@ -2944,7 +3004,7 @@ export default function PlatformAdsMetaManagement() {
                                                               >
                                                                 <span className="truncate">
                                                                   {field.value?.length === 0 ? "اختر مواع Facebook" :
-                                                                   field.value?.length === 1 ? `📱 ${field.value[0] === 'feed' ? 'الخلاصة' : field.value[0] === 'right_hand_column' ? 'العمود اجانبي' : field.value[0] === 'marketplace' ? 'Marketplace' : field.value[0] === 'instant_article' ? 'المقالات الورية' : field.value[0]}` :
+                                                                   field.value?.length === 1 ? `📱 ${field.value[0] === 'feed' ? 'الخلاصة' : field.value[0] === 'right_hand_column' ? 'العمود الجانبي' : field.value[0] === 'marketplace' ? 'Marketplace' : field.value[0] === 'video_feeds' ? 'خلاصة الفيديو' : field.value[0] === 'story' ? 'القصص' : field.value[0]}` :
                                                                    `${field.value?.length || 0} موضع محدد`}
                                                                 </span>
                                                                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -2954,13 +3014,16 @@ export default function PlatformAdsMetaManagement() {
                                                               <div className="p-2 space-y-2">
                                                                 {[
                                                                   { value: "feed" as const, label: "📱 خلاصة Facebook", desc: "الموضع الأساسي" },
-                                                                  { value: "right_hand_column" as const, label: "➡️ العمود الجانبي", desc: "فقط على الكمبيوت" },
+                                                                  { value: "right_hand_column" as const, label: "➡️ العمود الجانبي", desc: "فقط على الكمبيوتر" },
                                                                   { value: "marketplace" as const, label: "🛍️ Marketplace", desc: "في منطقة التسوق" },
-                                                                  { value: "instant_article" as const, label: "📰 المقالات الفورية", desc: "داخل المقالات" },
-                                                                  { value: "in_stream_video" as const, label: "📺 فيديوهات البث", desc: "أثناء مشاهدة الفيديو" },
-                                                                  { value: "search" as const, label: "🔍 نتائج البحث", desc: "في صفحة البحث" },
+                                                                  { value: "video_feeds" as const, label: "📺 خلاصة الفيديو", desc: "في خلاصة الفيديوهات" },
                                                                   { value: "story" as const, label: "📸 قصص Facebook", desc: "بين القصص" },
-                                                                  { value: "reels" as const, label: "🎬 Facebook Reels", desc: "فيديوهات قصيرة" }
+                                                                  { value: "search" as const, label: "🔍 نتائج البحث", desc: "في صفحة البحث" },
+                                                                  { value: "instream_video" as const, label: "📹 فيديو أثناء البث", desc: "أثناء مشاهدة الفيديو" },
+                                                                  { value: "facebook_reels" as const, label: "🎬 Facebook Reels", desc: "فيديوهات قصيرة" },
+                                                                  { value: "facebook_reels_overlay" as const, label: "🎬 Reels Overlay", desc: "تراكب على Reels" },
+                                                                  { value: "profile_feed" as const, label: "👤 خلاصة الملف الشخصي", desc: "في الملفات الشخصية" },
+                                                                  { value: "notification" as const, label: "🔔 الإشعارات", desc: "في الإشعارات" }
                                                                 ].map((position) => (
                                                                   <label
                                                                     key={position.value}
@@ -3024,10 +3087,12 @@ export default function PlatformAdsMetaManagement() {
                                                                 {[
                                                                   { value: "stream" as const, label: "📱 خلاصة Instagram", desc: "الموضع الأساسي" },
                                                                   { value: "story" as const, label: "📸 قصص Instagram", desc: "بين القصص" },
-                                                                  { value: "reels" as const, label: "🎬 Instagram Reels", desc: "فيديوهات قصيرة" },
                                                                   { value: "explore" as const, label: "🔍 صفحة الاستكشاف", desc: "منطقة البحث" },
+                                                                  { value: "explore_home" as const, label: "🏠 الصفحة الرئيسية للاستكشاف", desc: "في الصفحة الرئيسية" },
+                                                                  { value: "reels" as const, label: "🎬 Instagram Reels", desc: "فيديوهات قصيرة" },
                                                                   { value: "profile_feed" as const, label: "👤 خلاصة الملف الشخصي", desc: "في الملفات الشخصية" },
-                                                                  { value: "search" as const, label: "🔍 نتائج البحث", desc: "في صفحة البحث" }
+                                                                  { value: "ig_search" as const, label: "🔍 نتائج البحث", desc: "في صفحة البحث" },
+                                                                  { value: "profile_reels" as const, label: "🎬 Reels الملف الشخصي", desc: "في ملفات المستخدمين" }
                                                                 ].map((position) => (
                                                                   <label
                                                                     key={position.value}
@@ -3066,6 +3131,7 @@ export default function PlatformAdsMetaManagement() {
                                                   />
                                                 )}
                                               </div>
+                                              )}
                                             </div>
                                           </div>
                                         )}
@@ -3201,7 +3267,7 @@ export default function PlatformAdsMetaManagement() {
                                                 render={({ field }) => (
                                                   <FormItem>
                                                     <FormLabel className="text-theme-primary">إجرء نقر الزبون</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value || "BOOK_TRAVEL"} defaultValue="BOOK_TRAVEL">
+                                                    <Select onValueChange={field.onChange} value={field.value || "SHOP_NOW"} defaultValue="SHOP_NOW">
                                                       <FormControl>
                                                         <SelectTrigger className="theme-input">
                                                           <SelectValue placeholder="اختر إجراء النقر" />
@@ -3236,7 +3302,7 @@ export default function PlatformAdsMetaManagement() {
                                                   name="landingPageUrl"
                                                   render={({ field }) => (
                                                     <FormItem>
-                                                      <FormLabel className="text-theme-primary">رابط الصحة *</FormLabel>
+                                                      <FormLabel className="text-theme-primary">رابط الصفحة *</FormLabel>
                                                       <FormControl>
                                                         <Input 
                                                           {...field}
@@ -3252,16 +3318,16 @@ export default function PlatformAdsMetaManagement() {
                                                 />
                                               )}
                                               
-                                              {/* Pixel ID & Page ID fields */}
-                                              <div className="grid grid-cols-8 gap-4">
+                                              {/* Pixel ID, Page ID & Gender fields - Side by Side */}
+                                              <div className={`grid w-full gap-4 ${completeCampaignForm.watch('objective') === 'OUTCOME_SALES' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                                 {/* البكسل - فقط لحملات التحويلات */}
                                                 {completeCampaignForm.watch('objective') === 'OUTCOME_SALES' && (
                                                   <FormField
                                                     control={completeCampaignForm.control}
                                                     name="pixelId"
                                                     render={({ field }) => (
-                                                      <FormItem className="col-span-3">
-                                                        <FormLabel className="text-theme-primary">
+                                                      <FormItem>
+                                                        <FormLabel className="text-theme-primary text-base font-medium">
                                                           اختر البكسل *
                                                         </FormLabel>
                                                         <Select 
@@ -3270,7 +3336,7 @@ export default function PlatformAdsMetaManagement() {
                                                           disabled={pixelsLoading || !selectedAccount}
                                                         >
                                                           <FormControl>
-                                                            <SelectTrigger className="theme-input">
+                                                            <SelectTrigger className="theme-input h-10">
                                                               <SelectValue 
                                                                 placeholder={
                                                                   pixelsLoading 
@@ -3300,141 +3366,182 @@ export default function PlatformAdsMetaManagement() {
                                                   />
                                                 )}
                                                 
-                                                {/* الصفحة - مطلوبة دائماً لكن أهم في حملات الرسائل */}
+                                                {/* اختيار الجنس */}
                                                 <FormField
                                                   control={completeCampaignForm.control}
-                                                  name="pageId"
+                                                  name="targeting.genders"
                                                   render={({ field }) => (
-                                                    <FormItem className={completeCampaignForm.watch('objective') === 'OUTCOME_SALES' ? "col-span-5" : "col-span-8"}>
-                                                      <FormLabel className="text-theme-primary">
-                                                        اختر الصفحة {completeCampaignForm.watch("objective") === "OUTCOME_TRAFFIC" && "*"}
-                                                      </FormLabel>
+                                                    <FormItem>
+                                                      <FormLabel className="text-theme-primary text-base font-medium">الجنس المستهدف</FormLabel>
                                                       <Select 
-                                                        onValueChange={field.onChange} 
-                                                        value={field.value || ""}
-                                                        disabled={pagesLoading}
+                                                        onValueChange={(value) => {
+                                                          if (value === "all") {
+                                                            field.onChange(["1", "2"]);
+                                                          } else if (value === "male") {
+                                                            field.onChange(["1"]);
+                                                          } else if (value === "female") {
+                                                            field.onChange(["2"]);
+                                                          }
+                                                        }}
+                                                        value={
+                                                          field.value?.length === 2 ? "all" :
+                                                          field.value?.includes("1") ? "male" :
+                                                          field.value?.includes("2") ? "female" : "male"
+                                                        }
                                                       >
                                                         <FormControl>
-                                                          <SelectTrigger className="theme-input">
-                                                            <SelectValue 
-                                                              placeholder={
-                                                                pagesLoading 
-                                                                  ? "جاري تحميل الصفحات..." 
-                                                                  : "اختر الصفحة"
-                                                              }
-                                                            >
-                                                              {field.value && pages?.pages && (() => {
-                                                                const selectedPage = pages.pages.find((p: any) => p.id === field.value);
-                                                                if (selectedPage) {
-                                                                  return (
-                                                                    <div className="flex items-center justify-between w-full">
-                                                                      <div className="text-right space-y-1">
-                                                                        <div className="font-medium text-sm">
-                                                                          {selectedPage.name}
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2 text-xs">
-                                                                          <span className="flex items-center gap-1 text-blue-600">
-                                                                            <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
-                                                                            FB: @{selectedPage.username || selectedPage.id.slice(-8)}
-                                                                          </span>
-                                                                          {selectedPage.instagram_business_account && (
-                                                                            <span className="flex items-center gap-1 text-pink-600 font-medium">
-                                                                              <span className="inline-block w-2 h-2 bg-pink-500 rounded-full"></span>
-                                                                              IG: @{selectedPage.instagram_business_account.username}
-                                                                            </span>
-                                                                          )}
-                                                                        </div>
-                                                                      </div>
-                                                                      <div className="flex items-center gap-1">
-                                                                        {selectedPage.instagram_business_account?.profile_picture_url && (
-                                                                          <img 
-                                                                            src={selectedPage.instagram_business_account.profile_picture_url} 
-                                                                            alt="IG"
-                                                                            className="w-5 h-5 rounded-full object-cover"
-                                                                          />
-                                                                        )}
-                                                                        {selectedPage.picture && (
-                                                                          <img 
-                                                                            src={selectedPage.picture.data.url} 
-                                                                            alt="FB"
-                                                                            className="w-6 h-6 rounded-full object-cover border border-gray-300"
-                                                                          />
-                                                                        )}
-                                                                      </div>
-                                                                    </div>
-                                                                  );
-                                                                }
-                                                                return null;
-                                                              })()}
-                                                            </SelectValue>
+                                                          <SelectTrigger className="theme-input h-10">
+                                                            <SelectValue placeholder="اختر الجنس" />
                                                           </SelectTrigger>
                                                         </FormControl>
-                                                        <SelectContent className="w-full max-w-none">
-                                                          {pages?.pages?.map((page: any) => (
-                                                            <SelectItem key={page.id} value={page.id} className="whitespace-nowrap p-2 min-w-full">
-                                                              <div className="w-full flex items-center justify-between gap-2">
-                                                                {/* المحتوى الني على اليمين */}
-                                                                <div className="flex-grow text-right overflow-hidden">
-                                                                  <div className="space-y-1">
-                                                                    <span className="font-medium text-sm block truncate">
-                                                                      {page.name}
-                                                                    </span>
-                                                                    <div className="flex items-center justify-end gap-3 text-xs text-gray-600 dark:text-gray-400">
-                                                                      <span className="flex items-center gap-1">
-                                                                        <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
-                                                                        FB: @{page.username || page.id.slice(-8)}
-                                                                      </span>
-                                                                      {page.instagram_business_account && (
-                                                                        <span className="flex items-center gap-1 text-pink-600 dark:text-pink-400 font-medium">
-                                                                          <span className="inline-block w-2 h-2 bg-pink-500 rounded-full"></span>
-                                                                          IG: @{page.instagram_business_account.username}
-                                                                        </span>
-                                                                      )}
-                                                                      {!page.instagram_business_account && (
-                                                                        <span className="text-gray-400 italic">
-                                                                          (بدون Instagram)
-                                                                        </span>
-                                                                      )}
-                                                                    </div>
-                                                                  </div>
-                                                                </div>
-                                                                
-                                                                {/* الصور على اليسار */}
-                                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                                  {/* صورة اانستجرام */}
-                                                                  {page.instagram_business_account?.profile_picture_url && (
-                                                                    <img 
-                                                                      src={page.instagram_business_account.profile_picture_url} 
-                                                                      alt="IG"
-                                                                      className="w-6 h-6 rounded-full object-cover"
-                                                                      onError={(e) => {
-                                                                        (e.target as HTMLImageElement).style.display = 'none';
-                                                                      }}
-                                                                    />
-                                                                  )}
-                                                                  {/* صورة الصفحة */}
-                                                                  {page.picture && (
-                                                                    <img 
-                                                                      src={page.picture.data.url} 
-                                                                      alt="FB"
-                                                                      className="w-8 h-8 rounded-full object-cover border border-gray-300"
-                                                                      onError={(e) => {
-                                                                        (e.target as HTMLImageElement).style.display = 'none';
-                                                                      }}
-                                                                    />
-                                                                  )}
-                                                                </div>
-                                                              </div>
-                                                            </SelectItem>
-                                                          ))}
+                                                        <SelectContent className="bg-black border-gray-700">
+                                                          <SelectItem value="male">👨 رجال فقط</SelectItem>
+                                                          <SelectItem value="female">👩 نساء فقط</SelectItem>
+                                                          <SelectItem value="all">👥 الكل (رجال ونساء)</SelectItem>
                                                         </SelectContent>
                                                       </Select>
-                                                      <FormDescription>مطلب لحملات الرسائل</FormDescription>
+                                                      <FormDescription>اختر الجنس المستهدف للإعلان</FormDescription>
                                                       <FormMessage />
                                                     </FormItem>
                                                   )}
                                                 />
                                               </div>
+                                              
+                                              {/* الصفحة - في سطر منفصل */}
+                                              <FormField
+                                                control={completeCampaignForm.control}
+                                                name="pageId"
+                                                render={({ field }) => (
+                                                  <FormItem>
+                                                    <FormLabel className="text-theme-primary text-base font-medium">
+                                                      اختر الصفحة {completeCampaignForm.watch("objective") === "OUTCOME_TRAFFIC" && "*"}
+                                                    </FormLabel>
+                                                    <Select 
+                                                      onValueChange={field.onChange} 
+                                                      value={field.value || ""}
+                                                      disabled={pagesLoading}
+                                                    >
+                                                      <FormControl>
+                                                        <SelectTrigger className="theme-input h-10">
+                                                          <SelectValue 
+                                                            placeholder={
+                                                              pagesLoading 
+                                                                ? "جاري تحميل الصفحات..." 
+                                                                : "اختر الصفحة"
+                                                            }
+                                                          >
+                                                            {field.value && pages?.pages && (() => {
+                                                              const selectedPage = pages.pages.find((p: any) => p.id === field.value);
+                                                              if (selectedPage) {
+                                                                return (
+                                                                  <div className="flex items-center justify-between w-full">
+                                                                    <div className="text-right space-y-1">
+                                                                      <div className="font-medium text-sm">
+                                                                        {selectedPage.name}
+                                                                      </div>
+                                                                      <div className="flex items-center gap-2 text-xs">
+                                                                        <span className="flex items-center gap-1 text-blue-600">
+                                                                          <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                                                          FB: @{selectedPage.username || selectedPage.id.slice(-8)}
+                                                                        </span>
+                                                                        {selectedPage.instagram_business_account && (
+                                                                          <span className="flex items-center gap-1 text-pink-600 font-medium">
+                                                                            <span className="inline-block w-2 h-2 bg-pink-500 rounded-full"></span>
+                                                                            IG: @{selectedPage.instagram_business_account.username}
+                                                                          </span>
+                                                                        )}
+                                                                      </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1">
+                                                                      {selectedPage.instagram_business_account?.profile_picture_url && (
+                                                                        <img 
+                                                                          src={selectedPage.instagram_business_account.profile_picture_url} 
+                                                                          alt="Instagram Profile"
+                                                                          className="w-6 h-6 rounded-full object-cover border border-pink-300"
+                                                                        />
+                                                                      )}
+                                                                      <img 
+                                                                        src={selectedPage.picture?.data?.url || '/placeholder-page.png'} 
+                                                                        alt={selectedPage.name}
+                                                                        className="w-6 h-6 rounded-full object-cover border border-blue-300"
+                                                                        onError={(e) => {
+                                                                          e.currentTarget.src = '/placeholder-page.png';
+                                                                        }}
+                                                                      />
+                                                                    </div>
+                                                                  </div>
+                                                                );
+                                                              }
+                                                              return null;
+                                                            })()}
+                                                          </SelectValue>
+                                                        </SelectTrigger>
+                                                      </FormControl>
+                                                      <SelectContent className="w-full max-w-none">
+                                                        {pages?.pages?.map((page: any) => (
+                                                          <SelectItem key={page.id} value={page.id} className="whitespace-nowrap p-2 min-w-full">
+                                                            <div className="w-full flex items-center justify-between gap-2">
+                                                              {/* المحتوى النصي على اليمين */}
+                                                              <div className="flex-grow text-right overflow-hidden">
+                                                                <div className="space-y-1">
+                                                                  <span className="font-medium text-sm block truncate">
+                                                                    {page.name}
+                                                                  </span>
+                                                                  <div className="flex items-center justify-end gap-3 text-xs text-gray-600 dark:text-gray-400">
+                                                                    <span className="flex items-center gap-1">
+                                                                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                                                      FB: @{page.username || page.id.slice(-8)}
+                                                                    </span>
+                                                                    {page.instagram_business_account && (
+                                                                      <span className="flex items-center gap-1 text-pink-600 dark:text-pink-400 font-medium">
+                                                                        <span className="inline-block w-2 h-2 bg-pink-500 rounded-full"></span>
+                                                                        IG: @{page.instagram_business_account.username}
+                                                                      </span>
+                                                                    )}
+                                                                    {!page.instagram_business_account && (
+                                                                      <span className="text-gray-400 italic">
+                                                                        (بدون Instagram)
+                                                                      </span>
+                                                                    )}
+                                                                  </div>
+                                                                </div>
+                                                              </div>
+                                                              
+                                                              {/* الصور على اليسار */}
+                                                              <div className="flex items-center gap-1 flex-shrink-0">
+                                                                {/* صورة Instagram */}
+                                                                {page.instagram_business_account?.profile_picture_url && (
+                                                                  <img 
+                                                                    src={page.instagram_business_account.profile_picture_url} 
+                                                                    alt="IG"
+                                                                    className="w-6 h-6 rounded-full object-cover"
+                                                                    onError={(e) => {
+                                                                      (e.target as HTMLImageElement).style.display = 'none';
+                                                                    }}
+                                                                  />
+                                                                )}
+                                                                {/* صورة الصفحة */}
+                                                                {page.picture && (
+                                                                  <img 
+                                                                    src={page.picture.data.url} 
+                                                                    alt="FB"
+                                                                    className="w-8 h-8 rounded-full object-cover border border-gray-300"
+                                                                    onError={(e) => {
+                                                                      (e.target as HTMLImageElement).style.display = 'none';
+                                                                    }}
+                                                                  />
+                                                                )}
+                                                              </div>
+                                                            </div>
+                                                          </SelectItem>
+                                                        ))}
+                                                      </SelectContent>
+                                                    </Select>
+                                                    <FormDescription>مطلب لحملات الرسائل</FormDescription>
+                                                    <FormMessage />
+                                                  </FormItem>
+                                                )}
+                                              />
                                             </div>
                                             
                                             {/* وجهات الرسائل - فقط في حملات الرسائل */}

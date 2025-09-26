@@ -53,6 +53,20 @@ declare global {
 
 export default function PixelTracker({ platformId, eventType, eventData }: PixelTrackerProps) {
   
+  // التقاط fbclid من URL عند تحميل المكون وحفظه في localStorage
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const fbclid = urlParams.get('fbclid');
+    
+    if (fbclid) {
+      // حفظ fbclid في localStorage للاستخدام المستقبلي
+      localStorage.setItem('fbclid', fbclid);
+      localStorage.setItem('fbclid_timestamp', Date.now().toString());
+      
+      console.log('🔍 FBCLID captured from URL and stored:', fbclid);
+    }
+  }, []);
+
   // جلب إعدادات البكسلات من قاعدة البيانات
   const { data: pixelSettings, isLoading, error } = useQuery<PixelSettings>({
     queryKey: [`/api/platforms/${platformId}/ad-platform-settings`],
@@ -354,14 +368,68 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     // استخدام event_id المشترك الثابت
     const eventId = sharedEventId;
     
-    // استخراج Cookie FBP و FBC
+    // استخراج Cookie FBP و FBC مع تحسينات لحل مشكلة FBC الفارغة
     const getFBCookie = (name: string) => {
       const cookies = document.cookie.split(';');
       for (let cookie of cookies) {
         const [key, value] = cookie.trim().split('=');
-        if (key === name) return decodeURIComponent(value);
+        if (key === name && value && value !== 'undefined' && value !== 'null') {
+          return decodeURIComponent(value);
+        }
       }
       return null;
+    };
+
+    // إنشاء FBC من fbclid إذا لم يكن موجود في الـ cookies
+    const generateFBCFromURL = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const fbclid = urlParams.get('fbclid');
+      
+      if (fbclid) {
+        // إنشاء fbc من fbclid حسب معايير Facebook
+        const timestamp = Math.floor(Date.now() / 1000);
+        const fbc = `fb.1.${timestamp}.${fbclid}`;
+        
+        // حفظ في cookie لاستخدامات مستقبلية (90 يوم)
+        const expiryDate = new Date();
+        expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
+        document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+        
+        console.log('🔍 FBC generated from fbclid:', { fbclid, fbc });
+        return fbc;
+      }
+      
+      // محاولة استخراج من localStorage (إذا كان محفوظ من زيارة سابقة)
+      const storedFbclid = localStorage.getItem('fbclid');
+      const storedTimestamp = localStorage.getItem('fbclid_timestamp');
+      
+      if (storedFbclid && storedTimestamp) {
+        // التحقق من أن البيانات ليست قديمة جداً (أقل من 7 أيام)
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        if (parseInt(storedTimestamp) > sevenDaysAgo) {
+          const timestamp = Math.floor(parseInt(storedTimestamp) / 1000);
+          const fbc = `fb.1.${timestamp}.${storedFbclid}`;
+          
+          // حفظ في cookie
+          const expiryDate = new Date();
+          expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
+          document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+          
+          console.log('🔍 FBC generated from stored fbclid:', { storedFbclid, fbc });
+          return fbc;
+        }
+      }
+      
+      return null;
+    };
+
+    // الحصول على FBC محسن
+    const getEnhancedFBC = () => {
+      let fbc = getFBCookie('_fbc');
+      if (!fbc) {
+        fbc = generateFBCFromURL();
+      }
+      return fbc;
     };
     
     // إرسال القيمة كما هي بدون تحويل لتطابق الكتالوج
@@ -775,20 +843,80 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       });
       
       setTimeout(() => {
-        const getFBCookie = (name: string) => {
+        // استخراج Cookie FBP و FBC مع تحسينات لحل مشكلة FBC الفارغة
+        const getFBCookieLocal = (name: string) => {
           const cookies = document.cookie.split(';');
           for (let cookie of cookies) {
             const [key, value] = cookie.trim().split('=');
-            if (key === name) return decodeURIComponent(value);
+            if (key === name && value && value !== 'undefined' && value !== 'null') {
+              return decodeURIComponent(value);
+            }
           }
           return null;
         };
 
+        // إنشاء FBC من fbclid إذا لم يكن موجود
+        const generateFBCFromURLLocal = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const fbclid = urlParams.get('fbclid');
+          
+          if (fbclid) {
+            const timestamp = Math.floor(Date.now() / 1000);
+            const fbc = `fb.1.${timestamp}.${fbclid}`;
+            
+            // حفظ في cookie لاستخدامات مستقبلية
+            const expiryDate = new Date();
+            expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
+            document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+            
+            console.log('🔍 FBC generated from fbclid (useEffect):', { fbclid, fbc });
+            return fbc;
+          }
+          
+          // محاولة استخراج من localStorage
+          const storedFbclid = localStorage.getItem('fbclid');
+          const storedTimestamp = localStorage.getItem('fbclid_timestamp');
+          
+          if (storedFbclid && storedTimestamp) {
+            const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            if (parseInt(storedTimestamp) > sevenDaysAgo) {
+              const timestamp = Math.floor(parseInt(storedTimestamp) / 1000);
+              const fbc = `fb.1.${timestamp}.${storedFbclid}`;
+              
+              const expiryDate = new Date();
+              expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
+              document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+              
+              console.log('🔍 FBC generated from stored fbclid (useEffect):', { storedFbclid, fbc });
+              return fbc;
+            }
+          }
+          
+          return null;
+        };
+
+        // الحصول على FBC محسن
+        const getEnhancedFBCLocal = () => {
+          let fbc = getFBCookieLocal('_fbc');
+          if (!fbc) {
+            fbc = generateFBCFromURLLocal();
+          }
+          return fbc;
+        };
+
         const enrichedEventData = {
           ...eventData,
-          fbp: getFBCookie('_fbp'),
-          fbc: getFBCookie('_fbc')
+          fbp: getFBCookieLocal('_fbp'),
+          fbc: getEnhancedFBCLocal()
         };
+
+        console.log('🔍 Enhanced Event Data (useEffect):', {
+          eventType,
+          fbp: enrichedEventData.fbp ? 'Present' : 'Missing',
+          fbc: enrichedEventData.fbc ? 'Present' : 'Missing',
+          fbclid_in_url: new URLSearchParams(window.location.search).get('fbclid') ? 'Present' : 'Missing',
+          fbclid_in_storage: localStorage.getItem('fbclid') ? 'Present' : 'Missing'
+        });
 
         // إضافة Advanced Matching للحدث إذا كانت بيانات العميل متوفرة
         const eventAdvancedMatching: any = {};
@@ -871,21 +999,80 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       loadFacebookPixel(pixelSettings.facebookPixelId, initAdvancedMatching);
       
       setTimeout(() => {
-        // إضافة Facebook Cookies إلى eventData قبل الإرسال
-        const getFBCookie = (name: string) => {
+        // استخراج Cookie FBP و FBC مع تحسينات لحل مشكلة FBC الفارغة
+        const getFBCookieLocal2 = (name: string) => {
           const cookies = document.cookie.split(';');
           for (let cookie of cookies) {
             const [key, value] = cookie.trim().split('=');
-            if (key === name) return decodeURIComponent(value);
+            if (key === name && value && value !== 'undefined' && value !== 'null') {
+              return decodeURIComponent(value);
+            }
           }
           return null;
         };
 
+        // إنشاء FBC من fbclid إذا لم يكن موجود
+        const generateFBCFromURLLocal2 = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const fbclid = urlParams.get('fbclid');
+          
+          if (fbclid) {
+            const timestamp = Math.floor(Date.now() / 1000);
+            const fbc = `fb.1.${timestamp}.${fbclid}`;
+            
+            // حفظ في cookie لاستخدامات مستقبلية
+            const expiryDate = new Date();
+            expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
+            document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+            
+            console.log('🔍 FBC generated from fbclid (init):', { fbclid, fbc });
+            return fbc;
+          }
+          
+          // محاولة استخراج من localStorage
+          const storedFbclid = localStorage.getItem('fbclid');
+          const storedTimestamp = localStorage.getItem('fbclid_timestamp');
+          
+          if (storedFbclid && storedTimestamp) {
+            const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            if (parseInt(storedTimestamp) > sevenDaysAgo) {
+              const timestamp = Math.floor(parseInt(storedTimestamp) / 1000);
+              const fbc = `fb.1.${timestamp}.${storedFbclid}`;
+              
+              const expiryDate = new Date();
+              expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
+              document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+              
+              console.log('🔍 FBC generated from stored fbclid (init):', { storedFbclid, fbc });
+              return fbc;
+            }
+          }
+          
+          return null;
+        };
+
+        // الحصول على FBC محسن
+        const getEnhancedFBCLocal2 = () => {
+          let fbc = getFBCookieLocal2('_fbc');
+          if (!fbc) {
+            fbc = generateFBCFromURLLocal2();
+          }
+          return fbc;
+        };
+
         const enrichedEventData = {
           ...eventData,
-          fbp: getFBCookie('_fbp'),
-          fbc: getFBCookie('_fbc')
+          fbp: getFBCookieLocal2('_fbp'),
+          fbc: getEnhancedFBCLocal2()
         };
+
+        console.log('🔍 Enhanced Event Data (init):', {
+          eventType,
+          fbp: enrichedEventData.fbp ? 'Present' : 'Missing',
+          fbc: enrichedEventData.fbc ? 'Present' : 'Missing',
+          fbclid_in_url: new URLSearchParams(window.location.search).get('fbclid') ? 'Present' : 'Missing',
+          fbclid_in_storage: localStorage.getItem('fbclid') ? 'Present' : 'Missing'
+        });
 
         trackFacebookEvent(eventType, enrichedEventData, eventId);
         // إرسال إلى Server-Side API مع البيانات المحسنة

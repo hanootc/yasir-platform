@@ -68,6 +68,18 @@ export default function PrivacyPolicy() {
         title: "ملفات تعريف الارتباط (الكوكيز)",
         content: "نستخدم ملفات تعريف الارتباط لتحسين تجربتك على موقعنا وتذكر تفضيلاتك. يمكنك إيقاف هذه الملفات من إعدادات المتصفح إذا رغبت في ذلك."
       },
+      dataRights: {
+        title: "حقوقك في البيانات",
+        content: "لديك الحق في:",
+        items: [
+          "الوصول إلى بياناتك الشخصية ومعرفة كيفية استخدامها",
+          "تصحيح أو تحديث بياناتك الشخصية",
+          "طلب حذف بياناتك الشخصية نهائياً",
+          "الاعتراض على معالجة بياناتك لأغراض تسويقية",
+          "نقل بياناتك إلى خدمة أخرى"
+        ],
+        deletionLink: "لطلب حذف بياناتك، يرجى زيارة صفحة حذف البيانات"
+      },
       contact: {
         title: "تواصل معنا",
         content: "إذا كان لديك أي أسئلة أو استفسارات حول سياسة الخصوصية هذه، يرجى التواصل معنا:"
@@ -105,6 +117,18 @@ export default function PrivacyPolicy() {
       cookies: {
         title: "Cookies",
         content: "We use cookies to improve your experience on our website and remember your preferences. You can disable these files from your browser settings if you wish."
+      },
+      dataRights: {
+        title: "Your Data Rights",
+        content: "You have the right to:",
+        items: [
+          "Access your personal data and know how it's being used",
+          "Correct or update your personal data",
+          "Request permanent deletion of your personal data",
+          "Object to processing your data for marketing purposes",
+          "Transfer your data to another service"
+        ],
+        deletionLink: "To request data deletion, please visit our data deletion page"
       },
       contact: {
         title: "Contact Us",
@@ -182,6 +206,29 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">{t.cookies.title}</h2>
               <p>{t.cookies.content}</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">{t.dataRights.title}</h2>
+              <p>{t.dataRights.content}</p>
+              <ul className="list-disc list-inside mt-2 space-y-2">
+                {t.dataRights.items.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-blue-800">
+                  {t.dataRights.deletionLink}:{" "}
+                  <a 
+                    href="/data-deletion" 
+                    className="text-blue-600 hover:text-blue-800 underline font-medium"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {language === "ar" ? "صفحة حذف البيانات" : "Data Deletion Page"}
+                  </a>
+                </p>
+              </div>
             </section>
 
             <section>

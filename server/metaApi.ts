@@ -713,6 +713,14 @@ export class MetaMarketingAPI {
     messageDestinations?: string[];
   }) {
     console.log('🚀 إنشاء حملة Meta كاملة:', data.campaignName);
+    
+    // 🔥 تشخيص شامل للحملة
+    console.log('🔍 تشخيص الحملة:');
+    console.log('- نوع الحملة:', data.objective);
+    console.log('- Advantage+ Placements مطلوب:', data.placements?.advantagePlacements);
+    console.log('- المنصات المطلوبة:', data.placements?.publisherPlatforms);
+    console.log('- مواضع Facebook المطلوبة:', data.placements?.facebookPlacements);
+    console.log('- الأجهزة المطلوبة:', data.placements?.devicePlatforms);
     console.log('🖼️ بيانات الوسائط:', {
       videoUrl: data.videoUrl,
       thumbnailUrl: data.thumbnailUrl,
@@ -915,7 +923,8 @@ export class MetaMarketingAPI {
         displayName: data.displayName,
         adText: data.adText,
         adDescription: data.adDescription,
-        callToAction: data.callToAction
+        callToAction: data.callToAction,
+        landingPageUrl: data.landingPageUrl
       });
       
       const creativeData = await this.buildAdCreative({
@@ -1025,6 +1034,7 @@ export class MetaMarketingAPI {
       adText: data.adText,
       adDescription: data.adDescription,
       callToAction: data.callToAction,
+      landingPageUrl: data.landingPageUrl,
       messageDestinations: data.messageDestinations,
       pageId: data.pageId
     });
@@ -1058,16 +1068,8 @@ export class MetaMarketingAPI {
         // إضافة Instagram actor ID لجميع الحملات التي تنشر على Instagram
         ...(instagramActorId && { 
           instagram_actor_id: instagramActorId 
-        }),
-        link_data: {
-          call_to_action: {
-            type: data.callToAction,
-            value: {
-              ...(data.landingPageUrl && { link: data.landingPageUrl }),
-              ...(data.adDescription && { link_description: data.adDescription })
-            }
-          }
-        }
+        })
+        // لا ننشئ link_data هنا - سننشئه حسب نوع الإعلان
       }
     };
 
@@ -1078,45 +1080,56 @@ export class MetaMarketingAPI {
     });
 
     // إضافة الوسائط حسب النوع
+    console.log('🔍 فحص نوع الإعلان:', {
+      adFormat: data.adFormat,
+      videoId: data.videoId,
+      imageHash: data.imageHash
+    });
+    
     if (data.adFormat === 'SINGLE_VIDEO' && data.videoId) {
+      console.log('🎬 دخول شرط الفيديو - SINGLE_VIDEO');
       // فحص وجود thumbnail URL للفيديو
       if (!data.thumbnailUrl) {
         throw new Error('يجب وجود thumbnail URL للفيديو - لا نقبل صور افتراضية!');
       }
-      // الحل المضمون: استخدام link_data مع video_data معاً
-      // تحديث link_data بالعنوان والوصف والنص
-      console.log('🔍 قبل تحديث link_data:', {
-        'displayName': data.displayName,
-        'adDescription': data.adDescription,
-        'adText': data.adText
-      });
       
-      creative.object_story_spec.link_data.name = data.displayName;        // العنوان
-      creative.object_story_spec.link_data.description = data.adDescription; // الوصف
-      creative.object_story_spec.link_data.message = data.adText;           // النص الأساسي
-      
-      console.log('🔍 بعد تحديث link_data:', creative.object_story_spec.link_data);
-
-      // إضافة video_data مع الاحتفاظ بـ link_data
+      // للفيديو، نستخدم video_data فقط مع جميع البيانات
       creative.object_story_spec.video_data = {
         video_id: data.videoId,
         // استخدام thumbnail URL الحقيقي من الفيديو فقط - لا صور افتراضية!
         ...(data.thumbnailUrl ? { image_url: data.thumbnailUrl } : {}),
         // Instagram actor ID إذا كان متوفراً
-        ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {})
+        ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {}),
+        // إضافة النصوص والعنوان
+        name: data.displayName,
+        message: data.adText,
+        description: data.adDescription,
+        // إضافة call_to_action مباشرة في video_data
+        call_to_action: {
+          type: data.callToAction === 'BOOK_TRAVEL' ? 'SHOP_NOW' : data.callToAction,
+          value: {
+            link: data.landingPageUrl || 'https://sanadi.pro'
+          }
+        }
       };
       
-      // لا نحذف link_data - نحتاجها للعنوان والوصف والنص!
+      console.log('✅ تم إنشاء video_data كامل بدون link_data');
       
-      console.log('📝 بيانات الإعلان النهائية:', {
-        'العنوان (link_data.name)': data.displayName,
-        'النص الأساسي (link_data.message)': data.adText,
-        'الوصف (link_data.description)': data.adDescription,
-        'call_to_action': data.callToAction
-      });
-      console.log('✅ تم استخدام link_data مع video_data - الطريقة الرسمية');
     } else if (data.adFormat === 'SINGLE_IMAGE' && data.imageHash) {
-      creative.object_story_spec.link_data.image_hash = data.imageHash;
+      // للصور، ننشئ link_data
+      creative.object_story_spec.link_data = {
+        call_to_action: {
+          type: data.callToAction === 'BOOK_TRAVEL' ? 'SHOP_NOW' : data.callToAction,
+          value: {
+            link: data.landingPageUrl || 'https://sanadi.pro',
+            ...(data.adDescription && { link_description: data.adDescription })
+          }
+        },
+        image_hash: data.imageHash,
+        name: data.displayName,
+        message: data.adText,
+        description: data.adDescription
+      };
     }
 
     // إضافة degrees_of_freedom_spec دائماً للحملات الرسائل
@@ -1144,62 +1157,146 @@ export class MetaMarketingAPI {
 
   // بناء إعدادات المواضع
   private buildPlacements(placements?: any): any {
+    console.log('🎯 بناء المواضع - البيانات المستلمة:', JSON.stringify(placements, null, 2));
+    
     const placementData: any = {};
     
+    // 🔥 حسب وثائق Facebook: لا نرسل advantage_placements في targeting
+    // بدلاً من ذلك، نتحكم في المواضع عبر تحديد المواضع المحددة أو عدم تحديدها
+    console.log('🎯 بناء المواضع حسب وثائق Facebook Developer');
+    
     if (placements) {
-      // Publisher platforms مع تحكم يدوي صريح
-      if (placements.publisherPlatforms?.length > 0) {
-        placementData.publisher_platforms = placements.publisherPlatforms;
+      // 🔥 إذا كان Advantage+ معطل، نرسل اختيارات المستخدم مع تعطيل placement_expansion
+      if (placements.advantagePlacements !== true) {
+        console.log('🎯 Advantage+ معطل - استخدام اختيارات المستخدم مع تحكم يدوي');
         
-        // تحديد المواضع المحددة لكل منصة لإجبار التحكم اليدوي
-        if (placements.publisherPlatforms.includes('facebook')) {
-          placementData.facebook_positions = placements.facebookPlacements && placements.facebookPlacements.length > 0 
-            ? placements.facebookPlacements 
-            : ['feed', 'right_hand_column'];
-        }
+        // 🔥 لا نرسل placement_expansion لأنه ليس حقل صحيح في Facebook API
+        console.log('🔥 عدم إرسال placement_expansion (حقل غير صحيح)');
         
-        if (placements.publisherPlatforms.includes('instagram')) {
-          placementData.instagram_positions = placements.instagramPlacements && placements.instagramPlacements.length > 0 
-            ? placements.instagramPlacements 
-            : ['stream', 'story'];
-        }
-        
-        if (placements.publisherPlatforms.includes('audience_network')) {
-          placementData.audience_network_positions = placements.audienceNetwork && placements.audienceNetwork.length > 0 
-            ? placements.audienceNetwork 
-            : ['classic'];
-        }
-        
-        if (placements.publisherPlatforms.includes('messenger')) {
-          placementData.messenger_positions = ['messenger_home'];
+        // إرسال المنصات المحددة من المستخدم
+        if (placements.publisherPlatforms?.length > 0) {
+          placementData.publisher_platforms = placements.publisherPlatforms;
+          console.log('✅ استخدام المنصات المختارة:', placements.publisherPlatforms);
+          
+          // إرسال المواضع المحددة من المستخدم لكل منصة
+          if (placements.publisherPlatforms.includes('facebook') && placements.facebookPlacements?.length > 0) {
+            placementData.facebook_positions = placements.facebookPlacements;
+            console.log('✅ مواضع Facebook المختارة:', placements.facebookPlacements);
+          }
+          
+          if (placements.publisherPlatforms.includes('instagram') && placements.instagramPlacements?.length > 0) {
+            placementData.instagram_positions = placements.instagramPlacements;
+            console.log('✅ مواضع Instagram المختارة:', placements.instagramPlacements);
+          }
+          
+          if (placements.publisherPlatforms.includes('audience_network') && placements.audienceNetwork?.length > 0) {
+            placementData.audience_network_positions = placements.audienceNetwork;
+            console.log('✅ مواضع Audience Network المختارة:', placements.audienceNetwork);
+          }
+          
+          if (placements.publisherPlatforms.includes('messenger')) {
+            placementData.messenger_positions = ['messenger_home'];
+            console.log('✅ مواضع Messenger المختارة: messenger_home');
+          }
+        } else {
+          // إذا لم يختر المستخدم منصات، نستخدم Facebook فقط
+          placementData.publisher_platforms = ['facebook'];
+          placementData.facebook_positions = ['feed'];
+          console.log('✅ لم يتم اختيار منصات - استخدام Facebook Feed كافتراضي');
         }
         
       } else {
-        placementData.publisher_platforms = ['facebook', 'instagram']; // افتراضي
-        placementData.facebook_positions = ['feed', 'right_hand_column'];
-        placementData.instagram_positions = ['stream', 'story'];
+        console.log('🎯 Advantage+ مفعل - السماح لـ Facebook بالاختيار التلقائي');
+        
+        // 🔥 لا نرسل placement_expansion لأنه ليس حقل صحيح في Facebook API
+        console.log('🔥 عدم إرسال placement_expansion (حقل غير صحيح)');
+        
+        // عند تفعيل Advantage+، نرسل المواضع المحددة ونترك Facebook يختار
+        if (placements.publisherPlatforms?.length > 0) {
+          placementData.publisher_platforms = placements.publisherPlatforms;
+          console.log('✅ استخدام المنصات المحددة مع Advantage+:', placements.publisherPlatforms);
+          
+          // تحديد المواضع المحددة لكل منصة
+          if (placements.publisherPlatforms.includes('facebook') && placements.facebookPlacements?.length > 0) {
+            placementData.facebook_positions = placements.facebookPlacements;
+            console.log('✅ مواضع Facebook مع Advantage+:', placements.facebookPlacements);
+          }
+          
+          if (placements.publisherPlatforms.includes('instagram') && placements.instagramPlacements?.length > 0) {
+            placementData.instagram_positions = placements.instagramPlacements;
+            console.log('✅ مواضع Instagram مع Advantage+:', placements.instagramPlacements);
+          }
+          
+          if (placements.publisherPlatforms.includes('audience_network') && placements.audienceNetwork?.length > 0) {
+            placementData.audience_network_positions = placements.audienceNetwork;
+            console.log('✅ مواضع Audience Network مع Advantage+:', placements.audienceNetwork);
+          }
+          
+          if (placements.publisherPlatforms.includes('messenger')) {
+            placementData.messenger_positions = ['messenger_home'];
+            console.log('✅ مواضع Messenger مع Advantage+: messenger_home');
+          }
+        }
+      }
+      
+      // 🔥 الإعدادات المتقدمة: استخدام اختيارات المستخدم دائماً
+      console.log('🎯 إضافة اختيارات المستخدم للإعدادات المتقدمة');
+      
+      // أنظمة التشغيل - تحويل إلى القيم الصحيحة لـ Facebook API
+      if (placements.operatingSystems?.length > 0) {
+        if (placements.operatingSystems.includes('all_mobile')) {
+          // جميع الأجهزة المحمولة - لا نرسل user_os للسماح بجميع الأجهزة
+          console.log('✅ أنظمة التشغيل: جميع الأجهزة المحمولة → لا نحدد user_os (جميع الأجهزة)');
+          // لا نضيف user_os للسماح بجميع أنظمة التشغيل المحمولة
+        } else if (placements.operatingSystems.includes('iOS') && placements.operatingSystems.includes('Android')) {
+          // إذا تم اختيار iOS و Android معاً يدوياً - لا نرسل user_os
+          console.log('✅ أنظمة التشغيل: iOS + Android يدوياً → لا نحدد user_os (جميع الأجهزة)');
+          // لا نضيف user_os للسماح بجميع أنظمة التشغيل المحمولة
+        } else if (placements.operatingSystems.includes('iOS')) {
+          placementData.user_os = ['iOS'];
+          console.log('✅ أنظمة التشغيل: iOS فقط');
+        } else if (placements.operatingSystems.includes('Android')) {
+          placementData.user_os = ['Android'];
+          console.log('✅ أنظمة التشغيل: Android فقط');
+        }
+      }
+      
+      // نوع الاتصال - تجاهل لأنه يسبب مشاكل في Facebook API
+      if (placements.connectionTypes?.length > 0) {
+        console.log('✅ نوع الاتصال المختار (تم تجاهله):', placements.connectionTypes);
+        // لا نرسل wireless_carrier لأنه يسبب أخطاء
       }
       
     } else {
-      // القيم الافتراضية إذا لم يتم تمرير المواضع
-      placementData.publisher_platforms = ['facebook', 'instagram'];
-      placementData.facebook_positions = ['feed', 'right_hand_column'];
-      placementData.instagram_positions = ['stream', 'story'];
+      console.log('⚠️ لا توجد بيانات مواضع - استخدام الافتراضي الأساسي');
+      // القيم الافتراضية الأساسية فقط
+      placementData.publisher_platforms = ['facebook'];
+      placementData.facebook_positions = ['feed'];
     }
+    
+    console.log('🎯 المواضع النهائية المبنية:', JSON.stringify(placementData, null, 2));
+    
+    // 🔥 إضافة تشخيص شامل
+    console.log('🔍 تشخيص شامل للمواضع:');
+    console.log('- نوع الحملة: OUTCOME_SALES (قد يفرض Advantage+)');
+    console.log('- Advantage+ مطلوب من المستخدم:', placements?.advantagePlacements);
+    console.log('- المواضع المرسلة:', Object.keys(placementData));
+    console.log('- عدد المنصات:', placementData.publisher_platforms?.length || 0);
+    console.log('- عدد مواضع Facebook:', placementData.facebook_positions?.length || 0);
     
     return placementData;
   }
 
   // بناء معايير الاستهداف
-  private buildTargeting(targeting: any, placements?: any) {
+  public buildTargeting(targeting: any, placements?: any) {
     const metaTargeting: any = {
       geo_locations: {
         countries: ['IQ'] // العراق افتراضياً
       },
-      // استخدام قيم الأجهزة من الواجهة أو الافتراضي (الأجهزة المحمولة فقط)
+      // 🔥 الأجهزة: استخدام اختيارات المستخدم دائماً
       device_platforms: placements?.devicePlatforms?.length > 0 ? placements.devicePlatforms : ['mobile'],
       targeting_automation: {
-        advantage_audience: targeting.advantageAudience ? 1 : 0 // تفعيل/تعطيل Advantage+ Audience حسب اختيار المستخدم
+        advantage_audience: targeting?.advantageAudience === true ? 1 : 0 // تفعيل/تعطيل Advantage+ Audience حسب اختيار المستخدم
       }
     };
 
@@ -1207,6 +1304,9 @@ export class MetaMarketingAPI {
     if (placements) {
       const placementData = this.buildPlacements(placements);
       Object.assign(metaTargeting, placementData);
+      console.log('🔥 تم دمج بيانات المواضع في targeting:', JSON.stringify(placementData, null, 2));
+    } else {
+      console.log('⚠️ لا توجد بيانات مواضع - سيستخدم Facebook الإعدادات الافتراضية');
     }
 
     if (targeting.genders && targeting.genders.length > 0) {

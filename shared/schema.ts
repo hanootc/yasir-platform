@@ -1466,11 +1466,12 @@ export const completeMetaCampaignSchema = z.object({
   
   // Placements configuration (مواضع الإعلان)
   placements: z.object({
+    advantagePlacements: z.boolean().optional().default(false), // Advantage+ Placements
     devicePlatforms: z.array(z.enum(["mobile", "desktop", "tablet"])).optional().default(["mobile"]),
     publisherPlatforms: z.array(z.enum(["facebook", "instagram", "audience_network", "messenger", "threads"])).optional().default(["facebook", "instagram"]),
-    facebookPlacements: z.array(z.enum(["feed", "marketplace", "right_hand_column", "instant_article", "in_stream_video", "search", "story", "reels"])).optional(),
-    instagramPlacements: z.array(z.enum(["stream", "explore", "profile_feed", "story", "reels", "search"])).optional(),
-    operatingSystems: z.array(z.enum(["iOS", "Android", "Windows", "MacOS", "Linux"])).optional(),
+    facebookPlacements: z.array(z.enum(["feed", "right_hand_column", "marketplace", "video_feeds", "story", "search", "instream_video", "facebook_reels", "facebook_reels_overlay", "profile_feed", "notification"])).optional(),
+    instagramPlacements: z.array(z.enum(["stream", "story", "explore", "explore_home", "reels", "profile_feed", "ig_search", "profile_reels"])).optional(),
+    operatingSystems: z.array(z.enum(["all_mobile", "iOS", "Android", "Windows", "MacOS", "Linux"])).optional(),
     connectionTypes: z.array(z.enum(["wifi", "cellular", "broadband"])).optional(),
     audienceNetwork: z.array(z.enum(["classic", "instream_video", "rewarded_video"])).optional(),
     advancedOptions: z.array(z.enum(["exclude_threads", "premium_placements", "brand_safety", "block_lists"])).optional(),
@@ -2687,3 +2688,47 @@ export const updatePlatformThemeSchema = insertPlatformThemeSchema.partial();
 export type PlatformTheme = typeof platformThemes.$inferSelect;
 export type InsertPlatformTheme = z.infer<typeof insertPlatformThemeSchema>;
 export type UpdatePlatformTheme = z.infer<typeof updatePlatformThemeSchema>;
+
+// Data deletion requests status enum
+export const dataDeletionStatusEnum = pgEnum("data_deletion_status", [
+  "pending",
+  "processing", 
+  "completed",
+  "rejected"
+]);
+
+// Data deletion requests table
+export const dataDeletionRequests = pgTable("data_deletion_requests", {
+  id: varchar("id").primaryKey(),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  reason: text("reason"),
+  additionalInfo: text("additional_info"),
+  status: dataDeletionStatusEnum("status").notNull().default("pending"),
+  requestDate: timestamp("request_date").notNull(),
+  processedDate: timestamp("processed_date"),
+  processedBy: varchar("processed_by", { length: 255 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Data deletion requests schema
+export const insertDataDeletionRequestSchema = createInsertSchema(dataDeletionRequests, {
+  email: z.string().email().optional(),
+  phone: z.string().min(1).optional(),
+  reason: z.string().optional(),
+  additionalInfo: z.string().optional(),
+});
+
+export const updateDataDeletionRequestSchema = z.object({
+  status: z.enum(["pending", "processing", "completed", "rejected"]).optional(),
+  processedDate: z.date().optional(),
+  processedBy: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+// Data deletion requests types
+export type DataDeletionRequest = typeof dataDeletionRequests.$inferSelect;
+export type InsertDataDeletionRequest = z.infer<typeof insertDataDeletionRequestSchema>;
+export type UpdateDataDeletionRequest = z.infer<typeof updateDataDeletionRequestSchema>;
