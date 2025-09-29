@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
+import PerformanceChart from "@/components/PerformanceChart";
+import AudienceChart from "@/components/AudienceChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +52,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import PlatformSidebar from "@/components/PlatformSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import ColorThemeSelector from "@/components/ColorThemeSelector";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -116,6 +119,9 @@ const getDateRangeOptions = (): DateRangeOption[] => {
 };
 
 export default function PlatformAdsMetaManagement() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إدارة إعلانات ميتا');
+
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
@@ -167,6 +173,30 @@ export default function PlatformAdsMetaManagement() {
   const [adSetCompleted, setAdSetCompleted] = useState(false);
   const [adCompleted, setAdCompleted] = useState(false);
   const [targetingCompleted, setTargetingCompleted] = useState(false);
+  
+  // Ad Statistics Dialog State
+  const [adStatsDialogOpen, setAdStatsDialogOpen] = useState(false);
+  const [selectedAdForStats, setSelectedAdForStats] = useState<any>(null);
+  const [statsDateRange, setStatsDateRange] = useState('last_7d');
+
+  // Query لجلب إحصائيات إعلان محدد
+  const { data: selectedAdInsights, isLoading: selectedAdInsightsLoading, refetch: refetchSelectedAdInsights } = useQuery({
+    queryKey: ["/api/platform-ads/meta/ad-insights", selectedAdForStats?.id, statsDateRange],
+    enabled: !!selectedAdForStats?.id && adStatsDialogOpen,
+    queryFn: async () => {
+      if (!selectedAdForStats?.id) return null;
+      
+      const response = await fetch(`/api/platform-ads/meta/ad-insights/${selectedAdForStats.id}?datePreset=${statsDateRange}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch ad insights');
+      }
+      
+      const data = await response.json();
+      return data.insights;
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchOnWindowFocus: false,
+  });
   
   // Geographic targeting visibility
   const [showRegionsSection, setShowRegionsSection] = useState(false);
@@ -1037,6 +1067,90 @@ export default function PlatformAdsMetaManagement() {
     },
     enabled: !!selectedAccount && !!ads?.ads,
     staleTime: 30000,
+  });
+
+  // Query لجلب إحصائيات شاملة للتحليلات الرئيسية
+  const { data: overallInsights, isLoading: overallInsightsLoading, refetch: refetchOverallInsights } = useQuery({
+    queryKey: ["/api/platform-ads/meta/overall-insights", selectedAccount, statsDateRange, campaignInsights, adInsights],
+    enabled: !!selectedAccount && activeTab === 'analytics' && !campaignInsightsLoading && !adInsightsLoading,
+    queryFn: async () => {
+      if (!selectedAccount) return null;
+      
+      try {
+        // استخدام البيانات الموجودة من الـ queries الأخرى
+        let totalSpend = 0;
+        let totalImpressions = 0;
+        let totalClicks = 0;
+        let totalConversions = 0;
+        
+        // جمع بيانات من campaignInsights الموجودة
+        if (campaignInsights) {
+          Object.values(campaignInsights).forEach((insight: any) => {
+            totalSpend += parseFloat(insight.spend || 0);
+            totalImpressions += parseInt(insight.impressions || 0);
+            totalClicks += parseInt(insight.clicks || 0);
+            // البحث عن التحويلات في actions
+            if (insight.actions) {
+              insight.actions.forEach((action: any) => {
+                if (action.action_type === 'purchase' || action.action_type === 'lead') {
+                  totalConversions += parseInt(action.value || 0);
+                }
+              });
+            }
+          });
+        }
+        
+        // جمع بيانات من adInsights الموجودة
+        if (adInsights) {
+          Object.values(adInsights).forEach((insight: any) => {
+            // إضافة البيانات فقط إذا لم تكن موجودة في الحملات
+            if (!campaignInsights || Object.keys(campaignInsights).length === 0) {
+              totalSpend += parseFloat(insight.spend || 0);
+              totalImpressions += parseInt(insight.impressions || 0);
+              totalClicks += parseInt(insight.clicks || 0);
+            }
+            // إضافة التحويلات من الإعلانات
+            if (insight.actions) {
+              insight.actions.forEach((action: any) => {
+                if (action.action_type === 'purchase' || action.action_type === 'lead') {
+                  totalConversions += parseInt(action.value || 0);
+                }
+              });
+            }
+          });
+        }
+        
+        console.log('📊 Overall Insights Calculated:', {
+          totalSpend,
+          totalImpressions,
+          totalClicks,
+          totalConversions,
+          campaignInsightsCount: campaignInsights ? Object.keys(campaignInsights).length : 0,
+          adInsightsCount: adInsights ? Object.keys(adInsights).length : 0
+        });
+        
+        return {
+          totalSpend,
+          totalImpressions,
+          totalClicks,
+          totalConversions,
+          campaignInsights: campaignInsights || {},
+          adInsights: adInsights || {}
+        };
+      } catch (error) {
+        console.error('Error calculating overall insights:', error);
+        return {
+          totalSpend: 0,
+          totalImpressions: 0,
+          totalClicks: 0,
+          totalConversions: 0,
+          campaignInsights: {},
+          adInsights: {}
+        };
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   // Hierarchical filtering functions - النظام الهرمي
@@ -4084,6 +4198,10 @@ export default function PlatformAdsMetaManagement() {
                                             variant="outline" 
                                             className="theme-border hover:bg-theme-primary-light"
                                             title="عرض الإحصائيات"
+                                            onClick={() => {
+                                              setSelectedAdForStats(campaign);
+                                              setAdStatsDialogOpen(true);
+                                            }}
                                           >
                                             <BarChart3 className="h-4 w-4" />
                                           </Button>
@@ -4844,6 +4962,10 @@ export default function PlatformAdsMetaManagement() {
                                               variant="outline" 
                                               className="theme-border hover:bg-theme-primary-light"
                                               title="عرض الإحصائيات"
+                                              onClick={() => {
+                                                setSelectedAdForStats(ad);
+                                                setAdStatsDialogOpen(true);
+                                              }}
                                             >
                                               <BarChart3 className="h-4 w-4" />
                                             </Button>
@@ -4922,13 +5044,292 @@ export default function PlatformAdsMetaManagement() {
                       </button>
                     </div>
                     
-                    <Card className="theme-border bg-theme-primary-lighter">
-                      <CardContent className="p-8 text-center">
-                        <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold mb-2">التحليلات</h3>
-                        <p className="text-gray-600 dark:text-gray-400">قريباً... تحليلات الأداء المفصلة</p>
-                      </CardContent>
-                    </Card>
+                    {/* Analytics Dashboard */}
+                    <div className="space-y-6">
+                      {/* Date Range Selector */}
+                      <Card className="theme-border">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <CalendarIcon className="w-5 h-5" />
+                            فترة التحليل
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-3">
+                            <Select value={statsDateRange} onValueChange={setStatsDateRange}>
+                              <SelectTrigger className="w-48">
+                                <SelectValue placeholder="اختر الفترة" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="today">اليوم</SelectItem>
+                                <SelectItem value="yesterday">أمس</SelectItem>
+                                <SelectItem value="last_7d">آخر 7 أيام</SelectItem>
+                                <SelectItem value="last_14d">آخر 14 يوم</SelectItem>
+                                <SelectItem value="last_30d">آخر 30 يوم</SelectItem>
+                                <SelectItem value="this_month">هذا الشهر</SelectItem>
+                                <SelectItem value="last_month">الشهر الماضي</SelectItem>
+                                <SelectItem value="lifetime">الحد الأقصى (جميع البيانات)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button 
+                              variant="outline" 
+                              className="theme-border"
+                              onClick={() => refetchOverallInsights()}
+                              disabled={overallInsightsLoading}
+                            >
+                              <RefreshCw className={`w-4 h-4 mr-2 ${overallInsightsLoading ? 'animate-spin' : ''}`} />
+                              تحديث البيانات
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Key Metrics Overview */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card className="theme-border">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">إجمالي الإنفاق</p>
+                                <p className="text-2xl font-bold">
+                                  {overallInsightsLoading ? '...' : 
+                                   overallInsights?.totalSpend ? 
+                                   `$${overallInsights.totalSpend.toFixed(2)}` : '$0.00'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {statsDateRange === 'today' ? 'اليوم' :
+                                   statsDateRange === 'yesterday' ? 'أمس' :
+                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
+                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
+                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
+                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
+                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
+                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                </p>
+                              </div>
+                              <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                                <TrendingUp className="w-6 h-6 text-blue-600" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card className="theme-border">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">مرات الظهور</p>
+                                <p className="text-2xl font-bold">
+                                  {overallInsightsLoading ? '...' : 
+                                   overallInsights?.totalImpressions ? 
+                                   Number(overallInsights.totalImpressions).toLocaleString('ar-IQ') : '0'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {statsDateRange === 'today' ? 'اليوم' :
+                                   statsDateRange === 'yesterday' ? 'أمس' :
+                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
+                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
+                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
+                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
+                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
+                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                </p>
+                              </div>
+                              <div className="p-3 bg-green-100 dark:bg-green-900 rounded-full">
+                                <Eye className="w-6 h-6 text-green-600" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card className="theme-border">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">النقرات</p>
+                                <p className="text-2xl font-bold">
+                                  {overallInsightsLoading ? '...' : 
+                                   overallInsights?.totalClicks ? 
+                                   Number(overallInsights.totalClicks).toLocaleString('ar-IQ') : '0'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {statsDateRange === 'today' ? 'اليوم' :
+                                   statsDateRange === 'yesterday' ? 'أمس' :
+                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
+                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
+                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
+                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
+                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
+                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                </p>
+                              </div>
+                              <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                                <Target className="w-6 h-6 text-purple-600" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card className="theme-border">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">التحويلات</p>
+                                <p className="text-2xl font-bold">
+                                  {overallInsightsLoading ? '...' : 
+                                   overallInsights?.totalConversions ? 
+                                   Number(overallInsights.totalConversions).toLocaleString('ar-IQ') : '0'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {statsDateRange === 'today' ? 'اليوم' :
+                                   statsDateRange === 'yesterday' ? 'أمس' :
+                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
+                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
+                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
+                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
+                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
+                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                </p>
+                              </div>
+                              <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-full">
+                                <CheckCircle className="w-6 h-6 text-orange-600" />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Data Status Info */}
+                      {(!overallInsightsLoading && (!overallInsights || (overallInsights.totalImpressions === 0 && overallInsights.totalSpend === 0))) && (
+                        <Card className="theme-border bg-yellow-50 dark:bg-yellow-950">
+                          <CardContent className="p-6">
+                            <div className="flex items-start gap-3">
+                              <Info className="w-5 h-5 text-yellow-600 mt-0.5" />
+                              <div>
+                                <h4 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">حالة البيانات</h4>
+                                <div className="text-sm text-yellow-800 dark:text-yellow-200 space-y-1">
+                                  <p>• <strong>الحملات المتوفرة:</strong> {campaigns?.campaigns?.length || 0}</p>
+                                  <p>• <strong>الإعلانات المتوفرة:</strong> {ads?.ads?.length || 0}</p>
+                                  <p>• <strong>إحصائيات الحملات:</strong> {campaignInsights ? Object.keys(campaignInsights).length : 0}</p>
+                                  <p>• <strong>إحصائيات الإعلانات:</strong> {adInsights ? Object.keys(adInsights).length : 0}</p>
+                                  <p className="mt-2 font-semibold">
+                                    {campaigns?.campaigns?.length === 0 ? 
+                                      '⚠️ لا توجد حملات - أنشئ حملة جديدة أولاً' :
+                                      ads?.ads?.length === 0 ?
+                                      '⚠️ لا توجد إعلانات - أنشئ إعلانات للحملات الموجودة' :
+                                      '⚠️ الحملات والإعلانات موجودة لكن لا توجد إحصائيات - قد تحتاج 24-48 ساعة للظهور'
+                                    }
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Performance Charts */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card className="theme-border">
+                          <CardHeader>
+                            <CardTitle className="text-lg">أداء الحملات</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {overallInsightsLoading ? (
+                              <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                <div className="text-center">
+                                  <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-2 animate-spin" />
+                                  <p className="text-gray-500">جاري تحميل البيانات...</p>
+                                  <p className="text-sm text-gray-400">يرجى الانتظار</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <PerformanceChart 
+                                data={overallInsights || {
+                                  totalSpend: 0,
+                                  totalImpressions: 0,
+                                  totalClicks: 0,
+                                  totalConversions: 0
+                                }}
+                                type="line"
+                                title="أداء الحملات عبر الوقت"
+                                accountId={selectedAccount}
+                                useRealData={true}
+                                datePreset={statsDateRange}
+                              />
+                            )}
+                          </CardContent>
+                        </Card>
+
+                        <Card className="theme-border">
+                          <CardHeader>
+                            <CardTitle className="text-lg">توزيع الجمهور</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {overallInsightsLoading ? (
+                              <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                <div className="text-center">
+                                  <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-2 animate-spin" />
+                                  <p className="text-gray-500">جاري تحميل البيانات...</p>
+                                  <p className="text-sm text-gray-400">يرجى الانتظار</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <AudienceChart 
+                                data={{
+                                  totalClicks: overallInsights?.totalClicks || 0,
+                                  totalConversions: overallInsights?.totalConversions || 0,
+                                  totalImpressions: overallInsights?.totalImpressions || 0
+                                }}
+                              />
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Top Performing Ads */}
+                      <Card className="theme-border">
+                        <CardHeader>
+                          <CardTitle className="text-lg">أفضل الإعلانات أداءً</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {overallInsights && overallInsights.adInsights && Object.keys(overallInsights.adInsights).length > 0 ? (
+                            <div className="space-y-4">
+                              {Object.entries(overallInsights.adInsights)
+                                .sort(([,a]: any, [,b]: any) => (parseFloat(b.spend || 0) - parseFloat(a.spend || 0)))
+                                .slice(0, 5)
+                                .map(([adId, insights]: any) => (
+                                  <div key={adId} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-sm">إعلان #{adId.slice(-8)}</h4>
+                                      <div className="flex gap-4 mt-2 text-xs text-gray-600">
+                                        <span>مرات الظهور: {Number(insights.impressions || 0).toLocaleString('ar-IQ')}</span>
+                                        <span>النقرات: {Number(insights.clicks || 0).toLocaleString('ar-IQ')}</span>
+                                        <span>الإنفاق: ${parseFloat(insights.spend || 0).toFixed(2)}</span>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-lg font-bold text-green-600">
+                                        {insights.ctr ? `${parseFloat(insights.ctr).toFixed(2)}%` : '0%'}
+                                      </div>
+                                      <div className="text-xs text-gray-500">معدل النقر</div>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <Video className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                              <p className="text-gray-500">
+                                {overallInsightsLoading ? 'جاري تحميل الإعلانات...' : 'لا توجد إعلانات للعرض'}
+                              </p>
+                              <p className="text-sm text-gray-400">
+                                {overallInsightsLoading ? 'يرجى الانتظار' : 'أنشئ إعلانات لرؤية أدائها هنا'}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
                   </TabsContent>
                 </Tabs>
               )}
@@ -4959,6 +5360,355 @@ export default function PlatformAdsMetaManagement() {
             {/* Loading Message */}
             <div className="text-gray-400 text-base text-center">
               سيتم تحديث الصفحة خلال 3 ثواني...
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ad Statistics Dialog */}
+      <Dialog open={adStatsDialogOpen} onOpenChange={setAdStatsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <BarChart3 className="w-6 h-6" />
+              إحصائيات الإعلان: {selectedAdForStats?.name}
+            </DialogTitle>
+            <DialogDescription>
+              تفاصيل الأداء والإحصائيات المفصلة للإعلان
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Ad Basic Info */}
+            <Card className="theme-border">
+              <CardHeader>
+                <CardTitle className="text-lg">معلومات الإعلان</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">اسم الإعلان</p>
+                    <p className="font-semibold">{selectedAdForStats?.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">الحالة</p>
+                    <Badge variant={selectedAdForStats?.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                      {selectedAdForStats?.status === 'ACTIVE' ? 'نشط' : 
+                       selectedAdForStats?.status === 'PAUSED' ? 'متوقف' : 
+                       selectedAdForStats?.status === 'PENDING_REVIEW' ? 'قيد المراجعة' : 
+                       selectedAdForStats?.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">تاريخ الإنشاء</p>
+                    <p className="font-semibold">
+                      {selectedAdForStats?.created_time ? 
+                        new Date(selectedAdForStats.created_time).toLocaleDateString('ar-IQ') : 
+                        'غير متوفر'
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">آخر تحديث</p>
+                    <p className="font-semibold">
+                      {selectedAdForStats?.updated_time ? 
+                        new Date(selectedAdForStats.updated_time).toLocaleDateString('ar-IQ') : 
+                        'غير متوفر'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Performance Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">مرات الظهور</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.impressions ? 
+                         Number(selectedAdInsights.impressions).toLocaleString('ar-IQ') : '0'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {statsDateRange === 'today' ? 'اليوم' :
+                         statsDateRange === 'yesterday' ? 'أمس' :
+                         statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
+                         statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
+                         statsDateRange === 'last_30d' ? 'آخر 30 يوم' : 'الفترة المحددة'}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                      <Eye className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">النقرات</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.clicks ? 
+                         Number(selectedAdInsights.clicks).toLocaleString('ar-IQ') : '0'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {statsDateRange === 'today' ? 'اليوم' :
+                         statsDateRange === 'yesterday' ? 'أمس' :
+                         statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
+                         statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
+                         statsDateRange === 'last_30d' ? 'آخر 30 يوم' : 'الفترة المحددة'}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-green-100 dark:bg-green-900 rounded-full">
+                      <Target className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">معدل النقر</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.ctr ? 
+                         `${Number(selectedAdInsights.ctr).toFixed(2)}%` : '0%'}
+                      </p>
+                      <p className="text-xs text-gray-500">CTR</p>
+                    </div>
+                    <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                      <TrendingUp className="w-6 h-6 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">الإنفاق</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.spend ? 
+                         `$${Number(selectedAdInsights.spend).toFixed(2)}` : '$0.00'}
+                      </p>
+                      <p className="text-xs text-gray-500">إجمالي</p>
+                    </div>
+                    <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-full">
+                      <TrendingUp className="w-6 h-6 text-orange-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Quality Scores */}
+            <Card className="theme-border">
+              <CardHeader>
+                <CardTitle className="text-lg">تقييمات الجودة</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">تقييم الجودة</p>
+                    <div className="text-2xl font-bold">
+                      {selectedAdInsightsLoading ? '...' : 
+                       selectedAdInsights?.quality_ranking ? 
+                       (() => {
+                         const ranking = selectedAdInsights.quality_ranking;
+                         if (ranking === 'ABOVE_AVERAGE') return 'أعلى من المتوسط';
+                         if (ranking === 'AVERAGE') return 'متوسط';
+                         if (ranking === 'BELOW_AVERAGE') return 'أقل من المتوسط';
+                         return ranking;
+                       })() : 'غير متوفر'}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">تقييم التفاعل</p>
+                    <div className="text-2xl font-bold">
+                      {selectedAdInsightsLoading ? '...' : 
+                       selectedAdInsights?.engagement_rate_ranking ? 
+                       (() => {
+                         const ranking = selectedAdInsights.engagement_rate_ranking;
+                         if (ranking === 'ABOVE_AVERAGE') return 'أعلى من المتوسط';
+                         if (ranking === 'AVERAGE') return 'متوسط';
+                         if (ranking === 'BELOW_AVERAGE') return 'أقل من المتوسط';
+                         return ranking;
+                       })() : 'غير متوفر'}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">تقييم التحويل</p>
+                    <div className="text-2xl font-bold">
+                      {selectedAdInsightsLoading ? '...' : 
+                       selectedAdInsights?.conversion_rate_ranking ? 
+                       (() => {
+                         const ranking = selectedAdInsights.conversion_rate_ranking;
+                         if (ranking === 'ABOVE_AVERAGE') return 'أعلى من المتوسط';
+                         if (ranking === 'AVERAGE') return 'متوسط';
+                         if (ranking === 'BELOW_AVERAGE') return 'أقل من المتوسط';
+                         return ranking;
+                       })() : 'غير متوفر'}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Additional Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">الوصول</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.reach ? 
+                         Number(selectedAdInsights.reach).toLocaleString('ar-IQ') : '0'}
+                      </p>
+                      <p className="text-xs text-gray-500">أشخاص فريدون</p>
+                    </div>
+                    <div className="p-3 bg-indigo-100 dark:bg-indigo-900 rounded-full">
+                      <Users className="w-6 h-6 text-indigo-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">التكرار</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.frequency ? 
+                         Number(selectedAdInsights.frequency).toFixed(2) : '0'}
+                      </p>
+                      <p className="text-xs text-gray-500">متوسط المشاهدات</p>
+                    </div>
+                    <div className="p-3 bg-pink-100 dark:bg-pink-900 rounded-full">
+                      <RefreshCw className="w-6 h-6 text-pink-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">تكلفة النقرة</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.cpc ? 
+                         `$${Number(selectedAdInsights.cpc).toFixed(2)}` : '$0.00'}
+                      </p>
+                      <p className="text-xs text-gray-500">CPC</p>
+                    </div>
+                    <div className="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-full">
+                      <TrendingUp className="w-6 h-6 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="theme-border">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">تكلفة الألف ظهور</p>
+                      <p className="text-2xl font-bold">
+                        {selectedAdInsightsLoading ? '...' : 
+                         selectedAdInsights?.cpm ? 
+                         `$${Number(selectedAdInsights.cpm).toFixed(2)}` : '$0.00'}
+                      </p>
+                      <p className="text-xs text-gray-500">CPM</p>
+                    </div>
+                    <div className="p-3 bg-teal-100 dark:bg-teal-900 rounded-full">
+                      <BarChart3 className="w-6 h-6 text-teal-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Data Availability Info */}
+            <Card className="theme-border bg-blue-50 dark:bg-blue-950">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">معلومات حول البيانات</h4>
+                    <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                      <p>• <strong>تقييمات الجودة:</strong> تظهر فقط للإعلانات النشطة التي حصلت على مرات ظهور كافية</p>
+                      <p>• <strong>البيانات المالية:</strong> قد تستغرق 24-48 ساعة للظهور بعد بدء الإعلان</p>
+                      <p>• <strong>التحديث:</strong> البيانات تُحدث كل ساعة من Facebook</p>
+                      <p>• <strong>الفترة الزمنية:</strong> غير الفترة أعلاه لرؤية بيانات مختلفة</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Performance Chart */}
+            <Card className="theme-border">
+              <CardHeader>
+                <CardTitle className="text-lg">أداء الإعلان عبر الوقت</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {selectedAdInsightsLoading ? (
+                  <div className="h-64 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="text-center">
+                      <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-2 animate-spin" />
+                      <p className="text-gray-500">جاري تحميل البيانات...</p>
+                      <p className="text-sm text-gray-400">يرجى الانتظار</p>
+                    </div>
+                  </div>
+                ) : (
+                  <PerformanceChart 
+                    data={{
+                      totalSpend: parseFloat(selectedAdInsights?.spend || '0'),
+                      totalImpressions: parseInt(selectedAdInsights?.impressions || '0'),
+                      totalClicks: parseInt(selectedAdInsights?.clicks || '0'),
+                      totalConversions: 0 // يمكن إضافة التحويلات لاحقاً
+                    }}
+                    type="bar"
+                    title={`أداء الإعلان - ${selectedAdForStats?.name || 'غير محدد'}`}
+                    adId={selectedAdForStats?.id}
+                    useRealData={true}
+                    datePreset={selectedDateRange.value}
+                    since={selectedDateRange.startDate.toISOString().split('T')[0]}
+                    until={selectedDateRange.endDate.toISOString().split('T')[0]}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setAdStatsDialogOpen(false)}>
+                إغلاق
+              </Button>
+              <Button 
+                className="bg-theme-primary hover:bg-theme-primary-dark"
+                onClick={() => refetchSelectedAdInsights()}
+                disabled={selectedAdInsightsLoading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${selectedAdInsightsLoading ? 'animate-spin' : ''}`} />
+                تحديث البيانات
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -17,11 +17,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5000,
+    // Run Vite dev server on 5173 to avoid conflict with Express on 5000
+    port: 5173,
     host: true,
     proxy: {
       "/api": {
-        target: "http://localhost:5001",
+        // Proxy API to the backend running on 5001
+        target: "http://localhost:5002",
         changeOrigin: true,
       },
     },

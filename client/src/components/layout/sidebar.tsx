@@ -132,6 +132,14 @@ const menuItems = [
     badgeVariant: "destructive" as const,
     adminOnly: true,
   },
+  {
+    href: "/admin-rate-limit-monitor",
+    icon: "fas fa-tachometer-alt",
+    label: "مراقبة معدل الاستخدام",
+    badge: "API",
+    badgeVariant: "secondary" as const,
+    adminOnly: true,
+  },
 ];
 
 export default function Sidebar() {

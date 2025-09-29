@@ -380,42 +380,62 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       return null;
     };
 
-    // إنشاء FBC من fbclid إذا لم يكن موجود في الـ cookies
-    const generateFBCFromURL = () => {
+    // ✅ الطريقة الصحيحة: ترك Facebook Pixel ينشئ _fbc تلقائياً
+    // فقط حفظ fbclid في localStorage للاستخدام في Server-Side API
+    const captureFBCLIDForServerSide = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const fbclid = urlParams.get('fbclid');
       
       if (fbclid) {
-        // إنشاء fbc من fbclid حسب معايير Facebook
-        const timestamp = Math.floor(Date.now() / 1000);
-        const fbc = `fb.1.${timestamp}.${fbclid}`;
+        // حفظ fbclid في localStorage للاستخدام في Server-Side API فقط
+        localStorage.setItem('fbclid', fbclid);
+        localStorage.setItem('fbclid_timestamp', Date.now().toString());
         
-        // حفظ في cookie لاستخدامات مستقبلية (90 يوم)
-        const expiryDate = new Date();
-        expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
-        document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+        console.log('✅ FBCLID captured for Server-Side API:', fbclid);
         
-        console.log('🔍 FBC generated from fbclid:', { fbclid, fbc });
-        return fbc;
+        // ✅ ترك Facebook Pixel ينشئ _fbc cookie تلقائياً
+        // لا نتدخل في آلية Facebook الطبيعية
+        console.log('ℹ️ Facebook Pixel will create _fbc cookie automatically');
+      }
+    };
+    
+    // إنشاء FBC للـ Server-Side API فقط (ليس للبكسل)
+    const generateFBCForServerSide = () => {
+      // محاولة الحصول على _fbc من الكوكي أولاً (الذي أنشأه Facebook Pixel)
+      const existingFBC = getFBCookie('_fbc');
+      if (existingFBC) {
+        console.log('✅ Using existing _fbc cookie from Facebook Pixel:', existingFBC);
+        return existingFBC;
       }
       
-      // محاولة استخراج من localStorage (إذا كان محفوظ من زيارة سابقة)
+      // إذا لم يوجد _fbc، إنشاء واحد للـ Server-Side API فقط
       const storedFbclid = localStorage.getItem('fbclid');
       const storedTimestamp = localStorage.getItem('fbclid_timestamp');
       
       if (storedFbclid && storedTimestamp) {
-        // التحقق من أن البيانات ليست قديمة جداً (أقل من 7 أيام)
         const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-        if (parseInt(storedTimestamp) > sevenDaysAgo) {
-          const timestamp = Math.floor(parseInt(storedTimestamp) / 1000);
-          const fbc = `fb.1.${timestamp}.${storedFbclid}`;
+        const storedTime = parseInt(storedTimestamp);
+        
+        if (storedTime > sevenDaysAgo) {
+          const hostname = window.location.hostname;
+          let subdomainIndex = 1;
           
-          // حفظ في cookie
-          const expiryDate = new Date();
-          expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000));
-          document.cookie = `_fbc=${fbc}; expires=${expiryDate.toUTCString()}; path=/; domain=${window.location.hostname}`;
+          if (hostname === 'localhost' || hostname.split('.').length === 1) {
+            subdomainIndex = 0;
+          } else if (hostname.split('.').length === 2) {
+            subdomainIndex = 1;
+          } else {
+            subdomainIndex = 2;
+          }
           
-          console.log('🔍 FBC generated from stored fbclid:', { storedFbclid, fbc });
+          const fbc = `fb.${subdomainIndex}.${storedTime}.${storedFbclid}`;
+          
+          console.log('✅ FBC generated for Server-Side API only:', { 
+            storedFbclid, 
+            fbc, 
+            timestamp: storedTime,
+            subdomainIndex 
+          });
           return fbc;
         }
       }
@@ -423,13 +443,13 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       return null;
     };
 
-    // الحصول على FBC محسن
+    // الحصول على FBC محسن - للـ Server-Side API
     const getEnhancedFBC = () => {
-      let fbc = getFBCookie('_fbc');
-      if (!fbc) {
-        fbc = generateFBCFromURL();
-      }
-      return fbc;
+      // أولاً: التقاط fbclid إذا كان موجود في URL
+      captureFBCLIDForServerSide();
+      
+      // ثانياً: الحصول على FBC للـ Server-Side API
+      return generateFBCForServerSide();
     };
     
     // إرسال القيمة كما هي بدون تحويل لتطابق الكتالوج
@@ -737,10 +757,100 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       const standardEventType = fbEventMap[eventType] || eventType;
       
       
+      // ✅ إضافة fbc و fbp إلى بيانات الخادم
+      // استخراج fbc من الكوكي أو إنشاؤه من fbclid
+      const getFBCookieLocal = (name: string) => {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+          const [key, value] = cookie.trim().split('=');
+          if (key === name && value && value !== 'undefined' && value !== 'null') {
+            return decodeURIComponent(value);
+          }
+        }
+        return null;
+      };
+      
+      const generateFBCFromURLLocal = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fbclid = urlParams.get('fbclid');
+        
+        if (fbclid) {
+          const timestamp = Date.now();
+          const hostname = window.location.hostname;
+          let subdomainIndex = 1;
+          
+          if (hostname === 'localhost' || hostname.split('.').length === 1) {
+            subdomainIndex = 0;
+          } else if (hostname.split('.').length === 2) {
+            subdomainIndex = 1;
+          } else {
+            subdomainIndex = 2;
+          }
+          
+          return `fb.${subdomainIndex}.${timestamp}.${fbclid}`;
+        }
+        
+        const storedFbclid = localStorage.getItem('fbclid');
+        const storedTimestamp = localStorage.getItem('fbclid_timestamp');
+        
+        if (storedFbclid && storedTimestamp) {
+          const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+          const storedTime = parseInt(storedTimestamp);
+          
+          if (storedTime > sevenDaysAgo) {
+            const hostname = window.location.hostname;
+            let subdomainIndex = 1;
+            
+            if (hostname === 'localhost' || hostname.split('.').length === 1) {
+              subdomainIndex = 0;
+            } else if (hostname.split('.').length === 2) {
+              subdomainIndex = 1;
+            } else {
+              subdomainIndex = 2;
+            }
+            
+            return `fb.${subdomainIndex}.${storedTime}.${storedFbclid}`;
+          }
+        }
+        
+        return null;
+      };
+      
+      let fbc = getFBCookieLocal('_fbc');
+      if (!fbc) {
+        // إنشاء fbc للـ Server-Side API إذا لم يوجد
+        const storedFbclid = localStorage.getItem('fbclid');
+        const storedTimestamp = localStorage.getItem('fbclid_timestamp');
+        
+        if (storedFbclid && storedTimestamp) {
+          const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+          const storedTime = parseInt(storedTimestamp);
+          
+          if (storedTime > sevenDaysAgo) {
+            const hostname = window.location.hostname;
+            let subdomainIndex = 1;
+            
+            if (hostname === 'localhost' || hostname.split('.').length === 1) {
+              subdomainIndex = 0;
+            } else if (hostname.split('.').length === 2) {
+              subdomainIndex = 1;
+            } else {
+              subdomainIndex = 2;
+            }
+            
+            fbc = `fb.${subdomainIndex}.${storedTime}.${storedFbclid}`;
+          }
+        }
+      }
+      
+      const fbp = getFBCookieLocal('_fbp');
+      
       const serverEventData = {
         ...eventData,
         event_id: eventId,
-        event_source_url: window.location.href
+        event_source_url: window.location.href,
+        fbc: fbc, // ✅ إرسال fbc للخادم
+        fbp: fbp  // ✅ إرسال fbp للخادم
       };
       
       console.log('🔄 Sending to Server-Side API:', {
@@ -751,7 +861,9 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
         value: serverEventData.value,
         currency: serverEventData.currency,
         customer_phone: serverEventData.customer_phone ? '[REDACTED]' : undefined,
-        customer_email: serverEventData.customer_email ? '[REDACTED]' : undefined
+        customer_email: serverEventData.customer_email ? '[REDACTED]' : undefined,
+        fbc: fbc ? 'PRESENT' : 'MISSING', // ✅ إظهار حالة fbc
+        fbp: fbp ? 'PRESENT' : 'MISSING'  // ✅ إظهار حالة fbp
       });
       
       const response = await fetch('/api/facebook-conversions', {

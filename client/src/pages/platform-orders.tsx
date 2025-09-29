@@ -10,7 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import PlatformSidebar from "@/components/PlatformSidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { useIsMobile } from '@/hooks/use-mobile';
 import CompactOrderModal from "@/components/modals/compact-order-modal";
 import OrderInvoicePrintModal from "@/components/OrderInvoicePrintModal";
 import CustomExcelBuilderModal from "@/components/CustomExcelBuilderModal";
@@ -210,6 +211,9 @@ const convertToPublicUrls = (imageUrls: string[] | null): string[] => {
 };
 
 export default function PlatformOrders() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إدارة الطلبات');
+  
   const params = useParams();
   // Get platformId from session or URL params
   const [platformId, setPlatformId] = useState<string | null>(null);

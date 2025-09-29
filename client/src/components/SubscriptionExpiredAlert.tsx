@@ -24,7 +24,7 @@ export function SubscriptionExpiredAlert({ platform, onRenew }: SubscriptionExpi
 
   const getPlanPrice = (plan: string) => {
     switch (plan) {
-      case 'basic': return '1,000 د.ع';
+      case 'basic': return '49,000 د.ع';
       case 'premium': return '69,000 د.ع';
       case 'enterprise': return '99,000 د.ع';
       default: return '0 د.ع';

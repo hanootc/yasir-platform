@@ -15,7 +15,7 @@ const SubscriptionRenewal = () => {
     {
       id: 'basic',
       name: 'البداية',
-      price: '1,000',
+      price: '49,000',
       currency: 'IQD',
       duration: 'دينار/شهر',
       icon: Shield,
@@ -24,7 +24,7 @@ const SubscriptionRenewal = () => {
       features: [
         "25 منتج",
         "25 صفحة هبوط", 
-        "1000 طلب شهرياً",
+        "2000 طلب شهرياً",
         "3 حساب موظف",
         "إدارة مخزن",
         "8 ثيمات ألوان + نظام ليلي/نهاري",
@@ -88,11 +88,37 @@ const SubscriptionRenewal = () => {
     setIsProcessing(true);
     
     try {
-      // محاكاة عملية الدفع - سيتم استبدالها بـ API حقيقي
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // جلب بيانات المنصة من الجلسة
+      const platformSession = localStorage.getItem('platformSession');
+      let platformData = {};
       
-      // توجيه لصفحة الدفع أو معالجة التجديد
-      window.location.href = `/payment?plan=${selectedPlan}&action=renewal`;
+      if (platformSession) {
+        try {
+          const sessionData = JSON.parse(platformSession);
+          platformData = {
+            platformName: sessionData.platformName,
+            subdomain: sessionData.subdomain,
+            ownerName: sessionData.ownerName,
+            phoneNumber: sessionData.phoneNumber || sessionData.contactPhone
+          };
+        } catch (error) {
+          console.error('Error parsing platform session:', error);
+        }
+      }
+      
+      // حفظ بيانات التجديد مع بيانات المنصة
+      const renewalData = {
+        selectedPlan,
+        timestamp: new Date().toISOString(),
+        ...platformData
+      };
+      localStorage.setItem('renewalData', JSON.stringify(renewalData));
+      
+      // محاكاة معالجة قصيرة
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // توجيه لصفحة التواصل مع الدعم
+      window.location.href = `/subscription-renewal-contact?plan=${selectedPlan}`;
       
     } catch (error) {
       console.error('خطأ في عملية التجديد:', error);

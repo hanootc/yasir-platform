@@ -14,6 +14,7 @@ import PlatformSidebar from "@/components/PlatformSidebar";
 import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
 import { useCurrentSession } from "@/hooks/useSessionInfo";
@@ -39,6 +40,9 @@ const menuItems = [
 ];
 
 export default function PlatformLandingPages() {
+  // تعيين عنوان الصفحة
+  usePageTitle('صفحات الهبوط');
+
   const { isEmployee, employeeSession, isLoading: sessionLoading } = useCurrentSession();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('all');

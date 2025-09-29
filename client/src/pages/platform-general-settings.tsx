@@ -38,10 +38,6 @@ const platformGeneralSettingsSchema = z.object({
   whatsappNumber: z.string().optional(),
   contactAddress: z.string().optional(),
   
-  // Platform Settings
-  isPublic: z.boolean().default(true),
-  allowRegistration: z.boolean().default(true),
-  maintenanceMode: z.boolean().default(false),
   
   // Notification Settings
   emailNotifications: z.boolean().default(true),
@@ -84,9 +80,6 @@ export default function PlatformGeneralSettings() {
       contactPhone: "",
       whatsappNumber: "",
       contactAddress: "",
-      isPublic: true,
-      allowRegistration: true,
-      maintenanceMode: false,
       emailNotifications: true,
       smsNotifications: false,
       pushNotifications: true,
@@ -103,9 +96,6 @@ export default function PlatformGeneralSettings() {
         contactPhone: platformSettings.contactPhone || "",
         whatsappNumber: platformSettings.whatsappNumber || "",
         contactAddress: platformSettings.contactAddress || "",
-        isPublic: platformSettings.isPublic ?? true,
-        allowRegistration: platformSettings.allowRegistration ?? true,
-        maintenanceMode: platformSettings.maintenanceMode ?? false,
         emailNotifications: platformSettings.emailNotifications ?? true,
         smsNotifications: platformSettings.smsNotifications ?? false,
         pushNotifications: platformSettings.pushNotifications ?? true,
@@ -362,131 +352,6 @@ export default function PlatformGeneralSettings() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="isPublic"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border theme-border p-4 bg-theme-primary-lighter hover:bg-theme-primary-light/50 transition-colors">
-                        <div className="space-y-0.5 flex-1">
-                          <FormLabel className="text-base font-medium text-theme-text">
-                            منصة عامة
-                          </FormLabel>
-                          <FormDescription className="text-sm text-theme-text-secondary">
-                            السماح للعامة بزيارة المنصة ومنتجاتها
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => field.onChange(!field.value)}
-                              className={`
-                                w-8 h-5 rounded-full transition-all duration-300 ease-in-out relative focus:outline-none focus:ring-2 focus:ring-theme-primary focus:ring-opacity-50
-                                ${field.value ? 'bg-theme-gradient' : 'bg-gray-700 dark:bg-gray-600'}
-                                cursor-pointer
-                              `}
-                            >
-                              <span
-                                className={`
-                                  inline-block h-4 w-4 transform rounded-full shadow-md transition-all duration-300 ease-in-out absolute top-0.5 
-                                  ${field.value ? 'left-4 bg-white' : 'left-0.5 bg-theme-primary'}
-                                `}
-                              />
-                            </button>
-                            <span className={`text-xs font-medium ${
-                              field.value ? 'text-theme-primary' : 'text-theme-primary/60'
-                            }`}>
-                              {field.value ? 'نشط' : 'متوقف'}
-                            </span>
-                          </div>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="allowRegistration"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border theme-border p-4 bg-theme-primary-lighter hover:bg-theme-primary-light/50 transition-colors">
-                        <div className="space-y-0.5 flex-1">
-                          <FormLabel className="text-base font-medium text-theme-text">
-                            السماح بالتسجيل
-                          </FormLabel>
-                          <FormDescription className="text-sm text-theme-text-secondary">
-                            السماح للمستخدمين الجدد بإنشاء حسابات
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => field.onChange(!field.value)}
-                              className={`
-                                w-8 h-5 rounded-full transition-all duration-300 ease-in-out relative focus:outline-none focus:ring-2 focus:ring-theme-primary focus:ring-opacity-50
-                                ${field.value ? 'bg-theme-gradient' : 'bg-gray-700 dark:bg-gray-600'}
-                                cursor-pointer
-                              `}
-                            >
-                              <span
-                                className={`
-                                  inline-block h-4 w-4 transform rounded-full shadow-md transition-all duration-300 ease-in-out absolute top-0.5 
-                                  ${field.value ? 'left-4 bg-white' : 'left-0.5 bg-theme-primary'}
-                                `}
-                              />
-                            </button>
-                            <span className={`text-xs font-medium ${
-                              field.value ? 'text-theme-primary' : 'text-theme-primary/60'
-                            }`}>
-                              {field.value ? 'نشط' : 'متوقف'}
-                            </span>
-                          </div>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="maintenanceMode"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border theme-border p-4 bg-theme-primary-lighter hover:bg-theme-primary-light/50 transition-colors">
-                        <div className="space-y-0.5 flex-1">
-                          <FormLabel className="text-base font-medium text-theme-text">
-                            وضع الصيانة
-                          </FormLabel>
-                          <FormDescription className="text-sm text-theme-text-secondary">
-                            تفعيل وضع الصيانة وإخفاء المنصة مؤقتاً
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => field.onChange(!field.value)}
-                              className={`
-                                w-8 h-5 rounded-full transition-all duration-300 ease-in-out relative focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50
-                                ${field.value ? 'bg-gradient-to-r from-red-500 to-red-600' : 'bg-gray-700 dark:bg-gray-600'}
-                                cursor-pointer
-                              `}
-                            >
-                              <span
-                                className={`
-                                  inline-block h-4 w-4 transform rounded-full shadow-md transition-all duration-300 ease-in-out absolute top-0.5 
-                                  ${field.value ? 'left-4 bg-white' : 'left-0.5 bg-red-500'}
-                                `}
-                              />
-                            </button>
-                            <span className={`text-xs font-medium ${
-                              field.value ? 'text-red-500' : 'text-theme-primary/60'
-                            }`}>
-                              {field.value ? 'نشط' : 'متوقف'}
-                            </span>
-                          </div>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
                 </CardContent>
               </Card>
 

@@ -2538,7 +2538,12 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}
       res.json({ 
         message: "Platform registered successfully",
         platformName: platform.platformName,
-        subdomain: platform.subdomain 
+        subdomain: platform.subdomain,
+        ownerName: platform.ownerName,
+        phoneNumber: platform.phoneNumber,
+        businessType: platform.businessType,
+        subscriptionPlan: platform.subscriptionPlan,
+        createdAt: platform.createdAt
       });
     } catch (error) {
       console.error("Error registering platform:", error);
@@ -2596,6 +2601,30 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}
         return res.status(404).json({ message: "المنصة غير موجودة" });
       }
 
+      // التحقق من حالة المنصة
+      if (platform.status === 'pending_verification') {
+        return res.status(403).json({ 
+          message: "المنصة في انتظار التفعيل",
+          status: "pending_verification",
+          platformData: {
+            platformName: platform.platformName,
+            subdomain: platform.subdomain,
+            ownerName: platform.ownerName,
+            phoneNumber: platform.phoneNumber,
+            businessType: platform.businessType,
+            subscriptionPlan: platform.subscriptionPlan,
+            createdAt: platform.createdAt
+          }
+        });
+      }
+
+      if (platform.status === 'suspended') {
+        return res.status(403).json({ 
+          message: "المنصة معلقة. يرجى التواصل مع الدعم",
+          status: "suspended"
+        });
+      }
+
       // التحقق من كلمة المرور - مقارنة مباشرة لأن كلمة المرور غير مشفرة في قاعدة البيانات
       const isPasswordValid = password === platform.password;
       if (!isPasswordValid) {
@@ -2626,12 +2655,292 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}
           platformName: platform.platformName,
           subdomain: platform.subdomain,
           businessType: platform.businessType,
+          ownerName: platform.ownerName,
+          phoneNumber: platform.phoneNumber,
+          contactPhone: platform.contactPhone,
+          whatsappNumber: platform.whatsappNumber,
           logoUrl: platform.logoUrl,
         });
       });
     } catch (error) {
       console.error("Error during platform login:", error);
       res.status(500).json({ message: "خطأ في تسجيل الدخول" });
+    }
+  });
+
+  // Get governorate statistics for current platform
+  app.get('/api/platform/governorate-stats', async (req, res) => {
+    try {
+      console.log('🔍 API /api/platform/governorate-stats called');
+      console.log('🔍 Session data:', req.session);
+      
+      const platformSession = (req.session as any)?.platform;
+      
+      if (!platformSession || !platformSession.platformId) {
+        console.log('❌ No platform session found');
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      console.log('🔍 Starting governorate stats query for platform:', platformSession.platformId);
+      
+      // أولاً، تحقق من وجود طلبات للمنصة في جدول orders العادي
+      const totalOrdersForPlatform = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(orders)
+      .where(eq(orders.platformId, platformSession.platformId));
+      
+      console.log('🔍 Total orders in orders table:', totalOrdersForPlatform[0]?.count || 0);
+      
+      // تحقق من وجود طلبات في جدول landing page orders
+      const { landingPageOrders } = await import('../shared/schema.js');
+      const totalLPOrdersForPlatform = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(landingPageOrders)
+      .where(eq(landingPageOrders.platformId, platformSession.platformId));
+      
+      console.log('🔍 Total orders in landing_page_orders table:', totalLPOrdersForPlatform[0]?.count || 0);
+      
+      // تحقق من توزيع الطلبات حسب الحالة في جدول orders
+      const ordersByStatus = await db.select({
+        status: orders.status,
+        count: sql<number>`count(*)`
+      })
+      .from(orders)
+      .where(eq(orders.platformId, platformSession.platformId))
+      .groupBy(orders.status);
+      
+      console.log('🔍 Orders by status in orders table:', ordersByStatus);
+      
+      // تحقق من توزيع الطلبات حسب الحالة في جدول landing page orders
+      const lpOrdersByStatus = await db.select({
+        status: landingPageOrders.status,
+        count: sql<number>`count(*)`
+      })
+      .from(landingPageOrders)
+      .where(eq(landingPageOrders.platformId, platformSession.platformId))
+      .groupBy(landingPageOrders.status);
+      
+      console.log('🔍 Orders by status in landing_page_orders table:', lpOrdersByStatus);
+      
+      // جلب إحصائيات الطلبات حسب المحافظة للمنصة الحالية من جدول orders العادي
+      // نحسب جميع الطلبات بغض النظر عن الحالة (pending, confirmed, shipped, delivered, cancelled)
+      const governorateStats = await db.select({
+        governorate: orders.customerGovernorate,
+        orderCount: sql<number>`count(*)`,
+        totalRevenue: sql<number>`sum(${orders.total})`
+      })
+      .from(orders)
+      .where(eq(orders.platformId, platformSession.platformId))
+      // لا نضع شرط على status - نريد جميع الطلبات
+      .groupBy(orders.customerGovernorate);
+
+      // جلب إحصائيات من جدول landing page orders أيضاً
+      // نحسب جميع الطلبات بغض النظر عن الحالة (pending, confirmed, shipped, delivered, cancelled)
+      const lpGovernorateStats = await db.select({
+        governorate: landingPageOrders.customerGovernorate,
+        orderCount: sql<number>`count(*)`,
+        totalRevenue: sql<number>`sum(${landingPageOrders.totalAmount})`
+      })
+      .from(landingPageOrders)
+      .where(eq(landingPageOrders.platformId, platformSession.platformId))
+      // لا نضع شرط على status - نريد جميع الطلبات
+      .groupBy(landingPageOrders.customerGovernorate);
+
+      console.log('🔍 Landing page orders stats:', lpGovernorateStats);
+
+      // دمج النتائج من الجدولين
+      const combinedStats = [...governorateStats];
+      
+      // إضافة أو دمج بيانات landing page orders
+      lpGovernorateStats.forEach(lpStat => {
+        const existingIndex = combinedStats.findIndex(stat => stat.governorate === lpStat.governorate);
+        if (existingIndex >= 0) {
+          // دمج البيانات إذا كانت المحافظة موجودة
+          combinedStats[existingIndex].orderCount += Number(lpStat.orderCount);
+          combinedStats[existingIndex].totalRevenue += Number(lpStat.totalRevenue);
+        } else {
+          // إضافة محافظة جديدة
+          combinedStats.push(lpStat);
+        }
+      });
+
+      console.log('🔍 Combined stats:', combinedStats);
+
+      // تشخيص البيانات
+      console.log('🔍 Raw governorate stats:', governorateStats);
+      console.log('🔍 Platform ID:', platformSession.platformId);
+      console.log('🔍 Stats length:', governorateStats.length);
+
+      // خريطة تحويل الأسماء العربية إلى IDs إنجليزية
+      const governorateMapping: Record<string, string> = {
+        'الأنبار': 'anbar',
+        'نينوى': 'nineveh', 
+        'دهوك': 'duhok',
+        'أربيل': 'erbil',
+        'صلاح الدين': 'salahaldin',
+        'حلبجة': 'halabja',
+        'السليمانية': 'sulaymaniyah',
+        'كركوك': 'kirkuk',
+        'ديالى': 'diyala',
+        'بغداد': 'baghdad',
+        'بابل': 'babylon',
+        'كربلاء': 'karbala',
+        'النجف': 'najaf',
+        'القادسية': 'qadisiyyah',
+        'المثنى': 'muthanna',
+        'ذي قار': 'dhi_qar',
+        'ميسان': 'maysan',
+        'البصرة': 'basra',
+        'واسط': 'wasit'
+      };
+
+      // تحويل النتائج المدمجة إلى الشكل المطلوب للخريطة
+      const governorateData = combinedStats.map(stat => {
+        const arabicName = stat.governorate || 'غير محدد';
+        const englishId = governorateMapping[arabicName] || arabicName?.toLowerCase().replace(/\s+/g, '_') || 'unknown';
+        
+        return {
+          id: englishId,
+          name: arabicName,
+          orders: Number(stat.orderCount) || 0,
+          revenue: Number(stat.totalRevenue) || 0
+        };
+      });
+
+      console.log('🔍 Processed governorate data:', governorateData);
+      
+      // إذا لم توجد بيانات حقيقية، أرجع مصفوفة فارغة
+      if (combinedStats.length === 0) {
+        console.log('⚠️ لا توجد طلبات لهذه المنصة في قاعدة البيانات');
+        return res.json([]);
+      }
+      
+      res.json(governorateData);
+    } catch (error) {
+      console.error('Error getting governorate stats:', error);
+      res.status(500).json({ message: 'خطأ في جلب إحصائيات المحافظات' });
+    }
+  });
+
+
+  // Debug endpoint to check ALL orders data in database
+  app.get('/api/debug/all-orders', async (req, res) => {
+    try {
+      // جلب جميع الطلبات من جدول orders
+      const allRegularOrders = await db.select({
+        id: orders.id,
+        platformId: orders.platformId,
+        customerGovernorate: orders.customerGovernorate,
+        total: orders.total,
+        status: orders.status,
+        createdAt: orders.createdAt
+      })
+      .from(orders)
+      .limit(10);
+      
+      // جلب جميع الطلبات من جدول landing_page_orders
+      const { landingPageOrders } = await import('../shared/schema.js');
+      const allLPOrders = await db.select({
+        id: landingPageOrders.id,
+        platformId: landingPageOrders.platformId,
+        customerGovernorate: landingPageOrders.customerGovernorate,
+        totalAmount: landingPageOrders.totalAmount,
+        status: landingPageOrders.status,
+        createdAt: landingPageOrders.createdAt
+      })
+      .from(landingPageOrders)
+      .limit(10);
+      
+      // إحصائيات عامة
+      const regularOrdersCount = await db.select({ count: sql<number>`count(*)` }).from(orders);
+      const lpOrdersCount = await db.select({ count: sql<number>`count(*)` }).from(landingPageOrders);
+      
+      res.json({
+        regularOrders: {
+          count: regularOrdersCount[0]?.count || 0,
+          sample: allRegularOrders
+        },
+        landingPageOrders: {
+          count: lpOrdersCount[0]?.count || 0,
+          sample: allLPOrders
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching all orders:', error);
+      res.status(500).json({ message: 'خطأ في جلب الطلبات' });
+    }
+  });
+
+  // Debug endpoint to check orders data
+  app.get('/api/debug/orders', async (req, res) => {
+    try {
+      const platformSession = (req.session as any)?.platform;
+      
+      if (!platformSession || !platformSession.platformId) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      // جلب عينة من الطلبات للتشخيص
+      const sampleOrders = await db.select({
+        id: orders.id,
+        customerName: orders.customerName,
+        customerGovernorate: orders.customerGovernorate,
+        total: orders.total,
+        platformId: orders.platformId
+      })
+      .from(orders)
+      .where(eq(orders.platformId, platformSession.platformId))
+      .limit(10);
+
+      // إحصائيات عامة
+      const totalOrdersCount = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(orders)
+      .where(eq(orders.platformId, platformSession.platformId));
+
+      res.json({
+        platformId: platformSession.platformId,
+        totalOrders: totalOrdersCount[0]?.count || 0,
+        sampleOrders: sampleOrders
+      });
+    } catch (error) {
+      console.error('Error getting debug orders:', error);
+      res.status(500).json({ message: 'خطأ في جلب بيانات التشخيص' });
+    }
+  });
+
+  // Get current platform data for renewal
+  app.get('/api/platform/current', async (req, res) => {
+    try {
+      const platformSession = (req.session as any)?.platform;
+      
+      if (!platformSession || !platformSession.platformId) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const platform = await storage.getPlatform(platformSession.platformId);
+      
+      if (!platform) {
+        return res.status(404).json({ message: "المنصة غير موجودة" });
+      }
+
+      res.json({
+        platformName: platform.platformName,
+        subdomain: platform.subdomain,
+        ownerName: platform.ownerName,
+        phoneNumber: platform.phoneNumber,
+        contactPhone: platform.contactPhone,
+        whatsappNumber: platform.whatsappNumber,
+        businessType: platform.businessType,
+        subscriptionPlan: platform.subscriptionPlan,
+        status: platform.status
+      });
+    } catch (error) {
+      console.error('Error getting current platform data:', error);
+      res.status(500).json({ message: 'خطأ في جلب بيانات المنصة' });
     }
   });
 
@@ -2808,6 +3117,29 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}
     } catch (error) {
       console.error('Error processing ZainCash callback:', error);
       res.redirect('/platform-registration?payment=error&reason=callback_error');
+    }
+  });
+
+  // Test ZainCash connection endpoint
+  app.get('/api/payments/zaincash/test', async (req, res) => {
+    try {
+      console.log('🔍 Testing ZainCash API connection...');
+      const testResult = await zainCashService.testConnection();
+      
+      res.json({
+        success: testResult,
+        message: testResult 
+          ? 'ZainCash API connection successful' 
+          : 'ZainCash API connection failed',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('ZainCash connection test failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -6385,7 +6717,7 @@ ${platform?.platformName || 'متجرنا'}`;
         `https://${process.env.DOMAIN}` : 
         `${req.protocol}://${host}`;
       const redirectUri = encodeURIComponent(`${baseUrl}/api/platform-ads/meta/callback`);
-      const scope = encodeURIComponent('ads_management,ads_read,business_management');
+      const scope = encodeURIComponent('ads_management,ads_read,business_management,pages_show_list,pages_read_engagement');
       const state = `${(req.session as any).platform?.platformId || 'unknown'}_${Math.random().toString(36).substring(7)}`;
       
       const authUrl = `https://www.facebook.com/v23.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&response_type=code`;
@@ -6919,6 +7251,131 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // Rate limiting middleware للعملاء
+  const clientRateLimits = new Map<string, { count: number, resetTime: number }>();
+  
+  const checkClientRateLimit = (platformId: string, maxRequestsPerHour: number = 50) => {
+    const now = Date.now();
+    const hourInMs = 60 * 60 * 1000;
+    
+    const clientLimit = clientRateLimits.get(platformId);
+    
+    if (!clientLimit || now > clientLimit.resetTime) {
+      // إعادة تعيين العداد كل ساعة
+      clientRateLimits.set(platformId, {
+        count: 1,
+        resetTime: now + hourInMs
+      });
+      return true;
+    }
+    
+    if (clientLimit.count >= maxRequestsPerHour) {
+      return false; // تجاوز الحد المسموح
+    }
+    
+    clientLimit.count++;
+    return true;
+  };
+
+  // API لمراقبة Rate Limiting - للإدارة فقط
+  app.get('/api/admin/rate-limit-status', isAdminAuthenticated, async (req, res) => {
+    try {
+      const now = Date.now();
+      const clientStats = [];
+      let totalUsage = 0;
+      let totalLimit = 0;
+
+      // جلب معلومات جميع المنصات
+      const allPlatforms = await db.select({
+        id: platforms.id,
+        platformName: platforms.platformName,
+        subscriptionPlan: platforms.subscriptionPlan,
+        metaAccessToken: platforms.metaAccessToken
+      }).from(platforms);
+
+      // حساب الإحصائيات لكل عميل
+      for (const platform of allPlatforms) {
+        const clientLimit = clientRateLimits.get(platform.id);
+        const maxRequests = platform.subscriptionPlan === 'premium' ? 100 : 
+                           platform.subscriptionPlan === 'enterprise' ? 200 : 50;
+        
+        const currentUsage = clientLimit && now < clientLimit.resetTime ? clientLimit.count : 0;
+        const usagePercentage = Math.round((currentUsage / maxRequests) * 100);
+        const resetTime = clientLimit ? new Date(clientLimit.resetTime) : null;
+        
+        totalUsage += currentUsage;
+        totalLimit += maxRequests;
+
+        clientStats.push({
+          platformId: platform.id,
+          platformName: platform.platformName,
+          subscriptionPlan: platform.subscriptionPlan,
+          currentUsage,
+          maxRequests,
+          usagePercentage,
+          resetTime,
+          status: usagePercentage >= 90 ? 'critical' : 
+                  usagePercentage >= 70 ? 'warning' : 'normal',
+          hasMetaConnection: !!platform.metaAccessToken
+        });
+      }
+
+      // حساب الإحصائيات الإجمالية
+      const totalUsagePercentage = Math.round((totalUsage / totalLimit) * 100);
+      const metaGlobalLimit = allPlatforms.length * 200; // حد Meta الإجمالي
+      const metaUsagePercentage = Math.round((totalUsage / metaGlobalLimit) * 100);
+
+      // التنبيهات
+      const alerts = [];
+      
+      // تنبيهات العملاء
+      clientStats.forEach(client => {
+        if (client.usagePercentage >= 90) {
+          alerts.push({
+            type: 'critical',
+            message: `العميل ${client.platformName} تجاوز 90% من الحد المسموح`,
+            platformId: client.platformId
+          });
+        } else if (client.usagePercentage >= 70) {
+          alerts.push({
+            type: 'warning', 
+            message: `العميل ${client.platformName} اقترب من الحد المسموح (${client.usagePercentage}%)`,
+            platformId: client.platformId
+          });
+        }
+      });
+
+      // تنبيه الحد الإجمالي
+      if (metaUsagePercentage >= 80) {
+        alerts.push({
+          type: 'critical',
+          message: `تم استهلاك ${metaUsagePercentage}% من حد Meta الإجمالي`,
+          global: true
+        });
+      }
+
+      res.json({
+        success: true,
+        summary: {
+          totalClients: allPlatforms.length,
+          totalUsage,
+          totalLimit,
+          totalUsagePercentage,
+          metaGlobalLimit,
+          metaUsagePercentage,
+          activeClients: clientStats.filter(c => c.currentUsage > 0).length
+        },
+        clients: clientStats,
+        alerts,
+        lastUpdated: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error('Error fetching rate limit status:', error);
+      res.status(500).json({ error: 'Failed to fetch rate limit status' });
+    }
+  });
+
   // جلب صفحات الفيسبوك المتاحة
   app.get('/api/platform-ads/meta/pages', ensurePlatformSession, async (req: any, res) => {
     try {
@@ -6926,6 +7383,16 @@ ${platform?.platformName || 'متجرنا'}`;
       
       if (!platformId) {
         return res.status(404).json({ error: 'Platform not found for user' });
+      }
+
+      // فحص Rate Limiting للعميل
+      if (!checkClientRateLimit(platformId, 50)) {
+        console.log(`⚠️ Rate limit exceeded for platform ${platformId}`);
+        return res.status(429).json({ 
+          error: 'Rate limit exceeded', 
+          message: 'تم تجاوز الحد المسموح من الطلبات. يرجى المحاولة لاحقاً.',
+          retryAfter: 3600 // ساعة واحدة
+        });
       }
 
       const platform = await storage.getPlatform(platformId);
@@ -6939,16 +7406,23 @@ ${platform?.platformName || 'متجرنا'}`;
       }
 
       // جلب الصفحات من Meta API
+      console.log('🔍 جلب الصفحات من Meta API...');
       const response = await fetch(`https://graph.facebook.com/v23.0/me/accounts?access_token=${platform.metaAccessToken}&fields=id,name,about,category,username,picture,instagram_business_account{id,name,username,profile_picture_url}`);
       
       const data = await response.json();
+      console.log('📦 استجابة Meta Pages API:', JSON.stringify(data, null, 2));
       
       if (data.error) {
-        console.error('Meta Pages API error:', data.error);
-        return res.status(400).json({ error: data.error.message });
+        console.error('❌ Meta Pages API error:', data.error);
+        return res.status(400).json({ 
+          error: data.error.message,
+          errorCode: data.error.code,
+          errorType: data.error.type,
+          details: 'قد تحتاج لإضافة أذونات pages_show_list في Meta Developer Console'
+        });
       }
 
-      console.log('📄 تم جلب', data.data?.length || 0, 'صفحة فيسبوك');
+      console.log('✅ تم جلب', data.data?.length || 0, 'صفحة فيسبوك');
       
       res.json({
         success: true,
@@ -7544,6 +8018,221 @@ ${platform?.platformName || 'متجرنا'}`;
     } catch (error) {
       console.error('Error fetching Meta ad insights:', error);
       res.status(500).json({ error: 'Failed to fetch ad insights' });
+    }
+  });
+
+  // جلب ملخص إحصائيات جميع الإعلانات لحساب معين
+  app.get('/api/platform-ads/meta/ad-insights-summary', async (req, res) => {
+    try {
+      const { accountId, datePreset = 'last_7d', since, until } = req.query;
+      
+      const platformId = (req.session as any).platform?.platformId;
+      
+      if (!platformId) {
+        return res.status(404).json({ error: 'Platform not found for user' });
+      }
+
+      const platform = await storage.getPlatform(platformId);
+      if (!platform || !platform.metaAccessToken) {
+        return res.status(400).json({ error: 'Meta connection not found' });
+      }
+
+      // فحص صلاحية التوكن
+      if (platform.metaTokenExpiresAt && new Date() >= new Date(platform.metaTokenExpiresAt)) {
+        return res.status(401).json({ error: 'Meta token expired' });
+      }
+
+      // تحديد الفترة الزمنية
+      let dateParams = `date_preset=${datePreset}`;
+      if (since && until) {
+        dateParams = `time_range={"since":"${since}","until":"${until}"}`;
+      }
+      
+      // جلب جميع الإعلانات للحساب
+      const adsResponse = await fetch(`https://graph.facebook.com/v23.0/act_${accountId}/ads?access_token=${platform.metaAccessToken}&fields=id,name&limit=100`);
+      const adsData = await adsResponse.json();
+      
+      if (adsData.error) {
+        console.error('Meta Ads API error:', adsData.error);
+        return res.status(400).json({ error: adsData.error.message });
+      }
+
+      const insights: any = {};
+      
+      // جلب إحصائيات كل إعلان
+      for (const ad of adsData.data || []) {
+        try {
+          const insightsResponse = await fetch(`https://graph.facebook.com/v23.0/${ad.id}/insights?access_token=${platform.metaAccessToken}&fields=impressions,clicks,ctr,spend,actions&${dateParams}`);
+          const insightsData = await insightsResponse.json();
+          
+          if (insightsData.data && insightsData.data.length > 0) {
+            insights[ad.id] = insightsData.data[0];
+          }
+        } catch (error) {
+          console.error(`Error fetching insights for ad ${ad.id}:`, error);
+        }
+      }
+
+      console.log('📊 تم جلب ملخص إحصائيات الإعلانات للحساب:', accountId);
+      
+      res.json({
+        success: true,
+        insights
+      });
+    } catch (error) {
+      console.error('Error fetching Meta ads insights summary:', error);
+      res.status(500).json({ error: 'Failed to fetch ads insights summary' });
+    }
+  });
+
+  // جلب إحصائيات يومية حقيقية للمخططات
+  app.get('/api/platform-ads/meta/daily-insights', async (req, res) => {
+    try {
+      const { accountId, adId, datePreset = 'last_7d', since, until } = req.query;
+      
+      const platformId = (req.session as any).platform?.platformId;
+      
+      if (!platformId) {
+        return res.status(404).json({ error: 'Platform not found for user' });
+      }
+
+      const platform = await storage.getPlatform(platformId);
+      if (!platform || !platform.metaAccessToken) {
+        return res.status(400).json({ error: 'Meta connection not found' });
+      }
+
+      // فحص صلاحية التوكن
+      if (platform.metaTokenExpiresAt && new Date() >= new Date(platform.metaTokenExpiresAt)) {
+        return res.status(401).json({ error: 'Meta token expired' });
+      }
+
+      // تحديد الفترة الزمنية بناءً على المعاملات
+      let startDate: Date, endDate: Date;
+      
+      if (since && until) {
+        startDate = new Date(since as string);
+        endDate = new Date(until as string);
+      } else {
+        const today = new Date();
+        endDate = new Date(today);
+        
+        switch (datePreset) {
+          case 'today':
+            startDate = new Date(today);
+            break;
+          case 'yesterday':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 1);
+            endDate = new Date(startDate);
+            break;
+          case 'last_7d':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 6);
+            break;
+          case 'last_14d':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 13);
+            break;
+          case 'last_30d':
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 29);
+            break;
+          case 'this_month':
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            break;
+          case 'last_month':
+            startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+            break;
+          case 'lifetime':
+            // للحد الأقصى، نبدأ من تاريخ بعيد جداً (مثل 2020)
+            startDate = new Date('2020-01-01');
+            endDate = new Date(today);
+            break;
+          default:
+            startDate = new Date(today);
+            startDate.setDate(startDate.getDate() - 6);
+        }
+      }
+
+      const dailyInsights: any = {};
+      
+      // للفترات الطويلة جداً (lifetime)، نحدد الحد الأقصى للأيام لتجنب الحمل الزائد
+      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const maxDays = 365; // حد أقصى سنة واحدة
+      
+      let actualStartDate = startDate;
+      if (totalDays > maxDays) {
+        // إذا كانت الفترة أطول من سنة، نأخذ آخر سنة فقط
+        actualStartDate = new Date(endDate);
+        actualStartDate.setDate(actualStartDate.getDate() - (maxDays - 1));
+        console.log(`⚠️ تم تقليل فترة ${datePreset} من ${totalDays} يوم إلى ${maxDays} يوم للأداء`);
+      }
+      
+      // جلب البيانات لكل يوم في الفترة المحددة
+      const currentDate = new Date(actualStartDate);
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        
+        try {
+          let endpoint = '';
+          if (adId) {
+            // إحصائيات إعلان محدد
+            endpoint = `https://graph.facebook.com/v23.0/${adId}/insights`;
+          } else {
+            // إحصائيات الحساب كاملاً
+            endpoint = `https://graph.facebook.com/v23.0/act_${accountId}/insights`;
+          }
+          
+          const response = await fetch(`${endpoint}?access_token=${platform.metaAccessToken}&fields=impressions,clicks,spend&time_range={"since":"${dateStr}","until":"${dateStr}"}&time_increment=1`);
+          const data = await response.json();
+          
+          if (data.data && data.data.length > 0) {
+            dailyInsights[dateStr] = data.data[0];
+          } else {
+            // إذا لم توجد بيانات لهذا اليوم، لا نضع أي شيء (بدلاً من الصفر)
+            // هذا يعني أنه لم تكن هناك إعلانات نشطة في هذا اليوم
+          }
+        } catch (error) {
+          console.error(`Error fetching insights for date ${dateStr}:`, error);
+          // لا نضع بيانات وهمية في حالة الخطأ
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      const finalTotalDays = Math.ceil((endDate.getTime() - actualStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const daysWithData = Object.keys(dailyInsights).length;
+      
+      console.log('📊 تم جلب الإحصائيات اليومية الحقيقية:', {
+        daysWithData,
+        totalDays: finalTotalDays,
+        originalTotalDays: totalDays,
+        datePreset,
+        accountId,
+        adId,
+        startDate: actualStartDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        sampleData: Object.keys(dailyInsights).length > 0 ? 
+          Object.entries(dailyInsights).slice(0, 2) : 'لا توجد بيانات'
+      });
+      
+      res.json({
+        success: true,
+        dailyInsights,
+        period: {
+          startDate: actualStartDate.toISOString().split('T')[0],
+          endDate: endDate.toISOString().split('T')[0],
+          preset: datePreset,
+          totalDays: finalTotalDays,
+          originalTotalDays: totalDays,
+          daysWithData,
+          limited: totalDays > maxDays
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching daily insights:', error);
+      res.status(500).json({ error: 'Failed to fetch daily insights' });
     }
   });
 
@@ -16164,6 +16853,7 @@ ${platform?.platformName || 'متجرنا'}`;
         autoSuspendExpiredPlatforms: false,
         emailNotificationsEnabled: false,
         // ZainCash default settings
+        zaincashEnabled: true,
         zaincashMerchantId: "5ffacf6612b5777c6d44266f",
         zaincashMerchantSecret: "$2y$10$hBbAZo2GfSSvyqAyV2SaqOfYewgYpfR1O19gIh4SqyGWdmySZYPuS",
         zaincashMsisdn: "9647835077893"
@@ -16189,6 +16879,9 @@ ${platform?.platformName || 'متجرنا'}`;
           case 'zaincash_merchant_secret':
             settingsObj.zaincashMerchantSecret = setting.settingValue || "$2y$10$hBbAZo2GfSSvyqAyV2SaqOfYewgYpfR1O19gIh4SqyGWdmySZYPuS";
             break;
+          case 'zaincash_enabled':
+            settingsObj.zaincashEnabled = setting.settingValue === 'true';
+            break;
           case 'zaincash_msisdn':
             settingsObj.zaincashMsisdn = setting.settingValue || "9647835077893";
             break;
@@ -16200,6 +16893,26 @@ ${platform?.platformName || 'متجرنا'}`;
     } catch (error) {
       console.error("Error getting system settings:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get ZainCash enabled status for public use (platform registration)
+  app.get('/api/settings/zaincash-enabled', async (req, res) => {
+    try {
+      const setting = await db
+        .select({
+          settingValue: systemSettings.settingValue
+        })
+        .from(systemSettings)
+        .where(eq(systemSettings.settingKey, 'zaincash_enabled'))
+        .limit(1);
+      
+      const zaincashEnabled = setting.length > 0 ? setting[0].settingValue === 'true' : true;
+      
+      res.json({ zaincashEnabled });
+    } catch (error) {
+      console.error('Error getting ZainCash enabled status:', error);
+      res.status(500).json({ error: 'Failed to get ZainCash status' });
     }
   });
 
@@ -16261,7 +16974,7 @@ ${platform?.platformName || 'متجرنا'}`;
     try {
       console.log("🔧 Updating system settings...");
       
-      const { defaultSubscriptionDays, trialPeriodDays, autoSuspendExpiredPlatforms, emailNotificationsEnabled, zaincashMerchantId, zaincashMerchantSecret, zaincashMsisdn } = req.body;
+      const { defaultSubscriptionDays, trialPeriodDays, autoSuspendExpiredPlatforms, emailNotificationsEnabled, zaincashEnabled, zaincashMerchantId, zaincashMerchantSecret, zaincashMsisdn } = req.body;
       
       // تحديث/إدراج الإعدادات
       const settingsToUpdate = [
@@ -16294,6 +17007,11 @@ ${platform?.platformName || 'متجرنا'}`;
           settingKey: 'zaincash_merchant_secret',
           settingValue: zaincashMerchantSecret || "$2y$10$hBbAZo2GfSSvyqAyV2SaqOfYewgYpfR1O19gIh4SqyGWdmySZYPuS",
           description: 'سر التاجر زين كاش'
+        },
+        {
+          settingKey: 'zaincash_enabled',
+          settingValue: zaincashEnabled !== undefined ? zaincashEnabled.toString() : "true",
+          description: 'تفعيل زين كاش للدفع'
         },
         {
           settingKey: 'zaincash_msisdn',

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import PlatformSidebar from "@/components/PlatformSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useLocation } from "wouter";
 import { X, TrendingUp, ExternalLink, Search, Filter, Eye, BarChart3, Users, DollarSign, Calendar } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,6 +23,9 @@ interface PlatformSession {
 }
 
 export default function PlatformAdsMeta() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إعلانات فيسبوك وإنستغرام');
+
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [location] = useLocation();
@@ -300,12 +304,20 @@ export default function PlatformAdsMeta() {
                         <h4 className="font-semibold text-theme-primary mb-2">Facebook Pixel</h4>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">قم بإعداد بكسل فيسبوك لتتبع التحويلات بدقة</p>
                         <Button 
-                          onClick={() => window.location.href = '/platform-ads/settings'}
+                          onClick={() => {
+                            const platformSession = localStorage.getItem('platformSession');
+                            if (platformSession) {
+                              const session = JSON.parse(platformSession);
+                              window.location.href = `/platform/${session.subdomain}/settings`;
+                            } else {
+                              window.location.href = '/platform-settings';
+                            }
+                          }}
                           variant="outline" 
                           className="theme-border text-theme-primary hover:bg-theme-primary-light"
                         >
                           <i className="fas fa-cog ml-2"></i>
-                          إعداد البكسل
+                          إعدادات البكسل
                         </Button>
                       </div>
                     </div>

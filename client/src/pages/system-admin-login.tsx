@@ -101,7 +101,7 @@ export default function SystemAdminLogin() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@sanadi.pro"
+                  placeholder="البريد الإلكتروني"
                   {...register("email")}
                   className={`border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${errors.email ? "border-red-500 focus:border-red-500 focus:ring-red-500" : ""}`}
                   data-testid="input-email"
@@ -150,17 +150,6 @@ export default function SystemAdminLogin() {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                البيانات الافتراضية:
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                البريد: admin@sanadi.pro | كلمة المرور: admin123
-              </p>
-              <p className="text-xs text-red-500 mt-1">
-                ⚠️ تأكد من تغيير كلمة المرور فور تسجيل الدخول
-              </p>
-            </div>
           </CardContent>
         </Card>
 

@@ -159,6 +159,7 @@ interface SystemSettings {
   autoSuspendExpiredPlatforms: boolean;
   emailNotificationsEnabled: boolean;
   // ZainCash Payment Settings
+  zaincashEnabled: boolean;
   zaincashMerchantId: string;
   zaincashMerchantSecret: string;
   zaincashMsisdn: string;
@@ -659,6 +660,7 @@ function AdminDashboardContent() {
     autoSuspendExpiredPlatforms: false,
     emailNotificationsEnabled: false,
     // ZainCash default values - test values
+    zaincashEnabled: true, // تفعيل Zain Cash افتراضياً
     zaincashMerchantId: "5ffacf6612b5777c6d44266f",
     zaincashMerchantSecret: "$2y$10$hBbAZo2GfSSvyqAyV2j8Kup.LBbxpGIIlIAmCKxFo0OC1Zr3WeZF2",
     zaincashMsisdn: "964770000000"
@@ -719,6 +721,7 @@ function AdminDashboardContent() {
         ...prev,
         ...fetchedSettings,
         // Ensure ZainCash fields have default values if not present
+        zaincashEnabled: (fetchedSettings as any)?.zaincashEnabled ?? true,
         zaincashMerchantId: (fetchedSettings as any)?.zaincashMerchantId || "5ffacf6612b5777c6d44266f",
         zaincashMerchantSecret: (fetchedSettings as any)?.zaincashMerchantSecret || "$2y$10$hBbAZo2GfSSvyqAyV2j8Kup.LBbxpGIIlIAmCKxFo0OC1Zr3WeZF2",
         zaincashMsisdn: (fetchedSettings as any)?.zaincashMsisdn || "964770000000"
@@ -1707,6 +1710,32 @@ function AdminDashboardContent() {
                           </p>
                           
                           <div className="space-y-4">
+                            {/* زر تفعيل/إلغاء Zain Cash */}
+                            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                              <div className="flex items-center space-x-3 space-x-reverse">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${systemSettings.zaincashEnabled ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                  <i className={`fas ${systemSettings.zaincashEnabled ? 'fa-check-circle' : 'fa-times-circle'} text-lg`}></i>
+                                </div>
+                                <div>
+                                  <h4 className="font-medium text-gray-900 dark:text-white">
+                                    تفعيل زين كاش للدفع
+                                  </h4>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    {systemSettings.zaincashEnabled 
+                                      ? "زين كاش مُفعّل - سيظهر كخيار دفع في تسجيل المنصات" 
+                                      : "زين كاش مُعطّل - سيتم إخفاء خيار الدفع وإكمال التسجيل مباشرة"}
+                                  </p>
+                                </div>
+                              </div>
+                              <Switch 
+                                checked={systemSettings.zaincashEnabled}
+                                onCheckedChange={(checked) => setSystemSettings(prev => ({ 
+                                  ...prev, 
+                                  zaincashEnabled: checked 
+                                }))}
+                                className="data-[state=checked]:bg-green-500"
+                              />
+                            </div>
                             <div>
                               <Label htmlFor="zaincash-merchant-id">معرف التاجر (Merchant ID)</Label>
                               <Input

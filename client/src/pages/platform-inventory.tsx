@@ -7,6 +7,7 @@ import { PlatformSidebar } from "@/components/PlatformSidebar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
@@ -44,6 +45,9 @@ interface InventorySummary {
 }
 
 export default function PlatformInventory() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إدارة المخزون');
+
   const [dateFrom, setDateFrom] = useState(format(new Date(), "yyyy-MM-dd"));
   const [dateTo, setDateTo] = useState(format(new Date(), "yyyy-MM-dd"));
   const [searchTerm, setSearchTerm] = useState("");

@@ -44,7 +44,10 @@ export default function PlatformAdminLogin() {
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'فشل في تسجيل الدخول');
+        const error = new Error(errorData.message || 'فشل في تسجيل الدخول');
+        (error as any).status = errorData.status;
+        (error as any).platformData = errorData.platformData;
+        throw error;
       }
       
       return await response.json();
@@ -62,6 +65,9 @@ export default function PlatformAdminLogin() {
         subdomain: data.subdomain,
         businessType: data.businessType,
         ownerName: data.ownerName,
+        phoneNumber: data.phoneNumber,
+        contactPhone: data.contactPhone,
+        whatsappNumber: data.whatsappNumber,
         userType: 'PLATFORM_OWNER',
         logoUrl: data.logoUrl || '/bastia-logo.png'
       }));
@@ -74,7 +80,26 @@ export default function PlatformAdminLogin() {
         window.location.href = `/platform/${data.subdomain}/dashboard`;
       }, 1000);
     },
-    onError: (error: Error) => {
+    onError: (error: any) => {
+      // التحقق من حالة المنصة غير المفعلة
+      if (error.status === "pending_verification") {
+        // حفظ بيانات المنصة وتوجيه لصفحة انتظار التفعيل
+        if (error.platformData) {
+          localStorage.setItem('pendingPlatformData', JSON.stringify(error.platformData));
+        }
+        
+        toast({
+          title: "المنصة في انتظار التفعيل",
+          description: "يرجى التواصل مع الدعم لتفعيل المنصة",
+          variant: "destructive",
+        });
+        
+        setTimeout(() => {
+          window.location.href = '/platform-pending-activation';
+        }, 2000);
+        return;
+      }
+      
       toast({
         title: "خطأ في تسجيل الدخول",
         description: error.message || "تحقق من النطاق الفرعي وكلمة المرور",

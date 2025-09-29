@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import AccountingLayout from "@/components/AccountingLayout";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { 
   Calculator, 
   Wallet, 
@@ -53,6 +54,9 @@ interface CashAccount {
 }
 
 export default function AccountingDashboard() {
+  // تعيين عنوان الصفحة
+  usePageTitle('لوحة النظام المحاسبي');
+
   const [selectedPeriod, setSelectedPeriod] = useState("current_month");
 
   // Get platform session

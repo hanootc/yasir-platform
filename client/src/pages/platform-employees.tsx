@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import PlatformSidebar from "@/components/PlatformSidebar";
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import ThemeToggle from '@/components/ThemeToggle';
 import ColorThemeSelector from '@/components/ColorThemeSelector';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,6 +118,9 @@ const departmentPermissions = {
 };
 
 export default function PlatformEmployees() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إدارة الموظفين');
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");

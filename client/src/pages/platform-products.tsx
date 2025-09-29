@@ -17,7 +17,8 @@ import { ProductVariantsTab } from "@/components/product-variants/ProductVariant
 import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 import PlatformSidebar from "@/components/PlatformSidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { useIsMobile } from '@/hooks/use-mobile';
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
 
@@ -41,6 +42,9 @@ const menuItems = [
 ];
 
 export default function PlatformProducts() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إدارة المنتجات');
+  
   const { isEmployee, employeeSession, isLoading: sessionLoading } = useCurrentSession();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');

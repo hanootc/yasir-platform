@@ -29,6 +29,7 @@ import PlatformSidebar from "@/components/PlatformSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 
 interface Category {
   id: string;
@@ -41,6 +42,9 @@ interface Category {
 }
 
 export default function PlatformCategories() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إدارة التصنيفات');
+
   const { session, isLoading: sessionLoading } = usePlatformSession();
   const { toast } = useToast();
   const queryClient = useQueryClient();

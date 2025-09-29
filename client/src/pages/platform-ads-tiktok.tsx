@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import PlatformSidebar from "@/components/PlatformSidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useLocation } from "wouter";
 import { X, TrendingUp, ExternalLink } from "lucide-react";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
@@ -20,6 +21,9 @@ interface PlatformSession {
 }
 
 export default function PlatformAdsTikTok() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إعلانات تيك توك');
+
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [location] = useLocation();

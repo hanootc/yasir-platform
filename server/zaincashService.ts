@@ -12,7 +12,7 @@ const ZAINCASH_TEST_CONFIG = {
 
 // Subscription plan prices in IQD
 export const SUBSCRIPTION_PRICES = {
-  basic: 1000,       // 1k IQD (for testing)
+  basic: 49000,      // 49k IQD
   premium: 69000,    // 69k IQD  
   enterprise: 99000  // 99k IQD
 };
@@ -43,8 +43,8 @@ export class ZainCashService {
   
   constructor(testMode: boolean = true) {
     this.isTestMode = true;
-    // Force simulation mode due to ZainCash API access issues
-    this.forceSimulation = true; // Enable simulation for development
+    // Disable simulation mode - use real ZainCash API
+    this.forceSimulation = false;
   }
 
   /**
@@ -156,6 +156,11 @@ export class ZainCashService {
 
       // Get ZainCash configuration from admin settings
       const config = await this.getZainCashConfig();
+      console.log('🔧 Using ZainCash config:', {
+        merchantId: config.merchantId,
+        msisdn: config.msisdn,
+        hasSecret: !!config.secret
+      });
 
       // Check if forced simulation is enabled or test connection first if in test mode
       if (this.forceSimulation) {
@@ -280,22 +285,10 @@ export class ZainCashService {
         errorName === 'AbortError'
       );
       
-      // If in test mode and connection fails, provide simulation mode
-      if (this.isTestMode && isConnectionError) {
-        
-        console.log('🔧 ZainCash test API not accessible, using simulation mode for development');
-        console.log('📝 Note: Real ZainCash integration is ready and will work when API is available');
-        
-        // Create a simulated transaction response for development
-        const simulatedTransactionId = `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const baseUrl = 'https://sanadi.pro';
-        const paymentUrl = `${baseUrl}/register-platform?payment_simulation=true&transaction_id=${simulatedTransactionId}&order_id=${encodeURIComponent(data.orderId)}`;
-        
-        return {
-          success: true,
-          transactionId: simulatedTransactionId,
-          paymentUrl: paymentUrl
-        };
+      // If connection fails, throw a clear error
+      if (isConnectionError) {
+        console.error('❌ ZainCash API connection failed:', errorString);
+        throw new Error('فشل في الاتصال بخدمة زين كاش. يرجى التحقق من الاتصال بالإنترنت والمحاولة مرة أخرى.');
       }
       
       return {

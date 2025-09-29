@@ -13,6 +13,16 @@ import PlatformSidebar from "@/components/PlatformSidebar";
 import { useLocation } from "wouter";
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
+import { usePageTitle } from '@/hooks/usePageTitle';
+import { useIsMobile } from '@/hooks/use-mobile';
+
+interface PlatformSession {
+  platformId: string;
+  platformName: string;
+  subdomain: string;
+  userType: string;
+  logoUrl?: string;
+}
 
 interface WhatsAppSession {
   platformId: string;
@@ -24,14 +34,23 @@ interface WhatsAppSession {
 }
 
 export default function WhatsAppSettings() {
+  // تعيين عنوان الصفحة
+  usePageTitle('إعدادات الواتساب');
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isConnecting, setIsConnecting] = useState(false);
   const [location] = useLocation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
+
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setSidebarCollapsed(isMobile);
+  }, [isMobile]);
 
   // استعلام جلسة المنصة
-  const { data: platformSession } = useQuery({
+  const { data: platformSession } = useQuery<PlatformSession>({
     queryKey: ['/api/platform-session'],
     retry: false,
   });
@@ -206,7 +225,7 @@ export default function WhatsAppSettings() {
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 relative">
       <PlatformSidebar 
-        session={platformSession}
+        session={platformSession || {} as PlatformSession}
         currentPath={location}
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}

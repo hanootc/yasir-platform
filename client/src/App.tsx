@@ -74,6 +74,9 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import DirectAccess from "@/pages/direct-access";
 import AdminProfile from "@/pages/admin-profile";
 import SystemAdminLogin from "@/pages/system-admin-login";
+import AdminRateLimitMonitor from "@/pages/admin-rate-limit-monitor";
+import PlatformPendingActivation from "@/pages/platform-pending-activation";
+import SubscriptionRenewalContact from "@/pages/subscription-renewal-contact";
 
 // Loading component
 const LoadingSpinner = () => (
@@ -185,10 +188,13 @@ function Router() {
       <Route path="/payment" component={() => <AdminAuthGuard><AdminDashboard /></AdminAuthGuard>} />
       <Route path="/direct-access" component={() => <AdminAuthGuard><DirectAccess /></AdminAuthGuard>} />
       <Route path="/admin-profile" component={() => <AdminAuthGuard><AdminProfile /></AdminAuthGuard>} />
+      <Route path="/admin-rate-limit-monitor" component={() => <AdminAuthGuard><AdminRateLimitMonitor /></AdminAuthGuard>} />
       <Route path="/register-platform" component={PlatformRegistration} />
       <Route path="/platform-registration" component={PlatformRegistration} />
+      <Route path="/platform-pending-activation" component={PlatformPendingActivation} />
       <Route path="/subscription-expired" component={SubscriptionExpired} />
       <Route path="/subscription-renewal" component={SubscriptionRenewal} />
+      <Route path="/subscription-renewal-contact" component={SubscriptionRenewalContact} />
       
       {/* Admin sidebar routes - must be before parametric routes */}
       <Route path="/products" component={Products} />
@@ -310,5 +316,4 @@ function App() {
     </QueryClientProvider>
   );
 }
-
 export default App;

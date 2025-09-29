@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import PlatformSidebar from "@/components/PlatformSidebar";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePageTitle } from '@/hooks/usePageTitle';
 import ThemeToggle from "@/components/ThemeToggle";
 import ColorThemeSelector from "@/components/ColorThemeSelector";
 
@@ -47,6 +48,9 @@ interface WhatsAppMessage {
 }
 
 export default function PlatformWhatsApp() {
+  // تعيين عنوان الصفحة
+  usePageTitle('واتساب للأعمال');
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();

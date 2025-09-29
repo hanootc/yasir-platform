@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
@@ -32,13 +32,24 @@ export default function PlatformRegistration() {
   const [location] = useLocation();
   const { toast } = useToast();
 
+  // Check if ZainCash is enabled
+  const { data: zaincashStatus } = useQuery({
+    queryKey: ["/api/settings/zaincash-enabled"],
+    queryFn: async () => {
+      const response = await fetch('/api/settings/zaincash-enabled');
+      if (!response.ok) throw new Error('Failed to fetch ZainCash status');
+      return response.json();
+    },
+  });
+
+  const isZaincashEnabled = zaincashStatus?.zaincashEnabled ?? true;
+
   // Check for payment callback from URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const payment = params.get('payment');
     const orderId = params.get('orderId');
     const plan = params.get('plan');
-    const paymentSimulation = params.get('payment_simulation');
     const transactionId = params.get('transaction_id');
 
     if (payment === 'success' && orderId && plan) {
@@ -49,31 +60,6 @@ export default function PlatformRegistration() {
         description: "يمكنك الآن إكمال تسجيل منصتك",
         variant: "default",
       });
-    } else if (paymentSimulation === 'true' && transactionId) {
-      // Handle simulation mode for development
-      // Extract plan from order_id if available
-      const orderIdParam = params.get('order_id');
-      if (orderIdParam) {
-        // Extract plan from order_id format: platformName_planType_timestamp_random
-        const parts = decodeURIComponent(orderIdParam).split('_');
-        if (parts.length >= 2) {
-          const planFromOrderId = parts[1]; // premium, basic, enterprise
-          if (['basic', 'premium', 'enterprise'].includes(planFromOrderId)) {
-            setSelectedPlan(planFromOrderId);
-          }
-        }
-      }
-      
-      setPaymentStep('complete');
-      toast({
-        title: "تم الدفع بنجاح!",
-        description: "تم تأكيد عملية الدفع بزين كاش - يمكنك إكمال التسجيل",
-        variant: "default",
-      });
-      
-      // Clear URL parameters to clean up the address bar
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
     } else if (payment === 'failed') {
       const reason = params.get('reason');
       setPaymentStep('plan');
@@ -96,13 +82,13 @@ export default function PlatformRegistration() {
     {
       id: "basic",
       name: "البداية",
-      price: "1,000",
+      price: "49,000",
       period: "دينار/شهر",
       description: "مثالي للمتاجر الصغيرة والمبتدئين",
       features: [
         "25 منتج",
         "25 صفحة هبوط", 
-        "1000 طلب شهرياً",
+        "2000 طلب شهرياً",
         "3 حساب موظف",
         "إدارة مخزن",
         "8 ثيمات ألوان + نظام ليلي/نهاري",
@@ -179,29 +165,6 @@ export default function PlatformRegistration() {
     form.setValue('subscriptionPlan', selectedPlan as any);
   }, [selectedPlan, form]);
 
-  // Check URL for payment simulation completion
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('payment_simulation') === 'true') {
-      const transactionId = urlParams.get('transaction_id');
-      const orderId = urlParams.get('order_id');
-      
-      if (transactionId && orderId) {
-        console.log('Payment simulation completed successfully', { transactionId, orderId });
-        setPaymentStep('complete');
-        
-        // Clean URL
-        const cleanUrl = window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
-        
-        toast({
-          title: "تم الدفع بنجاح!",
-          description: "تم تأكيد عملية الدفع بزين كاش. يمكنك الآن إكمال إنشاء منصتك",
-          variant: "default",
-        });
-      }
-    }
-  }, []);
 
   const handleLogoUploadComplete = (files: any[]) => {
     if (files.length > 0) {
@@ -236,12 +199,12 @@ export default function PlatformRegistration() {
       return data;
     },
     onSuccess: (data) => {
-      console.log('✅ Payment success:', data);
+      console.log('✅ Payment API Response:', JSON.stringify(data, null, 2));
       setPaymentData(data);
       setPaymentLoading(false);
       
       if (data.success && data.paymentUrl) {
-        console.log('🔄 Storing form data and redirecting to:', data.paymentUrl);
+        console.log('🔄 Payment URL received:', data.paymentUrl);
         
         // Store form data temporarily
         const formData = form.getValues();
@@ -249,61 +212,29 @@ export default function PlatformRegistration() {
           ...formData,
           selectedPlan,
           logoUrl,
-          paymentData: data // Store payment data for reference
+          paymentData: data
         }));
         
-        // Check if this is a simulation or real payment
-        const isSimulation = data.paymentUrl.includes('payment_simulation=true');
-        
-        console.log('🔒 Redirecting to ZainCash payment gateway');
+        // Show success message
         toast({
-          title: "توجيه للدفع",
-          description: "سيتم توجيهك إلى زين كاش لإتمام الدفع الآمن",
+          title: "تم إنشاء رابط الدفع",
+          description: "سيتم توجيهك إلى زين كاش...",
           variant: "default",
         });
         
-        // Add small delay for UI feedback then redirect
+        console.log('🚀 Opening ZainCash payment URL:', data.paymentUrl);
+        
+        // Add small delay for better UX
         setTimeout(() => {
-          try {
-            console.log('🚀 Attempting redirect to:', data.paymentUrl);
-            
-            // Try direct redirect first
-            window.location.href = data.paymentUrl;
-            
-            // Fallback after 2 seconds if redirect doesn't work
-            setTimeout(() => {
-              console.log('⚠️ Direct redirect may have failed, trying window.open');
-              const popup = window.open(data.paymentUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
-              if (!popup) {
-                console.log('❌ Popup blocked, showing manual link');
-                toast({
-                  title: "يرجى فتح رابط الدفع يدوياً", 
-                  description: `انقر هنا: ${data.paymentUrl}`,
-                  variant: "default"
-                });
-              } else {
-                console.log('✅ Popup opened successfully');
-              }
-            }, 2000);
-            
-          } catch (error) {
-            console.error('❌ Redirect failed:', error);
-            // Immediate fallback: try popup
-            const popup = window.open(data.paymentUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
-            if (!popup) {
-              toast({
-                title: "يرجى فتح رابط الدفع يدوياً", 
-                description: `الرابط: ${data.paymentUrl}`,
-                variant: "default"
-              });
-            }
-          }
-        }, 500);
+          // Direct navigation to ZainCash
+          window.location.href = data.paymentUrl;
+        }, 1000);
+        
       } else {
-        console.log('❌ Payment response missing success or paymentUrl:', data);
+        console.error('❌ Invalid payment response:', data);
         toast({
-          title: "خطأ في الدفع",
-          description: data.error || "لم يتم الحصول على رابط الدفع",
+          title: "خطأ في إنشاء رابط الدفع",
+          description: data.error || "فشل في الحصول على رابط الدفع من زين كاش",
           variant: "destructive",
         });
       }
@@ -339,17 +270,29 @@ export default function PlatformRegistration() {
     onSuccess: (data) => {
       toast({
         title: "تم إنشاء المنصة بنجاح!",
-        description: "مرحباً بك في منصة إدارة الأعمال",
+        description: "يرجى التواصل مع الدعم لتفعيل المنصة",
         variant: "default",
       });
       
-      // Clear stored data
+      // حفظ بيانات المنصة الجديدة لصفحة انتظار التفعيل
+      const platformData = {
+        platformName: data.platformName,
+        subdomain: data.subdomain,
+        ownerName: data.ownerName,
+        phoneNumber: data.phoneNumber,
+        businessType: data.businessType,
+        subscriptionPlan: data.subscriptionPlan,
+        createdAt: new Date().toISOString()
+      };
+      localStorage.setItem('newPlatformData', JSON.stringify(platformData));
+      
+      // Clear registration data
       localStorage.removeItem('platformRegistrationData');
       
-      // Redirect to success page
+      // Redirect to pending activation page
       setTimeout(() => {
-        window.location.href = `/platform-success?subdomain=${data.subdomain}&platform=${encodeURIComponent(data.platformName)}`;
-      }, 2000);
+        window.location.href = '/platform-pending-activation';
+      }, 1500);
     },
     onError: (error: Error) => {
       console.error('❌ Platform registration failed:', error);
@@ -546,40 +489,20 @@ export default function PlatformRegistration() {
               <div></div>
             </div>
             
-            <div className="bg-theme-primary-light theme-border rounded-lg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+            {/* عرض معلومات الدفع فقط عند تفعيل زين كاش */}
+            {isZaincashEnabled && (
+              <div className="bg-theme-primary-light theme-border rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
                   <div className="w-4 h-4 bg-theme-gradient rounded-full"></div>
                   <p className="text-sm text-theme-primary font-bold">
                     الدفع الآمن بزين كاش
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="text-xs px-2 py-1 h-auto"
-                  onClick={() => {
-                    // Test ZainCash payment flow directly
-                    const testData = {
-                      platformName: "test-platform",
-                      subscriptionPlan: "premium",
-                      customerName: "أحمد محمد",
-                      customerPhone: "9647801234567",
-                      customerEmail: "test@example.com"
-                    };
-                    
-                    console.log('🧪 Testing ZainCash payment flow...');
-                    createPayment.mutate(testData);
-                  }}
-                >
-                  اختبار سريع
-                </Button>
+                <p className="text-xs text-theme-primary">
+                  نظام دفع آمن ومتكامل مع زين كاش
+                </p>
               </div>
-              <p className="text-xs text-theme-primary">
-                نظام دفع حقيقي متصل بزين كاش - بيانات اختبار: 9647802999569 (PIN: 1234, OTP: 1111)
-              </p>
-            </div>
+            )}
             
             {/* Progress Indicator */}
             <div className="flex items-center justify-center gap-4 mt-4">
@@ -695,12 +618,22 @@ export default function PlatformRegistration() {
                     <div className="flex justify-end pt-6">
                       <Button
                         type="button"
-                        onClick={() => setPaymentStep('payment')}
+                        onClick={() => {
+                          if (isZaincashEnabled) {
+                            setPaymentStep('payment');
+                          } else {
+                            setPaymentStep('complete');
+                          }
+                        }}
                         className="bg-theme-gradient hover:opacity-90 text-white px-8"
                       >
                         <div className="flex items-center gap-2">
                           <ArrowRight className="w-4 h-4" />
-                          <span>التالي - الدفع بزين كاش</span>
+                          <span>
+                            {isZaincashEnabled 
+                              ? "التالي - الدفع بزين كاش" 
+                              : "إكمال تسجيل المنصة"}
+                          </span>
                         </div>
                       </Button>
                     </div>
@@ -835,7 +768,11 @@ export default function PlatformRegistration() {
                     <div className="bg-theme-primary-light theme-border rounded-lg p-4 mb-4">
                       <div className="flex items-center gap-2">
                         <Check className="w-5 h-5 text-theme-primary" />
-                        <span className="text-theme-primary font-medium">تم الدفع بنجاح! أكمل معلومات منصتك</span>
+                        <span className="text-theme-primary font-medium">
+                          {isZaincashEnabled 
+                            ? "تم الدفع بنجاح! أكمل معلومات منصتك" 
+                            : "أكمل معلومات منصتك"}
+                        </span>
                       </div>
                     </div>
 

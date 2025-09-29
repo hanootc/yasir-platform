@@ -18,11 +18,12 @@ import {
   Menu,
   Truck,
   X,
-  RotateCcw
+  RotateCcw,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import PlatformSidebar from '@/components/PlatformSidebar';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useIsMobile } from '@/hooks/use-mobile';
 import ThemeToggle from '@/components/ThemeToggle';
 import ColorThemeSelector from '@/components/ColorThemeSelector';
@@ -75,6 +76,9 @@ function generateChartPath(data: number[], type: 'orders' | 'revenue'): string {
 }
 
 export default function PlatformDashboard() {
+  // تعيين عنوان الصفحة
+  usePageTitle('لوحة التحكم');
+  
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [location] = useLocation();

@@ -238,8 +238,40 @@ export function createFacebookConversionEvent(
   }
   
   if (eventData.fbc) {
-    hashedUserData.fbc = eventData.fbc;
-    console.log('🔍 FBC VALUE FOUND:', eventData.fbc);
+    // ✅ التحقق من صحة تنسيق fbc قبل الإرسال
+    const fbcParts = eventData.fbc.split('.');
+    if (fbcParts.length === 4 && fbcParts[0] === 'fb') {
+      const version = fbcParts[0]; // يجب أن يكون 'fb'
+      const subdomainIndex = fbcParts[1]; // 0, 1, أو 2
+      const creationTime = fbcParts[2]; // timestamp بالميلي ثانية
+      const fbclid = fbcParts[3]; // fbclid الأصلي بدون تعديل
+      
+      // التحقق من صحة creationTime
+      const creationTimeMs = parseInt(creationTime);
+      const now = Date.now();
+      const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
+      
+      if (creationTimeMs > now) {
+        console.warn('⚠️ FBC creationTime في المستقبل، سيتم تصحيحه');
+        // إنشاء fbc جديد بوقت صحيح
+        const correctedTime = now - (60 * 60 * 1000); // قبل ساعة من الآن
+        hashedUserData.fbc = `${version}.${subdomainIndex}.${correctedTime}.${fbclid}`;
+        console.log('✅ FBC CORRECTED:', hashedUserData.fbc);
+      } else if (creationTimeMs < sevenDaysAgo) {
+        console.warn('⚠️ FBC creationTime أقدم من 7 أيام، سيتم تصحيحه');
+        // إنشاء fbc جديد بوقت صحيح
+        const correctedTime = sevenDaysAgo + (60 * 60 * 1000); // بعد ساعة من الحد الأدنى
+        hashedUserData.fbc = `${version}.${subdomainIndex}.${correctedTime}.${fbclid}`;
+        console.log('✅ FBC CORRECTED:', hashedUserData.fbc);
+      } else {
+        // fbc صحيح
+        hashedUserData.fbc = eventData.fbc;
+        console.log('✅ FBC VALUE VALID:', eventData.fbc);
+      }
+    } else {
+      console.error('❌ FBC FORMAT INVALID:', eventData.fbc);
+      // لا نرسل fbc غير صحيح
+    }
   } else {
     console.log('❌ FBC VALUE MISSING');
   }
@@ -307,9 +339,34 @@ export function createFacebookConversionEvent(
     customData.user_external_id = eventData.external_id; // +14.5% تحسين
   }
 
+  // ✅ حساب event_time صحيح يتوافق مع fbc creationTime
+  let eventTime = Math.floor(Date.now() / 1000);
+  
+  // إذا كان لدينا fbc صالح، تأكد من أن event_time لا يسبق creationTime
+  if (hashedUserData.fbc) {
+    const fbcParts = hashedUserData.fbc.split('.');
+    if (fbcParts.length === 4) {
+      const fbcCreationTimeMs = parseInt(fbcParts[2]);
+      const fbcCreationTimeSeconds = Math.floor(fbcCreationTimeMs / 1000);
+      
+      // تأكد من أن event_time لا يسبق fbc creationTime
+      if (eventTime < fbcCreationTimeSeconds) {
+        eventTime = fbcCreationTimeSeconds + 60; // بعد دقيقة من fbc creationTime
+        console.log('✅ EVENT_TIME adjusted to be after FBC creationTime:', eventTime);
+      }
+    }
+  }
+  
+  // التأكد من أن event_time ليس أقدم من 7 أيام
+  const sevenDaysAgoSeconds = Math.floor((Date.now() - (7 * 24 * 60 * 60 * 1000)) / 1000);
+  if (eventTime < sevenDaysAgoSeconds) {
+    eventTime = sevenDaysAgoSeconds + 3600; // بعد ساعة من الحد الأدنى
+    console.log('✅ EVENT_TIME adjusted to be within 7 days:', eventTime);
+  }
+
   const finalEvent: FacebookConversionEvent = {
     event_name: eventType,
-    event_time: Math.floor(Date.now() / 1000),
+    event_time: eventTime,
     user_data: hashedUserData,
     custom_data: Object.keys(customData).length > 0 ? customData : undefined,
     event_source_url: eventData.event_source_url,

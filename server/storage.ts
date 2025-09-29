@@ -4815,19 +4815,30 @@ export class DatabaseStorage implements IStorage {
           
           labels.push(dayLabel);
           
-          // جلب الطلبات لهذا اليوم
-          const dayOrders = await db.execute(
+          // جلب الطلبات لهذا اليوم من جدول landing_page_orders
+          const dayLPOrders = await db.execute(
             sql`SELECT COUNT(*) as count, COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0) as revenue 
                 FROM landing_page_orders 
                 WHERE platform_id = ${platformId} 
                 AND DATE(created_at) = ${dateStr}`
           );
           
-          const dayData = dayOrders.rows[0] as any;
+          // جلب الطلبات لهذا اليوم من جدول orders العادي
+          const dayRegularOrders = await db.execute(
+            sql`SELECT COUNT(*) as count, COALESCE(SUM(CAST(total AS DECIMAL)), 0) as revenue 
+                FROM orders 
+                WHERE platform_id = ${platformId} 
+                AND DATE(created_at) = ${dateStr}`
+          );
+          
+          // دمج النتائج
+          const lpData = dayLPOrders.rows[0] as any;
+          const regularData = dayRegularOrders.rows[0] as any;
+          
           salesData.push({
             label: dayLabel,
-            orders: parseInt(dayData.count) || 0,
-            revenue: parseFloat(dayData.revenue) || 0
+            orders: (parseInt(lpData.count) || 0) + (parseInt(regularData.count) || 0),
+            revenue: (parseFloat(lpData.revenue) || 0) + (parseFloat(regularData.revenue) || 0)
           });
         }
         
@@ -4848,8 +4859,8 @@ export class DatabaseStorage implements IStorage {
           const weekLabel = i === 0 ? 'الأسبوع الحالي' : `الأسبوع ${6-i}`;
           labels.push(weekLabel);
           
-          // جلب الطلبات لهذا الأسبوع
-          const weekOrders = await db.execute(
+          // جلب الطلبات لهذا الأسبوع من جدول landing_page_orders
+          const weekLPOrders = await db.execute(
             sql`SELECT COUNT(*) as count, COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0) as revenue 
                 FROM landing_page_orders 
                 WHERE platform_id = ${platformId} 
@@ -4857,11 +4868,23 @@ export class DatabaseStorage implements IStorage {
                 AND DATE(created_at) <= ${weekEnd.toISOString().split('T')[0]}`
           );
           
-          const weekData = weekOrders.rows[0] as any;
+          // جلب الطلبات لهذا الأسبوع من جدول orders العادي
+          const weekRegularOrders = await db.execute(
+            sql`SELECT COUNT(*) as count, COALESCE(SUM(CAST(total AS DECIMAL)), 0) as revenue 
+                FROM orders 
+                WHERE platform_id = ${platformId} 
+                AND DATE(created_at) >= ${weekStart.toISOString().split('T')[0]}
+                AND DATE(created_at) <= ${weekEnd.toISOString().split('T')[0]}`
+          );
+          
+          // دمج النتائج
+          const weekLPData = weekLPOrders.rows[0] as any;
+          const weekRegularData = weekRegularOrders.rows[0] as any;
+          
           salesData.push({
             label: weekLabel,
-            orders: parseInt(weekData.count) || 0,
-            revenue: parseFloat(weekData.revenue) || 0
+            orders: (parseInt(weekLPData.count) || 0) + (parseInt(weekRegularData.count) || 0),
+            revenue: (parseFloat(weekLPData.revenue) || 0) + (parseFloat(weekRegularData.revenue) || 0)
           });
         }
         
@@ -4883,8 +4906,8 @@ export class DatabaseStorage implements IStorage {
           const monthLabel = monthNames[5-i] || `شهر ${month}`;
           labels.push(monthLabel);
           
-          // جلب الطلبات لهذا الشهر
-          const monthOrders = await db.execute(
+          // جلب الطلبات لهذا الشهر من جدول landing_page_orders
+          const monthLPOrders = await db.execute(
             sql`SELECT COUNT(*) as count, COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0) as revenue 
                 FROM landing_page_orders 
                 WHERE platform_id = ${platformId} 
@@ -4892,11 +4915,23 @@ export class DatabaseStorage implements IStorage {
                 AND EXTRACT(MONTH FROM created_at) = ${month}`
           );
           
-          const monthData = monthOrders.rows[0] as any;
+          // جلب الطلبات لهذا الشهر من جدول orders العادي
+          const monthRegularOrders = await db.execute(
+            sql`SELECT COUNT(*) as count, COALESCE(SUM(CAST(total AS DECIMAL)), 0) as revenue 
+                FROM orders 
+                WHERE platform_id = ${platformId} 
+                AND EXTRACT(YEAR FROM created_at) = ${year}
+                AND EXTRACT(MONTH FROM created_at) = ${month}`
+          );
+          
+          // دمج النتائج
+          const monthLPData = monthLPOrders.rows[0] as any;
+          const monthRegularData = monthRegularOrders.rows[0] as any;
+          
           salesData.push({
             label: monthLabel,
-            orders: parseInt(monthData.count) || 0,
-            revenue: parseFloat(monthData.revenue) || 0
+            orders: (parseInt(monthLPData.count) || 0) + (parseInt(monthRegularData.count) || 0),
+            revenue: (parseFloat(monthLPData.revenue) || 0) + (parseFloat(monthRegularData.revenue) || 0)
           });
         }
         
