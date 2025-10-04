@@ -2,6 +2,22 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import { logServerPixelEvent } from './pixelDiagnostics';
 
+// Dataset Quality API interfaces
+interface DatasetQualityResponse {
+  data: {
+    match_rate_approx: number;
+    matched_unique_users: number;
+    uploaded_unique_users: number;
+  }[];
+}
+
+interface DatasetQualityMetrics {
+  matchRate: number;
+  matchedUsers: number;
+  uploadedUsers: number;
+  timestamp: number;
+}
+
 interface FacebookConversionEvent {
   event_name: string;
   event_time: number;
@@ -389,4 +405,131 @@ export function createFacebookConversionEvent(
   });
 
   return finalEvent;
+}
+
+// دالة جلب مقاييس جودة البيانات من Dataset Quality API
+export async function getDatasetQualityMetrics(
+  pixelId: string,
+  accessToken: string,
+  startDate?: string,
+  endDate?: string
+): Promise<DatasetQualityMetrics | null> {
+  try {
+    // تحديد الفترة الزمنية (افتراضياً آخر 7 أيام)
+    const end = endDate || new Date().toISOString().split('T')[0];
+    const start = startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    const url = `https://graph.facebook.com/v19.0/${pixelId}/da_checks`;
+    const params = new URLSearchParams({
+      access_token: accessToken,
+      checks: 'user_data_quality',
+      start_date: start,
+      end_date: end
+    });
+
+    console.log('📊 Fetching Dataset Quality metrics:', {
+      pixelId,
+      startDate: start,
+      endDate: end,
+      url: `${url}?${params.toString()}`
+    });
+
+    const response = await fetch(`${url}?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Dataset Quality API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        pixelId
+      });
+      
+      // تحليل نوع الخطأ
+      try {
+        const errorObj = JSON.parse(errorText);
+        if (errorObj.error?.code === 100 && errorObj.error?.message?.includes('Missing Permission')) {
+          console.warn('⚠️ Dataset Quality API requires additional permissions:', {
+            required_permissions: ['business_management', 'ads_management'],
+            current_error: 'Missing Permission',
+            solution: 'Update Facebook Access Token with required permissions'
+          });
+        }
+      } catch (parseError) {
+        // تجاهل خطأ parsing
+      }
+      
+      return null;
+    }
+
+    const result = await response.json() as DatasetQualityResponse;
+    
+    if (!result.data || result.data.length === 0) {
+      console.warn('⚠️ No Dataset Quality data available for the specified period');
+      return null;
+    }
+
+    // أخذ أحدث البيانات المتاحة
+    const latestData = result.data[result.data.length - 1];
+    
+    const metrics: DatasetQualityMetrics = {
+      matchRate: Math.round(latestData.match_rate_approx * 100), // تحويل إلى نسبة مئوية
+      matchedUsers: latestData.matched_unique_users,
+      uploadedUsers: latestData.uploaded_unique_users,
+      timestamp: Date.now()
+    };
+
+    console.log('✅ Dataset Quality metrics retrieved:', {
+      matchRate: `${metrics.matchRate}%`,
+      matchedUsers: metrics.matchedUsers,
+      uploadedUsers: metrics.uploadedUsers,
+      efficiency: `${metrics.matchedUsers}/${metrics.uploadedUsers}`
+    });
+
+    return metrics;
+
+  } catch (error) {
+    console.error('💥 Dataset Quality API request failed:', error);
+    return null;
+  }
+}
+
+// دالة محسنة لإرسال الأحداث مع مراقبة جودة البيانات
+export async function sendFacebookConversionWithQuality(
+  pixelId: string,
+  accessToken: string,
+  events: FacebookConversionEvent[],
+  checkQuality: boolean = true
+): Promise<{ success: boolean; qualityMetrics?: DatasetQualityMetrics }> {
+  try {
+    // إرسال الأحداث أولاً
+    const conversionSuccess = await sendFacebookConversion(pixelId, accessToken, events);
+    
+    if (!conversionSuccess) {
+      return { success: false };
+    }
+
+    // جلب مقاييس الجودة إذا كان مطلوباً
+    let qualityMetrics: DatasetQualityMetrics | undefined;
+    if (checkQuality) {
+      // انتظار قصير للسماح لـ Facebook بمعالجة الأحداث
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      qualityMetrics = await getDatasetQualityMetrics(pixelId, accessToken) || undefined;
+    }
+
+    return {
+      success: true,
+      qualityMetrics
+    };
+
+  } catch (error) {
+    console.error('💥 Enhanced Facebook Conversion with Quality check failed:', error);
+    return { success: false };
+  }
 }

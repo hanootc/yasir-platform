@@ -96,6 +96,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
     selectedOffer: "",
     customPrice: 0,
     discountAmount: 0,
+    quantity: 1,
     selectedColor: "",
     selectedShape: "",
     selectedSize: "",
@@ -131,13 +132,19 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
 
   // العروض المتاحة - استخدام العروض الحقيقية أو العروض الافتراضية
   const availableOffers: OfferType[] = productOffers && productOffers.length > 0 
-    ? productOffers.map((offer: any) => ({
-        id: offer.id,
-        label: offer.name || `${offer.quantity} قطع`,
-        quantity: offer.quantity,
-        price: offer.price,
-        savings: offer.savings || 0
-      }))
+    ? (() => {
+        console.log('🔍 Product Offers from API:', productOffers);
+        return productOffers.map((offer: any) => {
+          console.log('🔍 Processing offer:', offer);
+          return {
+            id: offer.id,
+            label: offer.name || offer.label || offer.title || `${offer.quantity} قطع`,
+            quantity: offer.quantity,
+            price: offer.price,
+            savings: offer.savings || 0
+          };
+        });
+      })()
     : [
         { id: "1", label: "قطعة واحدة", quantity: 1, price: 15000, savings: 0 },
         { id: "2", label: "قطعتين", quantity: 2, price: 25000, savings: 5000 },
@@ -147,6 +154,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
   useEffect(() => {
     if (order && isOpen) {
       console.log('Order data in modal:', order);
+      console.log('🔍 Available offers:', availableOffers);
       const currentQuantity = extractQuantity(order.offer || "");
       const totalOfferPrice = extractPrice(order.offer || "") || Number(order.totalAmount || order.total_amount || 0);
       
@@ -163,6 +171,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
         selectedOffer: currentOffer?.id || "",
         customPrice: totalOfferPrice,
         discountAmount: Number(order.discountAmount || order.discount_amount || 0),
+        quantity: currentQuantity,
         selectedColor: order.selectedColor || order.color || "",
         selectedShape: order.selectedShape || order.shape || "",
         selectedSize: order.selectedSize || order.size || "",
@@ -172,7 +181,8 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
 
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
-      console.log('Updating order with data:', data);
+      console.log('🔄 Updating order with data:', data);
+      console.log('🔄 Order quantity in data:', data.quantity);
       const orderId = order.id || order._id;
       const platformId = order.platformId || order.platform_id;
       
@@ -184,15 +194,26 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
         return apiRequest(`/api/orders/${orderId}`, 'PATCH', data);
       }
     },
-    onSuccess: () => {
+    onSuccess: (updatedOrder) => {
+      console.log('✅ Order updated successfully:', updatedOrder);
+      console.log('✅ Updated order quantity:', updatedOrder?.quantity);
+      
+      // تحديث جميع queries المتعلقة بالطلبات
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/landing-page-orders"] });
+      
       const platformId = order.platformId || order.platform_id;
       if (platformId) {
         queryClient.invalidateQueries({ queryKey: [`/api/platforms/${platformId}/orders`] });
       }
+      
       // إجبار تحديث فوري للبيانات
       setTimeout(() => {
-        queryClient.refetchQueries({ queryKey: [`/api/platforms/${platformId}/orders`] });
+        queryClient.refetchQueries({ queryKey: ["/api/orders"] });
+        queryClient.refetchQueries({ queryKey: ["/api/landing-page-orders"] });
+        if (platformId) {
+          queryClient.refetchQueries({ queryKey: [`/api/platforms/${platformId}/orders`] });
+        }
       }, 100);
       toast({ title: "تم التحديث", description: "تم حفظ التغييرات بنجاح" });
       onClose();
@@ -209,12 +230,12 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
 
   const handleSave = () => {
     const selectedOfferData = availableOffers.find((offer: OfferType) => offer.id === formData.selectedOffer);
-    const quantity = selectedOfferData?.quantity || 1;
-    const offerLabel = selectedOfferData?.label || 'قطعة واحدة';
+    const quantity = formData.quantity || 1; // استخدام الكمية من formData
+    const offerLabel = selectedOfferData?.label || `${quantity} قطعة`;
     
     // إنشاء نص العرض الجديد
     const newOffer = `${offerLabel} - ${formData.customPrice.toLocaleString()} د.ع`;
-    const finalTotal = formData.customPrice - formData.discountAmount;
+    const finalTotal = formData.customPrice - formData.discountAmount; // بدون ضرب في الكمية
     
     // العثور على IDs المتغيرات المحددة
     const selectedColorId = productColors?.find((c: any) => (c.colorName || c.name) === formData.selectedColor)?.id;
@@ -239,14 +260,9 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
       selectedSize: formData.selectedSize,
     };
     
-    console.log('Product Colors:', productColors);
-    console.log('Product Shapes:', productShapes);
-    console.log('Product Sizes:', productSizes);
-    console.log('Form Data:', formData);
-    console.log('Selected Color ID:', selectedColorId);
-    console.log('Selected Shape ID:', selectedShapeId);
-    console.log('Selected Size ID:', selectedSizeId);
-    console.log('Saving order with variants:', updateData);
+    console.log('🔄 Saving order with data:', updateData);
+    console.log('🔄 Quantity being saved:', quantity);
+    console.log('🔄 New offer text:', newOffer);
     updateMutation.mutate(updateData);
   };
 
@@ -272,14 +288,21 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
           {/* بيانات المنتج */}
           <div className="bg-theme-primary-lighter dark:bg-gray-700 p-3 rounded text-sm border border-theme-primary dark:border-gray-600">
             <div className="font-medium text-theme-primary dark:text-white">{productName}</div>
-            <div className="text-theme-primary dark:text-gray-300 mt-1">{offer}</div>
+            {offer && (
+              <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-2 mt-2">
+                <div className="text-xs text-purple-700 dark:text-purple-300 font-medium mb-1">العرض المختار:</div>
+                <div className="text-purple-800 dark:text-purple-200 text-sm leading-relaxed text-right">
+                  {offer}
+                </div>
+              </div>
+            )}
             
             {/* خصائص المنتج (اللون، الشكل، الحجم) */}
             {(productColors?.length > 0 || productShapes?.length > 0 || productSizes?.length > 0) && (
               <div className="grid grid-cols-3 gap-2 mt-2">
                 {productColors?.length > 0 && (
                   <div className="text-center">
-                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">اللون</label>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 block mb-1">اللون</div>
                     <Select value={formData.selectedColor} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedColor: value }))}>
                       <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
                         <SelectValue placeholder="اختر اللون" />
@@ -296,7 +319,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
                 )}
                 {productShapes?.length > 0 && (
                   <div className="text-center">
-                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">الشكل</label>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 block mb-1">الشكل</div>
                     <Select value={formData.selectedShape} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedShape: value }))}>
                       <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
                         <SelectValue placeholder="اختر الشكل" />
@@ -313,7 +336,7 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
                 )}
                 {productSizes?.length > 0 && (
                   <div className="text-center">
-                    <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">الحجم</label>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 block mb-1">الحجم</div>
                     <Select value={formData.selectedSize} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedSize: value }))}>
                       <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500">
                         <SelectValue placeholder="اختر الحجم" />
@@ -333,15 +356,17 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
             
             {/* العروض المتاحة */}
             <div className="mt-3">
-              <label className="text-xs text-gray-600 dark:text-gray-400 block mb-2">العرض المحدد:</label>
+              <div className="text-xs text-gray-600 dark:text-gray-400 block mb-2">العرض المحدد:</div>
               <Select 
                 value={formData.selectedOffer} 
                 onValueChange={(value) => {
                   const selectedOffer = availableOffers.find((offer: OfferType) => offer.id === value);
                   if (selectedOffer) {
+                    console.log('🔄 Selected offer:', selectedOffer);
                     setFormData(prev => ({ 
                       ...prev, 
                       selectedOffer: value,
+                      quantity: selectedOffer.quantity,
                       customPrice: selectedOffer.price
                     }));
                   }
@@ -368,11 +393,12 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
               </Select>
             </div>
             
-            {/* تعديل السعر والخصم */}
-            <div className="grid grid-cols-2 gap-2 mt-3">
+            {/* تعديل السعر والكمية والخصم */}
+            <div className="grid grid-cols-3 gap-2 mt-3">
               <div className="text-center">
-                <label className="text-xs text-gray-600 dark:text-gray-400">سعر مخصص</label>
+                <label htmlFor="custom-price-input" className="text-xs text-gray-600 dark:text-gray-400">السعر الإجمالي</label>
                 <Input
+                  id="custom-price-input"
                   type="number"
                   value={formData.customPrice}
                   onChange={(e) => setFormData(prev => ({ ...prev, customPrice: parseInt(e.target.value) || 0 }))}
@@ -380,8 +406,20 @@ export default function CompactOrderModal({ isOpen, onClose, order }: CompactOrd
                 />
               </div>
               <div className="text-center">
-                <label className="text-xs text-gray-600 dark:text-gray-400">الخصم</label>
+                <label htmlFor="quantity-input" className="text-xs text-gray-600 dark:text-gray-400">الكمية</label>
                 <Input
+                  id="quantity-input"
+                  type="number"
+                  min="1"
+                  value={formData.quantity || extractQuantity(offer)}
+                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                  className="text-center h-7 text-xs bg-white dark:bg-gray-600 text-gray-900 dark:text-white border-gray-300 dark:border-gray-500"
+                />
+              </div>
+              <div className="text-center">
+                <label htmlFor="discount-amount-input" className="text-xs text-gray-600 dark:text-gray-400">الخصم</label>
+                <Input
+                  id="discount-amount-input"
                   type="number"
                   value={formData.discountAmount}
                   onChange={(e) => setFormData(prev => ({ ...prev, discountAmount: parseInt(e.target.value) || 0 }))}

@@ -250,8 +250,18 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   const loadTikTokPixel = (pixelId: string) => {
     // التحقق من تحميل البكسل سابقاً
     if (document.querySelector(`[data-tiktok-pixel-id="${pixelId}"]`)) {
+      console.log('🎵 TikTok Pixel already loaded:', pixelId);
+      // في تطبيقات SPA يجب استدعاء page() عند كل انتقال صفحة لضمان تتبع صحيح
+      try {
+        if (window.ttq && typeof window.ttq.page === 'function') {
+          window.ttq.page();
+          console.log('🎵 TikTok page() called on SPA navigation');
+        }
+      } catch (_) {}
       return;
     }
+
+    console.log('🎵 Loading TikTok Pixel:', pixelId);
 
 
     // تهيئة TikTok Pixel
@@ -286,6 +296,8 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     marker.setAttribute('data-tiktok-pixel-id', pixelId);
     marker.style.display = 'none';
     document.head.appendChild(marker);
+
+    console.log('✅ TikTok Pixel loaded successfully:', pixelId);
 
   };
 
@@ -380,76 +392,31 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       return null;
     };
 
-    // ✅ الطريقة الصحيحة: ترك Facebook Pixel ينشئ _fbc تلقائياً
-    // فقط حفظ fbclid في localStorage للاستخدام في Server-Side API
+    // ✅ الطريقة الصحيحة: استخدام _fbc كما هو من Facebook Pixel
+    const getOriginalFBC = () => {
+      // محاولة الحصول على _fbc من الكوكي كما أنشأه Facebook Pixel
+      const existingFBC = getFBCookie('_fbc');
+      if (existingFBC) {
+        console.log('✅ Using original _fbc cookie from Facebook Pixel (unchanged):', existingFBC);
+        return existingFBC;
+      }
+      
+      console.log('ℹ️ No _fbc cookie found - Facebook Pixel will create it automatically');
+      return null;
+    };
+
+    // حفظ fbclid من URL للاستخدام في Server-Side API فقط (بدون تعديل)
     const captureFBCLIDForServerSide = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const fbclid = urlParams.get('fbclid');
       
       if (fbclid) {
-        // حفظ fbclid في localStorage للاستخدام في Server-Side API فقط
-        localStorage.setItem('fbclid', fbclid);
+        // حفظ fbclid الأصلي بدون تعديل للاستخدام في Server-Side API
+        localStorage.setItem('original_fbclid', fbclid);
         localStorage.setItem('fbclid_timestamp', Date.now().toString());
         
-        console.log('✅ FBCLID captured for Server-Side API:', fbclid);
-        
-        // ✅ ترك Facebook Pixel ينشئ _fbc cookie تلقائياً
-        // لا نتدخل في آلية Facebook الطبيعية
-        console.log('ℹ️ Facebook Pixel will create _fbc cookie automatically');
+        console.log('✅ Original FBCLID captured (unchanged):', fbclid);
       }
-    };
-    
-    // إنشاء FBC للـ Server-Side API فقط (ليس للبكسل)
-    const generateFBCForServerSide = () => {
-      // محاولة الحصول على _fbc من الكوكي أولاً (الذي أنشأه Facebook Pixel)
-      const existingFBC = getFBCookie('_fbc');
-      if (existingFBC) {
-        console.log('✅ Using existing _fbc cookie from Facebook Pixel:', existingFBC);
-        return existingFBC;
-      }
-      
-      // إذا لم يوجد _fbc، إنشاء واحد للـ Server-Side API فقط
-      const storedFbclid = localStorage.getItem('fbclid');
-      const storedTimestamp = localStorage.getItem('fbclid_timestamp');
-      
-      if (storedFbclid && storedTimestamp) {
-        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-        const storedTime = parseInt(storedTimestamp);
-        
-        if (storedTime > sevenDaysAgo) {
-          const hostname = window.location.hostname;
-          let subdomainIndex = 1;
-          
-          if (hostname === 'localhost' || hostname.split('.').length === 1) {
-            subdomainIndex = 0;
-          } else if (hostname.split('.').length === 2) {
-            subdomainIndex = 1;
-          } else {
-            subdomainIndex = 2;
-          }
-          
-          const fbc = `fb.${subdomainIndex}.${storedTime}.${storedFbclid}`;
-          
-          console.log('✅ FBC generated for Server-Side API only:', { 
-            storedFbclid, 
-            fbc, 
-            timestamp: storedTime,
-            subdomainIndex 
-          });
-          return fbc;
-        }
-      }
-      
-      return null;
-    };
-
-    // الحصول على FBC محسن - للـ Server-Side API
-    const getEnhancedFBC = () => {
-      // أولاً: التقاط fbclid إذا كان موجود في URL
-      captureFBCLIDForServerSide();
-      
-      // ثانياً: الحصول على FBC للـ Server-Side API
-      return generateFBCForServerSide();
     };
     
     // إرسال القيمة كما هي بدون تحويل لتطابق الكتالوج
@@ -552,27 +519,33 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
 
   // تتبع أحداث TikTok بطريقة طبيعية وصحيحة
   const trackTikTokEvent = (eventType: string, data?: any) => {
+    console.log('🎵 trackTikTokEvent called with:', eventType, data);
+    
     if (!window.ttq) {
+      console.warn('🎵 TikTok Pixel not loaded - skipping event:', eventType);
       return;
     }
 
-    // خريطة الأحداث المعتمدة من TikTok
+    // خريطة الأحداث المعتمدة من TikTok - محدثة لاستخدام PlaceAnOrder
     const eventMap: Record<string, string> = {
       'page_view': 'ViewContent',
       'view_content': 'ViewContent',
       'ViewContent': 'ViewContent',
       'add_to_cart': 'AddToCart',
       'initiate_checkout': 'InitiateCheckout',
-      'purchase': 'CompletePayment',
-      'Purchase': 'CompletePayment',
+      'purchase': 'PlaceAnOrder',  // TikTok Custom Event - حدث مخصص لتسجيل الطلبات
+      'Purchase': 'PlaceAnOrder',  // TikTok Custom Event - حدث مخصص لتسجيل الطلبات
       'lead': 'SubmitForm',
       'contact': 'Contact'
     };
 
     const tikTokEvent = eventMap[eventType];
     if (!tikTokEvent) {
+      console.warn('🎵 TikTok event not mapped:', eventType);
       return;
     }
+
+    console.log('🎵 TikTok Event Mapping:', { originalEvent: eventType, tikTokEvent });
 
     // تحويل العملة للدولار
     const convertedValue = data?.value ? convertIQDToUSD(data.value) : data?.value;
@@ -585,6 +558,25 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     // إنشاء event_id فريد للحدث
     const eventId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    // التأكد من وجود content_id من البيانات الحقيقية
+    const contentId = data?.content_ids?.[0] 
+      || data?.content_id 
+      || data?.product_id 
+      || data?.landing_page_id 
+      || data?.transaction_id 
+      || data?.order_number
+      || data?.id;
+    
+    console.log('🎵 TikTok content_id resolution:', {
+      content_ids: data?.content_ids,
+      content_id: data?.content_id,
+      product_id: data?.product_id,
+      landing_page_id: data?.landing_page_id,
+      transaction_id: data?.transaction_id,
+      order_number: data?.order_number,
+      finalContentId: contentId
+    });
+    
     // تكوين بيانات الحدث
     const eventData: any = {
       value: convertedValue,
@@ -592,7 +584,7 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       content_type: 'product',
       content_name: data?.content_name || 'Purchase',
       content_category: data?.content_category || '',
-      content_id: data?.content_ids?.[0] || data?.content_id || '',
+      content_id: contentId, // ✅ من البيانات الحقيقية
       quantity: data?.quantity || 1,
       event_id: eventId // إضافة event_id للتتبع
     };
@@ -623,20 +615,59 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       if (phone && phone.trim()) {
         userProperties.phone_number = phone.trim();
       }
-      
-      // إرسال البيانات الشخصية أولاً (إذا كانت متوفرة)
-      if (Object.keys(userProperties).length > 0) {
-        window.ttq.identify(userProperties);
-      }
-      
-      // ثم إرسال الحدث
-      window.ttq.track(tikTokEvent, cleanEventData);
-      
-      // إرسال إلى TikTok API أيضاً (server-side)
-      sendToTikTokAPI(tikTokEvent, cleanEventData, data);
-      
+
+      const sendEvent = () => {
+        console.log('🎵 sendEvent function called for:', tikTokEvent);
+        console.log('🎵 TikTok Event Data:', {
+          event: tikTokEvent,
+          eventData: cleanEventData,
+          userProperties,
+          originalEventType: eventType
+        });
+
+        try {
+          // إرسال البيانات الشخصية أولاً (إذا كانت متوفرة)
+          if (Object.keys(userProperties).length > 0) {
+            console.log('🎵 TikTok identify:', userProperties);
+            window.ttq.identify(userProperties);
+          }
+
+          // ثم إرسال الحدث
+          console.log('🎵 TikTok track event:', tikTokEvent, cleanEventData);
+          window.ttq.track(tikTokEvent, cleanEventData);
+          console.log('🎵 TikTok track call completed');
+
+          // إرسال إلى TikTok API أيضاً (server-side)
+          sendToTikTokAPI(tikTokEvent, cleanEventData, data);
+
+          console.log('✅ TikTok event sent successfully:', tikTokEvent);
+
+          // في حالة الشراء، أطلق حدث مخصص وأضف علامة لتسهيل الانتظار قبل التوجيه
+          try {
+            if (tikTokEvent === 'PlaceAnOrder') {
+              console.log('🎵 Setting purchase completion flags');
+              localStorage.setItem('tiktok_purchase_sent', 'true');
+              window.dispatchEvent(new CustomEvent('tiktok_purchase_sent', {
+                detail: {
+                  content_id: cleanEventData.content_id,
+                  event_id: cleanEventData.event_id
+                }
+              }));
+            }
+          } catch (e) {
+            console.log('🎵 Error setting purchase flags:', e);
+          }
+        } catch (error) {
+          console.error('🎵 Error in sendEvent:', error);
+        }
+      };
+
+      // استدعاء مباشر بدون تعقيدات
+      console.log('🎵 About to call sendEvent directly');
+      sendEvent();
+
     } catch (error) {
-      // خطأ صامت
+      console.error('❌ TikTok event error:', error);
     }
   };
 
@@ -816,32 +847,18 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
         return null;
       };
       
-      let fbc = getFBCookieLocal('_fbc');
-      if (!fbc) {
-        // إنشاء fbc للـ Server-Side API إذا لم يوجد
-        const storedFbclid = localStorage.getItem('fbclid');
-        const storedTimestamp = localStorage.getItem('fbclid_timestamp');
-        
-        if (storedFbclid && storedTimestamp) {
-          const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-          const storedTime = parseInt(storedTimestamp);
-          
-          if (storedTime > sevenDaysAgo) {
-            const hostname = window.location.hostname;
-            let subdomainIndex = 1;
-            
-            if (hostname === 'localhost' || hostname.split('.').length === 1) {
-              subdomainIndex = 0;
-            } else if (hostname.split('.').length === 2) {
-              subdomainIndex = 1;
-            } else {
-              subdomainIndex = 2;
-            }
-            
-            fbc = `fb.${subdomainIndex}.${storedTime}.${storedFbclid}`;
-          }
-        }
+      // ✅ استخدام _fbc الأصلي من Facebook Pixel بدون تعديل
+      const fbc = getFBCookieLocal('_fbc');
+      
+      // ✅ حفظ fbclid الأصلي للاستخدام في Server-Side API إذا لزم الأمر
+      const urlParams = new URLSearchParams(window.location.search);
+      const fbclid = urlParams.get('fbclid');
+      if (fbclid) {
+        localStorage.setItem('original_fbclid', fbclid);
+        localStorage.setItem('fbclid_timestamp', Date.now().toString());
       }
+      
+      console.log('✅ Using original _fbc for Server-Side API:', fbc ? 'PRESENT (unchanged)' : 'NOT_FOUND');
       
       const fbp = getFBCookieLocal('_fbp');
       
@@ -1007,19 +1024,17 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
           return null;
         };
 
-        // الحصول على FBC محسن
-        const getEnhancedFBCLocal = () => {
-          let fbc = getFBCookieLocal('_fbc');
-          if (!fbc) {
-            fbc = generateFBCFromURLLocal();
-          }
+        // ✅ الحصول على FBC الأصلي بدون تعديل
+        const getOriginalFBCLocal = () => {
+          const fbc = getFBCookieLocal('_fbc');
+          console.log('✅ Using original _fbc (unchanged):', fbc ? 'PRESENT' : 'NOT_FOUND');
           return fbc;
         };
 
         const enrichedEventData = {
           ...eventData,
           fbp: getFBCookieLocal('_fbp'),
-          fbc: getEnhancedFBCLocal()
+          fbc: getOriginalFBCLocal()
         };
 
         console.log('🔍 Enhanced Event Data (useEffect):', {
@@ -1047,9 +1062,43 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
         // إرسال الحدث مع Advanced Matching محدث
         trackFacebookEvent(eventType, enrichedEventData, eventId, eventAdvancedMatching);
         sendToServerSideAPI(platformId, eventType, enrichedEventData, eventId);
+        
+        // تشغيل TikTok حتى في فرع "Pixel already loaded" - مباشر بدون تأخير
+        if (pixelSettings?.tiktokPixelId) {
+          console.log('🎵 [Already Loaded Branch] Loading TikTok for event:', eventType);
+          loadTikTokPixel(pixelSettings.tiktokPixelId);
+          
+          // استدعاء مباشر بدون تعقيدات
+          console.log('🎵 [Already Loaded Branch] Direct call - window.ttq exists:', !!window.ttq);
+          console.log('🎵 [Already Loaded Branch] Direct call - window.ttq.track type:', typeof window.ttq?.track);
+          
+          if (window.ttq && typeof window.ttq.track === 'function') {
+            console.log('🎵 [Already Loaded Branch] Calling trackTikTokEvent directly...');
+            trackTikTokEvent(eventType, eventData);
+          } else {
+            console.log('🎵 [Already Loaded Branch] TikTok not ready, trying with delay...');
+            setTimeout(() => {
+              console.log('🎵 [Already Loaded Branch] Delayed attempt - window.ttq exists:', !!window.ttq);
+              console.log('🎵 [Already Loaded Branch] Delayed attempt - window.ttq.track type:', typeof window.ttq?.track);
+              if (window.ttq && typeof window.ttq.track === 'function') {
+                console.log('🎵 [Already Loaded Branch] Calling trackTikTokEvent after delay...');
+                trackTikTokEvent(eventType, eventData);
+              } else {
+                console.log('🎵 [Already Loaded Branch] TikTok still not ready after delay');
+              }
+            }, 500);
+          }
+        }
+        
+        // تشغيل Snapchat و GA أيضاً في فرع "already loaded"
+        if (pixelSettings?.snapchatPixelId) {
+          trackSnapchatEvent(eventType, eventData);
+        }
+        if (pixelSettings?.googleAnalyticsId) {
+          trackGoogleEvent(eventType, eventData);
+        }
       }, 100);
-      
-      return;
+      // لا نُرجع هنا كي نسمح بتشغيل TikTok/Snap/GA بالأسفل حتى في حال كان Facebook Pixel محملاً مسبقاً
     }
     
     // تشخيص خاص لحدث Lead
@@ -1163,19 +1212,17 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
           return null;
         };
 
-        // الحصول على FBC محسن
-        const getEnhancedFBCLocal2 = () => {
-          let fbc = getFBCookieLocal2('_fbc');
-          if (!fbc) {
-            fbc = generateFBCFromURLLocal2();
-          }
+        // ✅ الحصول على FBC الأصلي بدون تعديل
+        const getOriginalFBCLocal2 = () => {
+          const fbc = getFBCookieLocal2('_fbc');
+          console.log('✅ Using original _fbc (unchanged):', fbc ? 'PRESENT' : 'NOT_FOUND');
           return fbc;
         };
 
         const enrichedEventData = {
           ...eventData,
           fbp: getFBCookieLocal2('_fbp'),
-          fbc: getEnhancedFBCLocal2()
+          fbc: getOriginalFBCLocal2()
         };
 
         console.log('🔍 Enhanced Event Data (init):', {
@@ -1193,20 +1240,50 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     }
     
     // تحميل وتنفيذ TikTok Pixel
-    if (pixelSettings.tiktokPixelId) {
+    if (pixelSettings?.tiktokPixelId) {
       loadTikTokPixel(pixelSettings.tiktokPixelId);
-      setTimeout(() => {
-        trackTikTokEvent(eventType, eventData);
-      }, 200);
+
+      // إرسال TikTok مع إعادة المحاولة (لمعالجة بطء تحميل SDK)
+      const trackTikTokWithRetry = (etype: string, edata: any, attempt = 1) => {
+        const maxAttempts = 3;
+        const delays = [200, 800, 1600];
+
+        const doSend = () => {
+          try {
+            if (window.ttq && typeof window.ttq.track === 'function') {
+              console.log('🎵 [Main Branch] Calling trackTikTokEvent for:', etype);
+              trackTikTokEvent(etype, edata);
+            } else if (attempt < maxAttempts) {
+              setTimeout(() => trackTikTokWithRetry(etype, edata, attempt + 1), delays[attempt] || 1600);
+            }
+          } catch (_) {
+            if (attempt < maxAttempts) {
+              setTimeout(() => trackTikTokWithRetry(etype, edata, attempt + 1), delays[attempt] || 1600);
+            }
+          }
+        };
+
+        // إن كانت ready متوفرة نضمن الجاهزية
+        if (window.ttq && typeof window.ttq.ready === 'function') {
+          try {
+            window.ttq.ready(doSend);
+          } catch (_) {
+            setTimeout(doSend, delays[attempt - 1] || 200);
+          }
+        } else {
+          setTimeout(doSend, delays[attempt - 1] || 200);
+        }
+      };
+
+      trackTikTokWithRetry(eventType, eventData);
     }
     
     // تنفيذ Snapchat Pixel
-    if (pixelSettings.snapchatPixelId) {
+    if (pixelSettings?.snapchatPixelId) {
       trackSnapchatEvent(eventType, eventData);
     }
-    
     // تنفيذ Google Analytics
-    if (pixelSettings.googleAnalyticsId) {
+    if (pixelSettings?.googleAnalyticsId) {
       trackGoogleEvent(eventType, eventData);
     }
     

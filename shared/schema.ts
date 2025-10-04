@@ -980,6 +980,8 @@ export const adPlatformSettings = pgTable("ad_platform_settings", {
   // TikTok settings  
   tiktokPixelId: varchar("tiktok_pixel_id"),
   tiktokAccessToken: varchar("tiktok_access_token"),
+  tiktokAdvertiserId: varchar("tiktok_advertiser_id"),
+  tiktokBusinessId: varchar("tiktok_business_id"),
   tiktokBusinessCenterId: varchar("tiktok_business_center_id"),
   
   // Snapchat settings
@@ -1263,6 +1265,23 @@ export const completeTiktokCampaignSchema = z.object({
     "PLACEMENT_TYPE_AUTOMATIC",
     "PLACEMENT_TYPE_SELECT"
   ]).default("PLACEMENT_TYPE_AUTOMATIC"),
+  
+  // إعدادات متقدمة للمجموعة الإعلانية
+  pacing: z.enum([
+    "PACING_MODE_SMOOTH",
+    "PACING_MODE_ACCELERATED"
+  ]).default("PACING_MODE_SMOOTH"),
+  optimizationGoal: z.enum([
+    "CONVERT",
+    "CLICK", 
+    "REACH",
+    "IMPRESSION"
+  ]).default("CONVERT"),
+  billingEvent: z.enum([
+    "CPC",
+    "CPM",
+    "OCPM"
+  ]).default("CPC"),
   
   // Ad data
   adName: z.string().min(1, "اسم الإعلان مطلوب"),

@@ -177,10 +177,10 @@ export default function PlatformEmployees() {
   // Create complete session for sidebar
   const sidebarSession = session && platformData ? {
     platformId: session.platformId,
-    platformName: platformData.name || "منصتي",
-    subdomain: platformData.subdomain || "",
-    userType: "platform_owner", // Add missing userType
-    logoUrl: platformData.logoUrl
+    platformName: (platformData as any)?.name || "منصتي",
+    subdomain: (platformData as any)?.subdomain || "",
+    userType: "platform_owner" as const, // Add missing userType
+    logoUrl: (platformData as any)?.logoUrl
   } : null;
 
   // Get employees data
@@ -277,8 +277,8 @@ export default function PlatformEmployees() {
     mutationFn: async (data: AddEmployeeForm) => {
       const employeeData = {
         ...data,
-        department: data.department === "none" ? "" : data.department,
-        position: data.position === "none" ? "" : data.position,
+        department: (data as any).department === "none" ? "" : (data as any).department,
+        position: (data as any).position === "none" ? "" : (data as any).position,
         salary: data.salary ? parseFloat(data.salary) : 0,
         hireDate: data.hireDate, // Keep as string, will be converted on server
         profileImageUrl: uploadedImageUrl || null,
@@ -645,7 +645,7 @@ export default function PlatformEmployees() {
                   فلترة حسب الحالة:
                 </label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[200px] theme-border">
+                  <SelectTrigger id="status-filter" className="w-[200px] theme-border">
                     <SelectValue placeholder="اختر الحالة" />
                   </SelectTrigger>
                   <SelectContent className="bg-theme-primary-lighter theme-border">
@@ -714,7 +714,7 @@ export default function PlatformEmployees() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">المدراء</p>
                     <p className="text-2xl font-bold text-blue-600">
-                      {employees.filter(e => ['admin', 'manager'].includes(e.role)).length}
+                      {employees.filter(e => ['admin', 'manager'].includes((e as any).role || '')).length}
                     </p>
                   </div>
                   <Shield className="h-8 w-8 text-blue-600" />
@@ -729,7 +729,8 @@ export default function PlatformEmployees() {
                     <p className="text-sm font-medium text-muted-foreground">الموظفين الجدد</p>
                     <p className="text-2xl font-bold text-purple-600">
                       {employees.filter(e => {
-                        const hireDate = new Date(e.hireDate);
+                        if (!(e as any).hireDate) return false;
+                        const hireDate = new Date((e as any).hireDate);
                         const thirtyDaysAgo = new Date();
                         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                         return hireDate >= thirtyDaysAgo;
@@ -780,7 +781,7 @@ export default function PlatformEmployees() {
                     <div className="flex items-center justify-between">
                       {/* Action buttons on left side */}
                       <div className="flex items-center gap-3">
-                        <EmployeeEditModal employee={employee}>
+                        <EmployeeEditModal employee={employee as any}>
                           <Button
                             variant="outline"
                             size="sm"

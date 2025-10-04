@@ -49,6 +49,7 @@ const extractQuantityFromOffer = (offer: string): string => {
 import { apiRequest } from "@/lib/queryClient";
 import CreateOrderModal from "@/components/modals/create-order-modal";
 import PrintInvoiceModal from "@/components/modals/print-invoice-modal";
+import ViewOrderModal from "@/components/modals/view-order-modal";
 import { PlatformSelector } from "@/components/PlatformSelector";
 
 const statusColors = {
@@ -83,6 +84,7 @@ export default function Orders() {
   const [dateTo, setDateTo] = useState("");
   const [showCreateOrder, setShowCreateOrder] = useState(false);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<any>(null);
+  const [selectedOrderForView, setSelectedOrderForView] = useState<any>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -97,7 +99,7 @@ export default function Orders() {
     queryKey: ['/api/platform-session'],
   });
 
-  const platformId = platformSession?.platformId || null;
+  const platformId = (platformSession as any)?.platformId || null;
 
   const { data: orders, isLoading, error, refetch } = useQuery({
     queryKey: selectedPlatform && selectedPlatform !== 'none' ? ["/api/admin/platforms", selectedPlatform, "orders"] : ["empty-orders"],
@@ -246,6 +248,10 @@ export default function Orders() {
     setSelectedOrderForPrint(order);
   };
 
+  const handleViewOrder = (order: any) => {
+    setSelectedOrderForView(order);
+  };
+
   // Hidden function to update order numbers (for admin use)
   const updateOrderNumbersMutation = useMutation({
     mutationFn: async () => {
@@ -346,7 +352,7 @@ export default function Orders() {
                 <div className="space-y-4">
                   {/* Platform Selector */}
                   <div className="flex items-center gap-4">
-                    <label className="text-sm font-medium text-theme-primary whitespace-nowrap">اختر المنصة:</label>
+                    <div className="text-sm font-medium text-theme-primary whitespace-nowrap">اختر المنصة:</div>
                     <PlatformSelector 
                       value={selectedPlatform || undefined}
                       onValueChange={setSelectedPlatform}
@@ -357,8 +363,9 @@ export default function Orders() {
                   {/* Date Range Filter */}
                   <div className="flex flex-col md:flex-row gap-4 items-center">
                     <div className="flex items-center gap-2 flex-1">
-                      <label className="text-sm font-medium text-theme-primary whitespace-nowrap">من تاريخ:</label>
+                      <label htmlFor="date-from-orders" className="text-sm font-medium text-theme-primary whitespace-nowrap">من تاريخ:</label>
                       <Input
+                        id="date-from-orders"
                         type="date"
                         value={dateFrom}
                         onChange={(e) => setDateFrom(e.target.value)}
@@ -366,8 +373,9 @@ export default function Orders() {
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
-                      <label className="text-sm font-medium text-theme-primary whitespace-nowrap">إلى تاريخ:</label>
+                      <label htmlFor="date-to-orders" className="text-sm font-medium text-theme-primary whitespace-nowrap">إلى تاريخ:</label>
                       <Input
+                        id="date-to-orders"
                         type="date"
                         value={dateTo}
                         onChange={(e) => setDateTo(e.target.value)}
@@ -746,7 +754,12 @@ export default function Orders() {
                       
                       <div className="flex flex-row-reverse justify-between items-center" dir="rtl">
                         <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" className="theme-border hover:bg-theme-primary-light hover:text-theme-primary">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleViewOrder(order)}
+                            className="theme-border hover:bg-theme-primary-light hover:text-theme-primary"
+                          >
                             <i className="fas fa-eye ml-1"></i>
                             عرض التفاصيل
                           </Button>
@@ -816,6 +829,14 @@ export default function Orders() {
           isOpen={!!selectedOrderForPrint}
           onClose={() => setSelectedOrderForPrint(null)}
           order={selectedOrderForPrint}
+        />
+      )}
+
+      {selectedOrderForView && (
+        <ViewOrderModal
+          isOpen={!!selectedOrderForView}
+          onClose={() => setSelectedOrderForView(null)}
+          order={selectedOrderForView}
         />
       )}
     </div>

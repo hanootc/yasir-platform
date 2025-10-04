@@ -282,8 +282,9 @@ export default function PlatformCategories() {
                 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1 text-right">اسم التصنيف</label>
+                    <label htmlFor="category-name-input" className="block text-sm font-medium mb-1 text-right">اسم التصنيف</label>
                     <Input
+                      id="category-name-input"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="أدخل اسم التصنيف"
@@ -293,8 +294,9 @@ export default function PlatformCategories() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium mb-1 text-right">الوصف</label>
+                    <label htmlFor="category-description-input" className="block text-sm font-medium mb-1 text-right">الوصف</label>
                     <Textarea
+                      id="category-description-input"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       placeholder="وصف التصنيف (اختياري)"
@@ -304,7 +306,7 @@ export default function PlatformCategories() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium mb-1 text-right">الأيقونة</label>
+                    <div className="block text-sm font-medium mb-1 text-right">الأيقونة</div>
                     <div className="grid grid-cols-6 gap-2 mb-2">
                       {iconOptions.map((icon) => (
                         <button

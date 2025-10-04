@@ -153,7 +153,8 @@ export const PROTECTED_PLATFORM_ENDPOINTS = [
   '/api/reports',
   '/api/ads',
   '/api/settings',
-  '/api/upload'
+  '/api/upload',
+  '/api/tiktok'
 ];
 
 // Check if endpoint requires platform authentication

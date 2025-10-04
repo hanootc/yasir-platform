@@ -774,7 +774,7 @@ export default function PlatformOrders() {
       case 'quantity':
         return (
           <span className="text-xs font-medium text-theme-primary">
-            {formatEnglishNumbers(order.quantity)}
+            {formatEnglishNumbers(order.quantity || extractQuantityFromOffer(order.offer || ""))}
           </span>
         );
       
@@ -873,7 +873,7 @@ export default function PlatformOrders() {
         return (
           <div className="flex items-center justify-center gap-1">
             <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border ${orderSourceColors[orderSource] || orderSourceColors.other}`}>
-              <i className={`${orderSourceIcons[orderSource] || orderSourceIcons.other} text-[8px]`}></i>
+              <i className={`${orderSourceIcons[orderSource] || orderSourceIcons.other} text-sm`}></i>
               <span>{orderSourceLabels[orderSource] || orderSourceLabels.other}</span>
             </div>
           </div>
@@ -2005,8 +2005,9 @@ export default function PlatformOrders() {
                     
                     <div className="flex items-center justify-center gap-2">
                       <i className="fas fa-calendar-alt text-sm text-theme-primary dark:text-white"></i>
-                      <label className="text-sm font-medium text-theme-primary dark:text-white whitespace-nowrap">من تاريخ:</label>
+                      <label htmlFor="date-from-input" className="text-sm font-medium text-theme-primary dark:text-white whitespace-nowrap">من تاريخ:</label>
                       <Input
+                        id="date-from-input"
                         type="date"
                         value={dateFrom}
                         onChange={(e) => setDateFrom(e.target.value)}
@@ -2015,8 +2016,9 @@ export default function PlatformOrders() {
                     </div>
                     <div className="flex items-center justify-center gap-2">
                       <i className="fas fa-calendar-alt text-sm text-theme-primary dark:text-white"></i>
-                      <label className="text-sm font-medium text-theme-primary dark:text-white whitespace-nowrap">إلى تاريخ:</label>
+                      <label htmlFor="date-to-input" className="text-sm font-medium text-theme-primary dark:text-white whitespace-nowrap">إلى تاريخ:</label>
                       <Input
+                        id="date-to-input"
                         type="date"
                         value={dateTo}
                         onChange={(e) => setDateTo(e.target.value)}

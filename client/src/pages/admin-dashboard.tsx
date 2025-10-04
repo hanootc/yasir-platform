@@ -1039,7 +1039,7 @@ function AdminDashboardContent() {
             </div>
 
             {/* إحصائيات النظام */}
-            {systemStats && Object.keys(systemStats).length > 0 && (
+            {systemStats && Object.keys(systemStats).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <Card>
                   <CardContent className="p-6">
@@ -1097,7 +1097,7 @@ function AdminDashboardContent() {
                   </CardContent>
                 </Card>
               </div>
-            )}
+            ) : null}
 
             <Tabs defaultValue="platforms" className="space-y-6">
               <TabsList className="grid w-full grid-cols-6">

@@ -80,6 +80,9 @@ function extractQuantityFromOffer(offer: string): number {
 export default function ViewOrderModal({ isOpen, onClose, order }: ViewOrderModalProps) {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Debug log
+  console.log("ViewOrderModal rendered with isEditing:", isEditing);
   const [formData, setFormData] = useState({
     customerName: "",
     customerPhone: "",
@@ -304,76 +307,89 @@ export default function ViewOrderModal({ isOpen, onClose, order }: ViewOrderModa
                   {/* Product Info - Takes remaining space */}
                   <div className="flex-1 text-right space-y-3">
                     <h3 className="text-lg font-semibold">{order.productName}</h3>
-                    <p className="text-gray-600">السعر: {formatCurrency(Number(order.productPrice || 0))}</p>
+                    <div className="space-y-2">
+                      {/* حقل السعر */}
+                      <div className="flex items-center gap-2">
+                        <Label className="text-gray-600">السعر للقطعة:</Label>
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={formData.customPrice}
+                              onChange={(e) => setFormData({ ...formData, customPrice: parseFloat(e.target.value) || 0 })}
+                              className="w-24 h-8 text-center"
+                            />
+                            <span className="text-sm text-gray-600">د.ع</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-800">
+                            {formatCurrency(Number(order.productPrice || 0))}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* حقل الكمية */}
+                      <div className="flex items-center gap-2">
+                        <Label className="text-blue-600 font-medium">الكمية:</Label>
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min="1"
+                              value={formData.quantity}
+                              onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                              className="w-20 h-8 text-center"
+                            />
+                            <span className="text-sm text-gray-600">قطعة</span>
+                          </div>
+                        ) : (
+                          <span className="text-blue-600 font-medium">
+                            {extractQuantityFromOffer(order.offer || "")} قطعة
+                          </span>
+                        )}
+                      </div>
+
+                      {/* حقل الخصم */}
+                      {isEditing && (
+                        <div className="flex items-center gap-2">
+                          <Label className="text-red-600 font-medium">الخصم:</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={formData.discountAmount}
+                              onChange={(e) => setFormData({ ...formData, discountAmount: parseFloat(e.target.value) || 0 })}
+                              className="w-24 h-8 text-center"
+                            />
+                            <span className="text-sm text-gray-600">د.ع</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* عرض المجموع في وضع التحرير */}
+                      {isEditing && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-2">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-green-700 font-medium">المجموع النهائي:</Label>
+                            <span className="text-green-800 font-bold text-lg">
+                              {formatCurrency(Math.max(0, (formData.customPrice * formData.quantity) - formData.discountAmount))}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     {order.offer && (
-                      <div className="flex gap-2 justify-end flex-wrap">
-                        <Badge variant="secondary" className="bg-green-100 text-green-800">
-                          الكمية: {isEditing ? formData.quantity : extractQuantityFromOffer(order.offer)}
-                        </Badge>
-                        <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                        <Label className="text-sm text-purple-700 font-medium">العرض المختار:</Label>
+                        <p className="text-purple-800 mt-1 text-right leading-relaxed">
                           {order.offer}
-                        </Badge>
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Editing Section */}
-                {isEditing && (
-                  <div className="mt-6 pt-6 border-t">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <Label className="text-sm text-gray-600">السعر للقطعة</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={formData.customPrice}
-                          onChange={(e) => setFormData({ ...formData, customPrice: parseFloat(e.target.value) || 0 })}
-                          className="mt-1 text-center"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm text-gray-600">الكمية</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={formData.quantity}
-                          onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
-                          className="mt-1 text-center"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm text-gray-600">مبلغ الخصم (د.ع)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={formData.discountAmount}
-                          onChange={(e) => setFormData({ ...formData, discountAmount: parseFloat(e.target.value) || 0 })}
-                          className="mt-1 text-center"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="bg-gray-50 p-4 rounded-lg mt-4 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>المجموع الفرعي:</span>
-                        <span>{formatCurrency(formData.customPrice * formData.quantity)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm text-red-600">
-                        <span>الخصم:</span>
-                        <span>-{formatCurrency(formData.discountAmount)}</span>
-                      </div>
-                      <div className="border-t pt-2">
-                        <div className="flex justify-between">
-                          <Label className="text-sm text-gray-600">المجموع النهائي:</Label>
-                          <div className="text-xl font-bold text-green-600">
-                            {formatCurrency(Math.max(0, (formData.customPrice * formData.quantity) - formData.discountAmount))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
@@ -384,7 +400,10 @@ export default function ViewOrderModal({ isOpen, onClose, order }: ViewOrderModa
               <Button
                 variant={isEditing ? "outline" : "default"}
                 size="sm"
-                onClick={() => setIsEditing(!isEditing)}
+                onClick={() => {
+                  console.log("Edit button clicked, current isEditing:", isEditing);
+                  setIsEditing(!isEditing);
+                }}
               >
                 {isEditing ? "إلغاء" : "تعديل"}
               </Button>

@@ -1942,6 +1942,10 @@ export class DatabaseStorage implements IStorage {
           updates.push(`total = $${paramIndex++}`);
           values.push(orderData.total);
         }
+        if ('quantity' in orderData && orderData.quantity !== undefined) {
+          updates.push(`quantity = $${paramIndex++}`);
+          values.push(orderData.quantity);
+        }
 
         // إضافة updated_at دائماً
         updates.push(`updated_at = $${paramIndex++}`);
@@ -3103,6 +3107,10 @@ export class DatabaseStorage implements IStorage {
           updates.push(`total_amount = $${paramIndex++}`);
           values.push(orderData.totalAmount);
         }
+        if ('quantity' in orderData && orderData.quantity !== undefined) {
+          updates.push(`quantity = $${paramIndex++}`);
+          values.push(orderData.quantity);
+        }
 
         if (updates.length === 1) { // فقط updated_at
           throw new Error("No data to update");
@@ -3861,7 +3869,7 @@ export class DatabaseStorage implements IStorage {
   async updateTikTokCampaignStats(campaignId: string, stats: any): Promise<void> {
     await db.update(tiktokCampaigns)
       .set({ ...stats, updatedAt: new Date() })
-      .where(eq(tiktokCampaigns.campaignId, campaignId));
+      .where(eq(tiktokCampaigns.id, campaignId));
   }
 
   async updateTikTokCampaignStatus(id: string, status: string): Promise<TiktokCampaign> {

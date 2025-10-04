@@ -289,10 +289,11 @@ export default function DataDeletion() {
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="email-input" className="block text-sm font-medium text-gray-700 mb-1">
                         {t.form.email}
                       </label>
                       <Input
+                        id="email-input"
                         type="email"
                         placeholder={t.form.emailPlaceholder}
                         value={formData.email}
@@ -301,10 +302,11 @@ export default function DataDeletion() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="phone-input" className="block text-sm font-medium text-gray-700 mb-1">
                         {t.form.phone}
                       </label>
                       <Input
+                        id="phone-input"
                         type="tel"
                         placeholder={t.form.phonePlaceholder}
                         value={formData.phone}
@@ -313,10 +315,11 @@ export default function DataDeletion() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="reason-input" className="block text-sm font-medium text-gray-700 mb-1">
                         {t.form.reason}
                       </label>
                       <Textarea
+                        id="reason-input"
                         placeholder={t.form.reasonPlaceholder}
                         value={formData.reason}
                         onChange={(e) => handleInputChange('reason', e.target.value)}
@@ -325,10 +328,11 @@ export default function DataDeletion() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="additional-info-input" className="block text-sm font-medium text-gray-700 mb-1">
                         {t.form.additionalInfo}
                       </label>
                       <Textarea
+                        id="additional-info-input"
                         placeholder={t.form.additionalInfoPlaceholder}
                         value={formData.additionalInfo}
                         onChange={(e) => handleInputChange('additionalInfo', e.target.value)}

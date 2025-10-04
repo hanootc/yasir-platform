@@ -35,6 +35,7 @@ import {
   FileText,
   User,
   Phone,
+  Loader2,
 
   MessageSquare,
   MapPin,
@@ -145,6 +146,10 @@ interface TikTokAd {
   callToAction?: string;
   imageUrls?: string[];
   videoUrl?: string;
+  videoId?: string;
+  coverImageUrl?: string;
+  hasVideo?: boolean;
+  actualVideoUrl?: string; // URL الفيديو الفعلي من TikTok
   impressions: number;
   clicks: number;
   spend: number;
@@ -197,6 +202,8 @@ interface TikTokAccountBalance {
   currency: string;
   status: string;
   lastUpdated: string;
+  last_updated?: string;  // إضافة الخاصية الجديدة من Backend
+  advertiser_id?: string; // إضافة advertiser_id للرابط الديناميكي
   isAvailable: boolean;
   error?: string;
 }
@@ -208,6 +215,7 @@ interface TikTokAccountInfo {
   country: string;
   currency: string;
   timezone: string;
+  advertiser_id?: string; // إضافة advertiser_id للرابط الديناميكي
   company?: string;
   phoneNumber?: string;
   email?: string;
@@ -597,6 +605,13 @@ export default function PlatformAdsTikTokManagement() {
 
       // حفظ معرف الفيديو في الحقل
       field.onChange(result.videoId);
+      
+      // حفظ صورة الغلاف إذا كانت متوفرة
+      if (result.videoCoverUrl) {
+        console.log('📸 صورة غلاف الفيديو:', result.videoCoverUrl);
+        // يمكن حفظ صورة الغلاف في حقل منفصل إذا لزم الأمر
+        // completeCampaignForm.setValue('videoCoverUrl', result.videoCoverUrl);
+      }
 
       toast({
         title: "✅ تم رفع الفيديو بنجاح",
@@ -731,7 +746,19 @@ export default function PlatformAdsTikTokManagement() {
     const budgetMode = completeCampaignForm.watch("campaignBudgetMode");
     const identityId = completeCampaignForm.watch("identityId");
     
-    return !!(campaignName && objective && budgetMode && identityId);
+    const isValid = !!(campaignName && objective && budgetMode && identityId);
+    
+    // تسجيل للتشخيص
+    console.log('🔍 Campaign Section Validation:', {
+      campaignName: !!campaignName,
+      objective: !!objective,
+      budgetMode: !!budgetMode,
+      identityId: !!identityId,
+      identityValue: identityId,
+      isValid
+    });
+    
+    return isValid;
   };
   
   const validateAdGroupSection = () => {
@@ -739,15 +766,19 @@ export default function PlatformAdsTikTokManagement() {
     const adGroupBudgetMode = completeCampaignForm.watch("adGroupBudgetMode");
     const adGroupBudget = completeCampaignForm.watch("adGroupBudget");
     const optimization = completeCampaignForm.watch("optimizationEvent");
+    const pixelId = completeCampaignForm.watch("pixelId");
+    // تبسيط التحقق - حدث التحسين مطلوب دائماً
+    const requireOptimization = true;
     const isCBOEnabled = completeCampaignForm.watch("useCampaignBudgetOptimization");
     
     // إذا كان CBO مفعل، الميزانية غير مطلوبة
     if (isCBOEnabled) {
-      return !!(adGroupName && adGroupBudgetMode && optimization);
+      // يتطلب optimizationEvent دائماً عند اختيار بكسل
+      return !!(adGroupName && adGroupBudgetMode && (!requireOptimization || optimization));
     }
     
     // إذا لم يكن CBO مفعل، الميزانية مطلوبة
-    return !!(adGroupName && adGroupBudgetMode && adGroupBudget && optimization);
+    return !!(adGroupName && adGroupBudgetMode && adGroupBudget && (!requireOptimization || optimization));
   };
   
   const validateAdSection = () => {
@@ -800,40 +831,27 @@ export default function PlatformAdsTikTokManagement() {
   // Video modal states - حالات مودال الفيديو
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [selectedVideoData, setSelectedVideoData] = useState<{videoUrl: string, coverUrl: string, videoId: string} | null>(null);
+  const [selectedTikTokAd, setSelectedTikTokAd] = useState<TikTokAd | null>(null);
 
-  // قائمة أحداث البكسل بالعربية (أحداث مقبولة من TikTok API)
-  const pixelEvents = {
-    'COMPLETE_PAYMENT': 'إتمام الدفع',
-    'ADD_TO_CART': 'إضافة إلى السلة',
-    'VIEW_CONTENT': 'مشاهدة المحتوى',
-    'INITIATE_CHECKOUT': 'بدء عملية الشراء',
-    'CONTACT': 'تواصل',
-    'DOWNLOAD': 'تحميل',
-    'SEARCH': 'بحث',
-    'SUBSCRIBE': 'اشتراك',
-    'SUBMIT_FORM': 'إرسال نموذج',
-    // أحداث مقبولة من TikTok API
-    'SUCCESSORDER_ACTION': 'إتمام الطلب',
-    'SUCCESSORDER_PAY': 'دفع الطلب',
-    'SHOPPING_ACTION': 'عمل تسوق',
-    'ON_WEB_ORDER': 'طلب على الويب',
-    'FORM': 'نموذج',
-    'BUTTON': 'زر',
-    'LANDING_PAGE_VIEW': 'عرض صفحة الهبوط',
-    'PHONE': 'هاتف',
-    'MESSAGE': 'رسالة',
-    'CONSULT': 'استشارة'
+  // قائمة أحداث التحسين المبسطة - الأحداث المقبولة فعلياً من TikTok AdGroup API
+  const optimizationEvents = {
+    'ON_WEB_ORDER': '🛒 شراء على الويب (موصى به)',
+    'SUCCESSORDER_PAY': '💰 دفع طلب ناجح',
+    'SUCCESSORDER_ACTION': '✅ إجراء طلب ناجح',
+    'ON_WEB_CART': '🛍️ إضافة إلى السلة',
+    'LANDING_PAGE_VIEW': '👁️ عرض صفحة الهبوط',
+    'INITIATE_ORDER': '💳 بدء الطلب',
+    'FORM': '📝 إرسال نموذج',
+    'BUTTON': '🖱️ النقر على زر',
+    'PAGE_VIEW': '📄 عرض الصفحة'
   };
 
-  // دالة للحصول على أحداث بكسل معين
-  const getPixelEvents = (pixelId: string) => {
-    if (!pixelsData?.pixels) return [];
-    const pixel = pixelsData.pixels.find((p: any) => p.pixel_id === pixelId);
-    if (pixel && pixel.events && pixel.events.length > 0) {
-      return pixel.events.filter((event: any) => event.status === 'Active');
-    }
-    // إرجاع أحداث افتراضية إذا لم توجد أحداث للبكسل
-    return Object.entries(pixelEvents).map(([type, name]) => ({ type, name, status: 'Active' }));
+  // دالة مبسطة لإرجاع قائمة الأحداث الثابتة
+  const getAvailableOptimizationEvents = () => {
+    return Object.entries(optimizationEvents).map(([key, label]) => ({
+      value: key,
+      label: label
+    }));
   };
 
   // Checkbox selection handlers
@@ -916,6 +934,17 @@ export default function PlatformAdsTikTokManagement() {
 
   // دالة للحصول على البيانات التحليلية لإعلان معين
   const getAdAnalytics = (ad: TikTokAd) => {
+    // استخدام البيانات المباشرة من الإعلان إذا كانت متوفرة
+    if (ad.impressions !== undefined || ad.clicks !== undefined || ad.spend !== undefined) {
+      return {
+        impressions: ad.impressions || 0,
+        clicks: ad.clicks || 0,
+        spend: String(ad.spend || '0'),
+        conversions: ad.conversions || 0,
+        leads: (ad as any).leads || 0
+      };
+    }
+
     // البحث عن البيانات التحليلية للحملة التي ينتمي إليها الإعلان
     const adGroup = adGroupsData?.adGroups?.find(ag => ag.id === ad.adGroupId);
     if (!adGroup) return null;
@@ -924,7 +953,7 @@ export default function PlatformAdsTikTokManagement() {
     if (!campaign) return null;
     
     // البحث في البيانات التحليلية المسترجعة من TikTok API أولاً
-    let campaignAnalytics = analytics?.campaigns?.find(c => c.id === campaign.id);
+    let campaignAnalytics = analytics?.campaigns?.find(c => c.id === campaign.id || (c as any).campaignId === campaign.id);
     
     // إذا لم تُجد، استخدم البيانات من قاعدة البيانات المحلية
     if (!campaignAnalytics) {
@@ -932,10 +961,10 @@ export default function PlatformAdsTikTokManagement() {
         id: campaign.id,
         impressions: campaign.impressions || 0,
         clicks: campaign.clicks || 0,
-        spend: campaign.spend || '0',
+        spend: parseFloat(String(campaign.spend || '0')),
         conversions: campaign.conversions || 0,
-        leads: campaign.leads || 0
-      };
+        leads: (campaign as any).leads || 0
+      } as any;
     }
     
     // حساب نسبة مشاركة الإعلان في أداء الحملة (افتراضياً متساوي)
@@ -947,21 +976,32 @@ export default function PlatformAdsTikTokManagement() {
     const shareRatio = adsInCampaign.length > 0 ? 1 / adsInCampaign.length : 1;
     
     return {
-      impressions: Math.round((campaignAnalytics.impressions || 0) * shareRatio),
-      clicks: Math.round((campaignAnalytics.clicks || 0) * shareRatio),
-      spend: (parseFloat(campaignAnalytics.spend || '0') * shareRatio),
-      conversions: Math.round((campaignAnalytics.conversions || 0) * shareRatio),
-      leads: Math.round((campaignAnalytics.leads || 0) * shareRatio)
+      impressions: Math.round((campaignAnalytics?.impressions || 0) * shareRatio),
+      clicks: Math.round((campaignAnalytics?.clicks || 0) * shareRatio),
+      spend: String((parseFloat(String(campaignAnalytics?.spend || '0')) * shareRatio)),
+      conversions: Math.round((campaignAnalytics?.conversions || 0) * shareRatio),
+      leads: Math.round(((campaignAnalytics as any)?.leads || 0) * shareRatio)
     };
   };
 
   // دالة للحصول على البيانات التحليلية لمجموعة إعلانية معينة
   const getAdGroupAnalytics = (adGroup: TikTokAdGroup) => {
+    // استخدام البيانات المباشرة من المجموعة الإعلانية إذا كانت متوفرة
+    if (adGroup.impressions !== undefined || adGroup.clicks !== undefined || adGroup.spend !== undefined) {
+      return {
+        impressions: adGroup.impressions || 0,
+        clicks: adGroup.clicks || 0,
+        spend: String(adGroup.spend || '0'),
+        conversions: adGroup.conversions || 0,
+        leads: (adGroup as any).leads || 0
+      };
+    }
+
     const campaign = campaignsData?.campaigns?.find(c => c.id === adGroup.campaignId);
     if (!campaign) return null;
     
     // البحث في البيانات التحليلية المسترجعة من TikTok API أولاً
-    let campaignAnalytics = analytics?.campaigns?.find(c => c.id === campaign.id);
+    let campaignAnalytics = analytics?.campaigns?.find(c => c.id === campaign.id || (c as any).campaignId === campaign.id);
     
     // إذا لم تُجد، استخدم البيانات من قاعدة البيانات المحلية
     if (!campaignAnalytics) {
@@ -969,10 +1009,10 @@ export default function PlatformAdsTikTokManagement() {
         id: campaign.id,
         impressions: campaign.impressions || 0,
         clicks: campaign.clicks || 0,
-        spend: campaign.spend || '0',
+        spend: parseFloat(String(campaign.spend || '0')),
         conversions: campaign.conversions || 0,
-        leads: campaign.leads || 0
-      };
+        leads: (campaign as any).leads || 0
+      } as any;
     }
     
     // حساب نسبة مشاركة المجموعة الإعلانية في أداء الحملة
@@ -980,11 +1020,11 @@ export default function PlatformAdsTikTokManagement() {
     const shareRatio = adGroupsInCampaign.length > 0 ? 1 / adGroupsInCampaign.length : 1;
     
     return {
-      impressions: Math.round((campaignAnalytics.impressions || 0) * shareRatio),
-      clicks: Math.round((campaignAnalytics.clicks || 0) * shareRatio),
-      spend: (parseFloat(campaignAnalytics.spend || '0') * shareRatio),
-      conversions: Math.round((campaignAnalytics.conversions || 0) * shareRatio),
-      leads: Math.round((campaignAnalytics.leads || 0) * shareRatio)
+      impressions: Math.round((campaignAnalytics?.impressions || 0) * shareRatio),
+      clicks: Math.round((campaignAnalytics?.clicks || 0) * shareRatio),
+      spend: String((parseFloat(String(campaignAnalytics?.spend || '0')) * shareRatio)),
+      conversions: Math.round((campaignAnalytics?.conversions || 0) * shareRatio),
+      leads: Math.round(((campaignAnalytics as any)?.leads || 0) * shareRatio)
     };
   };
 
@@ -1034,21 +1074,31 @@ export default function PlatformAdsTikTokManagement() {
     enabled: !!session,
   });
 
-  // Helper function to get the correct API endpoint based on date range
+  // Helper function to get the correct API endpoint with query parameters
   const getApiEndpoint = (baseEndpoint: string) => {
+    const params = new URLSearchParams();
+    
+    // Map frontend date range values to backend period values
     switch (selectedDateRange.value) {
       case 'today':
-        return `${baseEndpoint}/today`;
+        params.append('period', 'today');
+        break;
       case 'yesterday':
-        return `${baseEndpoint}/yesterday`;
+        params.append('period', 'yesterday');
+        break;
       case 'week':
-        return `${baseEndpoint}/week`;
+        params.append('period', 'this_week');
+        break;
       case 'month':
-        return `${baseEndpoint}/month`;
+        params.append('period', 'this_month');
+        break;
       case 'all':
       default:
-        return `${baseEndpoint}/all`;
+        params.append('period', 'this_week'); // Default to this week
+        break;
     }
+    
+    return `${baseEndpoint}?${params.toString()}`;
   };
 
   // Clone handling functions - وظائف النسخ
@@ -1097,10 +1147,20 @@ export default function PlatformAdsTikTokManagement() {
 
   // Get campaigns - مرتبط بالفلتر المحدد
   const { data: campaignsData, isLoading: campaignsLoading, refetch: refetchCampaigns } = useQuery<{campaigns: TikTokCampaign[]}>({
-    queryKey: ["/api/tiktok/campaigns/all"],
+    queryKey: ["/api/tiktok/campaigns/all", selectedDateRange.value],
     queryFn: async () => {
-      console.log('Fetching campaigns from: /api/tiktok/campaigns/all');
-      const response = await fetch('/api/tiktok/campaigns/all');
+      const params = new URLSearchParams();
+      params.append('period', selectedDateRange.value);
+      
+      if (selectedDateRange.value === 'custom' && selectedDateRange.startDate && selectedDateRange.endDate) {
+        params.append('start_date', selectedDateRange.startDate.toISOString().split('T')[0]);
+        params.append('end_date', selectedDateRange.endDate.toISOString().split('T')[0]);
+      }
+      
+      const endpoint = getApiEndpoint(`/api/tiktok/campaigns/all?${params.toString()}`);
+      console.log(`Fetching campaigns from: ${endpoint}`);
+      
+      const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -1108,7 +1168,7 @@ export default function PlatformAdsTikTokManagement() {
       console.log('Campaigns response:', data);
       return data;
     },
-    enabled: !!session,
+    enabled: !!session && !!connectionStatus?.tiktok?.connected,
     refetchInterval: 2 * 60 * 1000, // مزامنة تلقائية كل دقيقتين
     staleTime: 30000, // 30 seconds cache
   });
@@ -1128,10 +1188,13 @@ export default function PlatformAdsTikTokManagement() {
 
   // جلب بيانات المجموعات الإعلانية
   const { data: adGroupsData, isLoading: adGroupsLoading, refetch: refetchAdGroups } = useQuery<{adGroups: TikTokAdGroup[]}>({
-    queryKey: ["/api/tiktok/adgroups/all"],
+    queryKey: ["/api/tiktok/adgroups"],
     queryFn: async () => {
-      console.log('Fetching ad groups from: /api/tiktok/adgroups/all');
-      const response = await fetch('/api/tiktok/adgroups/all');
+      console.log('Fetching ad groups from: /api/tiktok/adgroups');
+      // للاختبار - إضافة test_platform_id إذا لم يكن هناك session
+      const testPlatformId = '3dbf0c5c-5076-471c-a114-61a86c20a156';
+      const url = session ? '/api/tiktok/adgroups' : `/api/tiktok/adgroups?test_platform_id=${testPlatformId}`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -1139,25 +1202,76 @@ export default function PlatformAdsTikTokManagement() {
       console.log('Ad groups response:', data);
       return data;
     },
-    enabled: !!session,
+    enabled: true, // تمكين دائماً للاختبار
     refetchInterval: 2 * 60 * 1000, // مزامنة تلقائية كل دقيقتين
     staleTime: 30000,
   });
 
   // جلب بيانات الإعلانات مع التحليلات حسب الفترة الزمنية
   const { data: adsData, isLoading: adsLoading, refetch: refetchAds } = useQuery<{ads: TikTokAd[]}>({
-    queryKey: ["/api/tiktok/ads/all"],
+    queryKey: ["/api/tiktok/ads"],
     queryFn: async () => {
-      console.log('Fetching ads from: /api/tiktok/ads/all');
-      const response = await fetch('/api/tiktok/ads/all');
+      console.log('🔄 جلب الإعلانات مع تفاصيل الفيديو...');
+      // للاختبار - إضافة test_platform_id إذا لم يكن هناك session
+      const testPlatformId = '3dbf0c5c-5076-471c-a114-61a86c20a156';
+      const url = session ? '/api/tiktok/ads' : `/api/tiktok/ads?test_platform_id=${testPlatformId}`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('Ads response:', data);
+      console.log('📊 استجابة الإعلانات:', data);
+      
+      // جلب تفاصيل الفيديو للإعلانات
+      if (data?.ads && Array.isArray(data.ads)) {
+        console.log('🎬 بدء جلب تفاصيل الفيديو للإعلانات...');
+        const adsWithVideo = await Promise.all(
+          data.ads.map(async (ad: any) => {
+            if (ad.adFormat === 'SINGLE_VIDEO') {
+              try {
+                console.log('🎬 جلب تفاصيل الفيديو للإعلان:', ad.adId);
+                const videoResponse = await fetch(`/api/tiktok/ads/${ad.adId}/details`);
+                console.log('📡 Response status:', videoResponse.status, videoResponse.statusText);
+                
+                if (videoResponse.ok) {
+                  const videoDetails = await videoResponse.json();
+                  console.log('✅ تم جلب تفاصيل الفيديو:', {
+                    adId: ad.adId,
+                    videoUrl: videoDetails.videoUrl,
+                    coverImageUrl: videoDetails.coverImageUrl,
+                    hasVideo: videoDetails.hasVideo
+                  });
+                  
+                  return {
+                    ...ad,
+                    videoId: videoDetails.videoId_display,
+                    coverImageUrl: videoDetails.coverImageUrl,
+                    hasVideo: videoDetails.hasVideo,
+                    actualVideoUrl: videoDetails.videoUrl, // URL الفيديو الفعلي
+                    pixelId: videoDetails.pixelId,
+                    landingPageUrl: videoDetails.landingPageUrl,
+                    callToAction: videoDetails.callToAction,
+                    displayName: videoDetails.displayName
+                  };
+                } else {
+                  const errorText = await videoResponse.text();
+                  console.warn('⚠️ فشل في جلب تفاصيل الفيديو:', ad.adId, 'Status:', videoResponse.status, 'Error:', errorText);
+                }
+              } catch (error) {
+                console.warn('❌ خطأ في جلب تفاصيل الفيديو:', ad.adId, error);
+              }
+            }
+            return ad;
+          })
+        );
+        
+        console.log('✅ تم الانتهاء من جلب تفاصيل الفيديو');
+        return { ads: adsWithVideo };
+      }
+      
       return data;
     },
-    enabled: !!session,
+    enabled: true, // تمكين دائماً للاختبار
     refetchInterval: 2 * 60 * 1000, // مزامنة تلقائية كل دقيقتين
     staleTime: 30000,
   });
@@ -1202,13 +1316,36 @@ export default function PlatformAdsTikTokManagement() {
 
 
   // Query to fetch identities
-  const { data: identitiesData, isLoading: identitiesLoading } = useQuery({
+  const { data: identitiesData, isLoading: identitiesLoading, error: identitiesError } = useQuery({
     queryKey: ['/api/tiktok/identities'],
-    enabled: !!session,
+    enabled: true, // ✅ تفعيل دائماً
     staleTime: 10 * 60 * 1000, // cache for 10 minutes
   });
 
-  const identities = identitiesData?.identities || [];
+  const identities = (identitiesData as any)?.identities || [];
+  
+  // Debug logging
+  console.log('🆔 Identities Data:', identitiesData);
+  console.log('🆔 Identities Array:', identities);
+  console.log('🆔 Loading:', identitiesLoading);
+  console.log('🆔 Error:', identitiesError);
+
+  // دالة للحصول على الهوية الافتراضية
+  const getDefaultIdentity = () => {
+    if (identities.length === 0) return "";
+    
+    // البحث عن Business Manager أولاً
+    const businessManager = identities.find((id: any) => id.is_bc_identity || id.identity_type === 'BUSINESS_CENTER');
+    if (businessManager) return businessManager.identity_id;
+    
+    // إذا لم يوجد Business Manager، استخدم الهوية الحقيقية
+    const realIdentity = identities.find((id: any) => id.is_real_user_identity);
+    if (realIdentity) return realIdentity.identity_id;
+    
+    // أو أول هوية متاحة
+    return identities[0].identity_id;
+  };
+
 
   // عرض الهويات المتاحة
   const showIdentitiesDialog = () => {
@@ -1222,7 +1359,7 @@ export default function PlatformAdsTikTokManagement() {
     staleTime: 30 * 60 * 1000, // cache for 30 minutes
   });
 
-  const userProfile = userProfileData?.userProfile;
+  const userProfile = (userProfileData as any)?.userProfile;
 
   // عرض معلومات المستخدم
   const showUserProfileDialog = () => {
@@ -1301,7 +1438,7 @@ export default function PlatformAdsTikTokManagement() {
       
       // Ad Group data
       adGroupName: "", // سيتم تحديثه تلقائياً
-      adGroupBudgetMode: "BUDGET_MODE_TOTAL", // إجمالي الميزانية
+      adGroupBudgetMode: "BUDGET_MODE_DAY", // ميزانية يومية (افتراضي)
       adGroupBudget: "",
       bidType: "BID_TYPE_NO_BID",
       bidPrice: "",
@@ -1319,12 +1456,12 @@ export default function PlatformAdsTikTokManagement() {
       videoUrl: "",
       imageUrls: [],
       
-      // Pixel tracking
-      pixelId: "",
-      optimizationEvent: "ON_WEB_ORDER",
+      // Pixel tracking - اختياري
+      pixelId: "none", // لا يتطلب بكسل افتراضياً
+      optimizationEvent: "ON_WEB_ORDER",  // حدث الشراء على الويب كافتراضي
       
       // Identity data
-      identityId: "platform_default",
+      identityId: "", // سيتم تعيينها تلقائياً من أول هوية متاحة
       
       // Targeting data
       targeting: {
@@ -1341,11 +1478,11 @@ export default function PlatformAdsTikTokManagement() {
       },
 
       // Lead form data (will be populated when LEAD_GENERATION is selected)
-      selectedLeadFormId: "", // الفورم المختار من الموجود في TikTok
+      // selectedLeadFormId: "", // الفورم المختار من الموجود في TikTok
       leadFormPrivacyPolicyUrl: "",
       leadFormSuccessMessage: "شكراً لك! تم استلام معلوماتك بنجاح وسنتواصل معك قريباً.",
-      leadFormProductId: "",
-      leadFormCustomFields: {},
+      // leadFormProductId: "",
+      // leadFormCustomFields: {},
       productId: "",
       
       // Custom form field collection settings
@@ -1361,6 +1498,33 @@ export default function PlatformAdsTikTokManagement() {
   // مراقبة الهدف المختار
   const selectedObjective = completeCampaignForm.watch("objective");
   const isLeadGeneration = selectedObjective === "LEAD_GENERATION";
+
+  // تحديث النموذج عندما تتوفر الهويات
+  useEffect(() => {
+    if (identities.length > 0) {
+      const currentIdentityId = completeCampaignForm.getValues("identityId");
+      
+      // إذا لم تكن هناك هوية محددة، اختر الافتراضية
+      if (!currentIdentityId) {
+        const defaultIdentity = getDefaultIdentity();
+        if (defaultIdentity) {
+          completeCampaignForm.setValue("identityId", defaultIdentity);
+          console.log('🆔 تم تعيين الهوية الافتراضية:', defaultIdentity);
+        }
+      }
+    }
+  }, [identities, completeCampaignForm]);
+
+  // تبسيط النظام - لا حاجة لجلب الأحداث من البكسل
+  const selectedPixelId = completeCampaignForm.watch("pixelId");
+  const selectedOptimizationEvent = completeCampaignForm.watch("optimizationEvent");
+  
+  // الحفاظ على حدث الشراء كافتراضي إذا لم يكن هناك حدث محدد
+  useEffect(() => {
+    if (!selectedOptimizationEvent || selectedOptimizationEvent === '') {
+      completeCampaignForm.setValue('optimizationEvent', 'ON_WEB_ORDER', { shouldValidate: true });
+    }
+  }, [selectedOptimizationEvent, completeCampaignForm]);
 
   // جلب الفورمات الموجودة من TikTok للـ Lead Generation
   const { data: leadFormsData, isLoading: isLoadingLeadForms } = useQuery({
@@ -1445,7 +1609,7 @@ export default function PlatformAdsTikTokManagement() {
           ...completeCampaignForm.getValues(),
           campaignName: `نسخة من ${campaign.campaignName}`,
           objective: (campaign.objective as "CONVERSIONS" | "LEAD_GENERATION") || "LEAD_GENERATION",
-          campaignBudgetMode: (campaign.budgetMode as "BUDGET_MODE_INFINITE" | "BUDGET_MODE_DAY" | "BUDGET_MODE_TOTAL") || "BUDGET_MODE_INFINITE",
+          campaignBudgetMode: ((campaign as any).budgetMode as "BUDGET_MODE_INFINITE" | "BUDGET_MODE_DAY" | "BUDGET_MODE_TOTAL") || "BUDGET_MODE_INFINITE",
           campaignBudget: campaign.budget ? campaign.budget.toString() : "100",
         });
       } else if (cloneType === 'adGroup' && cloneData) {
@@ -1484,9 +1648,9 @@ export default function PlatformAdsTikTokManagement() {
 
   // تحديث القيم الافتراضية للبكسل عند تحميل البكسلات (فقط إذا لم يكن توليد عملاء محتملين)
   useEffect(() => {
-    if (!isLeadGeneration && pixelsData?.pixels && pixelsData.pixels.length > 0) {
-      const firstPixelId = pixelsData.pixels[0].pixelId;
-      if (!completeCampaignForm.getValues("pixelId")) {
+    if (!isLeadGeneration && (pixelsData as any)?.pixels && (pixelsData as any).pixels.length > 0) {
+      const firstPixelId = (pixelsData as any).pixels[0].pixelId;
+      if (!completeCampaignForm.getValues("pixelId") || completeCampaignForm.getValues("pixelId") === "none") {
         completeCampaignForm.setValue("pixelId", firstPixelId);
       }
     }
@@ -1680,8 +1844,8 @@ export default function PlatformAdsTikTokManagement() {
     },
     onMutate: async ({ campaignId, status }) => {
       // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
-      await queryClient.cancelQueries({ queryKey: ["/api/tiktok/campaigns/all"] });
-      await queryClient.cancelQueries({ queryKey: ["/api/tiktok/analytics"] });
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/campaigns/all" });
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/analytics" });
 
       // Snapshot the previous value
       const previousCampaigns = queryClient.getQueryData(["/api/tiktok/campaigns/all"]);
@@ -1746,8 +1910,8 @@ export default function PlatformAdsTikTokManagement() {
         description: data.message || "تم تحديث حالة الحملة بنجاح" 
       });
       // Refresh both campaigns and analytics data to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["/api/tiktok/campaigns/all"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tiktok/analytics"] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/campaigns/all" });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/analytics" });
     },
     onError: (error: any, variables, context) => {
       console.error("Error updating campaign status:", error);
@@ -1793,8 +1957,8 @@ export default function PlatformAdsTikTokManagement() {
     },
     onMutate: async ({ adGroupId, status }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["/api/tiktok/adgroups/all"] });
-      await queryClient.cancelQueries({ queryKey: ["/api/tiktok/analytics"] });
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/adgroups" });
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/analytics" });
 
       // Snapshot the previous values
       const previousAdGroups = queryClient.getQueryData(["/api/tiktok/adgroups/all"]);
@@ -1843,8 +2007,8 @@ export default function PlatformAdsTikTokManagement() {
         description: data.message || "تم تحديث حالة المجموعة بنجاح" 
       });
       // Refresh data to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["/api/tiktok/adgroups/all"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tiktok/analytics"] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/adgroups" });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/analytics" });
     },
     onError: (error: any, variables, context) => {
       console.error("Error updating ad group status:", error);
@@ -1890,8 +2054,8 @@ export default function PlatformAdsTikTokManagement() {
     },
     onMutate: async ({ adId, status }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["/api/tiktok/ads/all"] });
-      await queryClient.cancelQueries({ queryKey: ["/api/tiktok/analytics"] });
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/ads" });
+      await queryClient.cancelQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/analytics" });
 
       // Snapshot the previous values
       const previousAds = queryClient.getQueryData(["/api/tiktok/ads/all"]);
@@ -1903,7 +2067,7 @@ export default function PlatformAdsTikTokManagement() {
         return {
           ...old,
           ads: old.ads.map((ad: any) => 
-            ad.id === adId 
+            ad.adId === adId 
               ? { ...ad, status: status }
               : ad
           )
@@ -1935,8 +2099,9 @@ export default function PlatformAdsTikTokManagement() {
         title: "تم تحديث الحالة",
         description: data.message || "تم تحديث حالة الإعلان بنجاح" 
       });
-      // No immediate invalidation - let optimistic updates handle the UI
-      // Data will be synced naturally by the automatic TikTok sync system
+      // Refresh data to ensure consistency (same as ad groups)
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/ads" });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "/api/tiktok/analytics" });
     },
     onError: (error: any, variables, context) => {
       console.error("Error updating ad status:", error);
@@ -2063,10 +2228,11 @@ export default function PlatformAdsTikTokManagement() {
     refetchInterval: 10 * 60 * 1000, // تحديث كل 10 دقائق
   });
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, currency?: string) => {
+    const accountCurrency = currency || accountBalanceData?.balance?.currency || 'USD';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: accountCurrency,
       minimumFractionDigits: 2,
     }).format(amount);
   };
@@ -2257,8 +2423,8 @@ export default function PlatformAdsTikTokManagement() {
                         
                         <Calendar
                           mode="range"
-                          selected={customDateRange}
-                          onSelect={(range) => setCustomDateRange(range || {})}
+                          selected={customDateRange as any}
+                          onSelect={(range) => setCustomDateRange(range || {} as any)}
                           className="rounded-md border text-sm"
                           locale={ar}
                           numberOfMonths={1}
@@ -2419,35 +2585,66 @@ export default function PlatformAdsTikTokManagement() {
                         {accountBalanceData.balance.isAvailable ? (
                           <>
                             <div className="text-2xl font-bold text-green-700 dark:text-green-400">
-                              {formatCurrency(accountBalanceData.balance.balance)}
+                              {formatCurrency(accountBalanceData.balance.balance, accountBalanceData.balance.currency)}
                             </div>
                             <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                               <div className="flex items-center justify-between">
-                                <span>العملة:</span>
                                 <span className="font-medium">{accountBalanceData.balance.currency}</span>
+                                <span>العملة:</span>
                               </div>
                               <div className="flex items-center justify-between">
-                                <span>الحالة:</span>
                                 <Badge 
-                                  variant={accountBalanceData.balance.status === 'ACTIVE' ? 'default' : 'secondary'}
-                                  className={`text-xs ${accountBalanceData.balance.status === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}`}
+                                  variant={accountBalanceData.balance.status === 'مفعل' || accountBalanceData.balance.status === 'ACTIVE' ? 'default' : 'secondary'}
+                                  className={`text-xs ${accountBalanceData.balance.status === 'مفعل' || accountBalanceData.balance.status === 'ACTIVE' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
                                 >
                                   {accountBalanceData.balance.status === 'ACTIVE' ? 'نشط' : accountBalanceData.balance.status}
                                 </Badge>
+                                <span>الحالة:</span>
                               </div>
                               {accountBalanceData.accountInfo && (
                                 <div className="flex items-center justify-between">
-                                  <span>الحساب:</span>
                                   <span className="font-medium text-xs">{accountBalanceData.accountInfo.name}</span>
+                                  <span>الحساب:</span>
                                 </div>
                               )}
                               <div className="text-xs text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-600">
-                                آخر تحديث: {new Date(accountBalanceData.balance.lastUpdated).toLocaleString('ar-IQ', {
+                                Last Updated: {new Date().toLocaleString('en-US', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit',
                                   hour: '2-digit',
                                   minute: '2-digit',
-                                  day: '2-digit',
-                                  month: '2-digit'
+                                  hour12: true
                                 })}
+                              </div>
+                            </div>
+                            {/* زر إضافة رصيد */}
+                            <div className="space-y-2">
+                              <Button 
+                                onClick={() => {
+                                  // استخدام advertiser_id الديناميكي من بيانات المستخدم
+                                  const userAdvertiserId = accountBalanceData?.balance?.advertiser_id || 
+                                                          accountBalanceData?.accountInfo?.advertiser_id || 
+                                                          '7548971232970571792'; // fallback للحساب الافتراضي
+                                  
+                                  const tiktokPaymentUrl = `https://ads.tiktok.com/i18n/account/payment?aadvid=${userAdvertiserId}`;
+                                  
+                                  console.log('🔗 فتح رابط الدفع للمعلن:', userAdvertiserId);
+                                  window.open(tiktokPaymentUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+                                  
+                                  toast({
+                                    title: "إضافة رصيد",
+                                    description: `سيتم فتح صفحة Payment لحسابك (${userAdvertiserId})`
+                                  });
+                                }}
+                                className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
+                              >
+                                <Plus className="h-4 w-4" />
+                                إضافة رصيد
+                              </Button>
+                              
+                              <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                                رابط مباشر لصفحة إضافة الرصيد
                               </div>
                             </div>
                           </>
@@ -2496,7 +2693,7 @@ export default function PlatformAdsTikTokManagement() {
                         <div>
                           <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">الحملات النشطة</p>
                           <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                            {analytics?.analytics?.overview?.activeCampaigns || 0}
+                            {campaignsData?.campaigns?.filter((c: any) => c.operation_status === 'ENABLE')?.length || 0}
                           </p>
                         </div>
                         <Megaphone className="h-6 w-6 text-blue-500" />
@@ -2510,7 +2707,10 @@ export default function PlatformAdsTikTokManagement() {
                         <div>
                           <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">إجمالي الإنطباعات</p>
                           <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
-                            {formatNumber(analytics?.analytics?.performance?.impressions || 0)}
+                            {formatNumber(adsData?.ads?.reduce((total: number, ad: any) => {
+                              const adAnalytics = getAdAnalytics(ad);
+                              return total + (parseFloat(String(adAnalytics?.impressions || 0)));
+                            }, 0) || 0)}
                           </p>
                         </div>
                         <Eye className="h-6 w-6 text-purple-500" />
@@ -2524,7 +2724,10 @@ export default function PlatformAdsTikTokManagement() {
                         <div>
                           <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">إجمالي النقرات</p>
                           <p className="text-lg font-bold text-orange-700 dark:text-orange-300">
-                            {formatNumber(analytics?.analytics?.performance?.clicks || 0)}
+                            {formatNumber(adsData?.ads?.reduce((total: number, ad: any) => {
+                              const adAnalytics = getAdAnalytics(ad);
+                              return total + (parseFloat(String(adAnalytics?.clicks || 0)));
+                            }, 0) || 0)}
                           </p>
                         </div>
                         <MousePointer className="h-6 w-6 text-orange-500" />
@@ -2538,7 +2741,10 @@ export default function PlatformAdsTikTokManagement() {
                         <div>
                           <p className="text-xs text-red-600 dark:text-red-400 font-medium">إجمالي الإنفاق</p>
                           <p className="text-lg font-bold text-red-700 dark:text-red-300">
-                            {formatCurrency(analytics?.analytics?.performance?.spend || 0)}
+                            {formatCurrency(adsData?.ads?.reduce((total: number, ad: any) => {
+                              const adAnalytics = getAdAnalytics(ad);
+                              return total + (parseFloat(String(adAnalytics?.spend || 0)));
+                            }, 0) || 0)}
                           </p>
                         </div>
                         <DollarSign className="h-6 w-6 text-red-500" />
@@ -2683,7 +2889,7 @@ export default function PlatformAdsTikTokManagement() {
                                 leadFormCustomFields: customFields,
                               };
 
-                              createCompleteCampaignMutation.mutate(processedData);
+                              createCompleteCampaignMutation.mutate(processedData as any);
                             })} className="compact-form">
                               
                               {/* قسم بيانات الحملة */}
@@ -2730,7 +2936,7 @@ export default function PlatformAdsTikTokManagement() {
                                               field.onChange(value);
                                               // البحث عن المنتج في كلا المصدرين للحصول على البيانات الكاملة
                                               const selectedProduct = productsData?.products?.find((p: ProductOption) => p.id === value);
-                                              const selectedProductDetails = productNames.find((p: any) => p.id === value);
+                                              const selectedProductDetails = (productNames as any)?.find((p: any) => p.id === value);
                                               
                                               if (selectedProduct) {
                                                 completeCampaignForm.setValue("campaignName", `حملة ${selectedProduct.name}`);
@@ -2738,13 +2944,37 @@ export default function PlatformAdsTikTokManagement() {
                                                 completeCampaignForm.setValue("adName", `إعلان ${selectedProduct.name}`);
                                                 completeCampaignForm.setValue("displayName", selectedProduct.name);
                                                 
-                                                // تحديث رابط المنتج للطلب من التفاصيل الكاملة للمنتج
+                                                // تحديث رابط المنتج - تحويل إلى نفس تنسيق Facebook
                                                 if (selectedProductDetails?.landingPageUrl) {
-                                                  completeCampaignForm.setValue("landingPageUrl", selectedProductDetails.landingPageUrl);
-                                                } else {
-                                                  // استخدام دومين الموقع الحالي مع النطاق الفرعي في المسار
+                                                  const originalUrl = selectedProductDetails.landingPageUrl;
                                                   const platformSubdomain = session?.subdomain || 'demo';
-                                                  completeCampaignForm.setValue("landingPageUrl", `${window.location.origin}/${platformSubdomain}/products/${selectedProduct.id}`);
+                                                  
+                                                  // استخراج المسار من الرابط الأصلي
+                                                  // من: https://hanoot.sanadi.pro/blwr-hwaa-asly-779095
+                                                  // إلى: https://sanadi.pro/hanoot/blwr-hwaa-asly-779095
+                                                  try {
+                                                    const url = new URL(originalUrl);
+                                                    const path = url.pathname; // /blwr-hwaa-asly-779095
+                                                    const convertedUrl = `${window.location.origin}/${platformSubdomain}${path}`;
+                                                    
+                                                    console.log('🔗 تحويل رابط المنتج:', {
+                                                      original: originalUrl,
+                                                      converted: convertedUrl,
+                                                      subdomain: platformSubdomain,
+                                                      path: path
+                                                    });
+                                                    
+                                                    completeCampaignForm.setValue("landingPageUrl", convertedUrl);
+                                                  } catch (error) {
+                                                    console.warn('خطأ في تحويل الرابط، استخدام الرابط الأصلي:', error);
+                                                    completeCampaignForm.setValue("landingPageUrl", originalUrl);
+                                                  }
+                                                } else {
+                                                  // إذا لم يوجد رابط للمنتج، استخدم الدومين الأساسي
+                                                  const platformSubdomain = session?.subdomain || 'demo';
+                                                  const generatedUrl = `${window.location.origin}/${platformSubdomain}`;
+                                                  console.log('🔗 لا يوجد رابط للمنتج، استخدام الدومين الأساسي:', generatedUrl);
+                                                  completeCampaignForm.setValue("landingPageUrl", generatedUrl);
                                                 }
                                                 
                                                 // تحديث نص الإعلان من وصف المنتج (10 كلمات فقط)
@@ -2837,7 +3067,7 @@ export default function PlatformAdsTikTokManagement() {
                                     render={({ field }) => (
                                       <FormItem className="form-item">
                                         <FormLabel className="form-label">هوية الإعلان</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value || "platform_default"}>
+                                        <Select onValueChange={field.onChange} value={field.value || getDefaultIdentity()}>
                                           <FormControl>
                                             <SelectTrigger className="form-select-trigger platform-select">
                                               <SelectValue placeholder="اختر الهوية" />
@@ -2846,7 +3076,17 @@ export default function PlatformAdsTikTokManagement() {
                                           <SelectContent className="select-content-solid">
                                             {identitiesLoading ? (
                                               <SelectItem value="loading" className="select-item">
-                                                جاري التحميل...
+                                                <div className="flex items-center gap-2">
+                                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                                  جاري تحميل الهويات...
+                                                </div>
+                                              </SelectItem>
+                                            ) : identitiesError ? (
+                                              <SelectItem value="error" className="select-item text-red-600">
+                                                <div className="flex items-center gap-2">
+                                                  <AlertCircle className="h-4 w-4" />
+                                                  خطأ في تحميل الهويات
+                                                </div>
                                               </SelectItem>
                                             ) : identities.length > 0 ? (
                                               identities.map((identity: any) => (
@@ -2875,8 +3115,8 @@ export default function PlatformAdsTikTokManagement() {
                                                     {identity.username && (
                                                       <span className="text-xs text-blue-400 font-mono">@{identity.username}</span>
                                                     )}
-                                                    {identity.is_real_user_identity && (
-                                                      <Badge variant="outline" className="text-xs bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300">
+                                                    {identity.is_real_user_identity && !identity.is_bc_identity && (
+                                                      <Badge variant="outline" className="text-xs bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-green-300">
                                                         الهوية الحقيقية
                                                       </Badge>
                                                     )}
@@ -2885,18 +3125,50 @@ export default function PlatformAdsTikTokManagement() {
                                                         افتراضي
                                                       </Badge>
                                                     )}
+                                                    {identity.is_advertiser_identity && (
+                                                      <Badge variant="outline" className="text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border-blue-300">
+                                                        حساب المعلن
+                                                      </Badge>
+                                                    )}
+                                                    {identity.is_bc_identity && (
+                                                      <Badge variant="outline" className="text-xs bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 border-purple-300">
+                                                        Business Manager
+                                                      </Badge>
+                                                    )}
+                                                    {identity.is_fallback_identity && (
+                                                      <Badge variant="outline" className="text-xs bg-gradient-to-r from-orange-100 to-yellow-100 text-orange-800 border-orange-300">
+                                                        احتياطي
+                                                      </Badge>
+                                                    )}
                                                   </div>
                                                 </SelectItem>
                                               ))
                                             ) : (
-                                              <SelectItem value="platform_default" className="select-item">
-                                                هوية المنصة (افتراضي)
-                                              </SelectItem>
+                                              <div className="px-3 py-4 text-center text-gray-500">
+                                                <div className="flex flex-col items-center gap-2">
+                                                  <AlertCircle className="h-8 w-8 text-orange-500" />
+                                                  <div className="text-sm font-medium">لا توجد هويات متاحة</div>
+                                                  <div className="text-xs text-gray-400 max-w-xs">
+                                                    تأكد من ربط حساب TikTok وإعداد الهويات في Business Center
+                                                  </div>
+                                                </div>
+                                              </div>
                                             )}
                                           </SelectContent>
                                         </Select>
                                         <FormDescription className="form-description">
-                                          الهوية التي ستظهر في الإعلان على TikTok
+                                          الهوية التي ستظهر في الإعلان على TikTok. الأولوية: Business Manager ← الهوية الحقيقية
+                                          {identitiesError && (
+                                            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                                              <div className="flex items-center gap-2">
+                                                <AlertCircle className="h-4 w-4" />
+                                                <span>خطأ في تحميل الهويات من TikTok</span>
+                                              </div>
+                                              <div className="mt-1 text-xs text-red-600">
+                                                تأكد من إعداد Access Token و Advertiser ID في إعدادات TikTok
+                                              </div>
+                                            </div>
+                                          )}
                                         </FormDescription>
                                         <FormMessage className="form-message" />
                                       </FormItem>
@@ -3240,6 +3512,138 @@ export default function PlatformAdsTikTokManagement() {
                                       )}
                                     />
                                   </div>
+                                  
+                                  {/* الصف الرابع - البكسل والحدث - يُخفى في توليد العملاء المحتملين */}
+                                  {!isLeadGeneration && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <FormField
+                                        control={completeCampaignForm.control}
+                                        name="pixelId"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <div className="flex items-center justify-between">
+                                              <FormLabel className="text-theme-primary text-xs">بكسل التتبع</FormLabel>
+                                              <button
+                                                type="button"
+                                                onClick={async () => {
+                                                  const pixelId = completeCampaignForm.watch("pixelId");
+                                                  if (pixelId && pixelId !== "none") {
+                                                    try {
+                                                      console.log(`🔄 إعادة جلب أحداث البكسل ${pixelId}...`);
+                                                      const response = await fetch(`/api/tiktok/pixels/${pixelId}/events`);
+                                                      const data = await response.json();
+                                                      console.log(`📋 أحداث البكسل ${pixelId}:`, data);
+                                                      
+                                                      if (data.success) {
+                                                        toast({
+                                                          title: '✅ تم جلب الأحداث',
+                                                          description: `تم العثور على ${data.eventsCount} حدث (${data.activeEventsCount} نشط)`,
+                                                        });
+                                                        // إعادة جلب البكسلات لتحديث البيانات
+                                                        refetchPixels();
+                                                      } else {
+                                                        toast({
+                                                          title: '❌ فشل جلب الأحداث',
+                                                          description: data.error || 'خطأ غير معروف',
+                                                          variant: 'destructive'
+                                                        });
+                                                      }
+                                                    } catch (error) {
+                                                      console.error('❌ خطأ في جلب الأحداث:', error);
+                                                      toast({
+                                                        title: '❌ خطأ في الاتصال',
+                                                        description: 'فشل الاتصال بالخادم',
+                                                        variant: 'destructive'
+                                                      });
+                                                    }
+                                                  } else {
+                                                    toast({
+                                                      title: '⚠️ تحذير',
+                                                      description: 'يرجى اختيار بكسل أولاً',
+                                                      variant: 'destructive'
+                                                    });
+                                                  }
+                                                }}
+                                                className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                                              >
+                                                🔄 تحديث الأحداث
+                                              </button>
+                                            </div>
+                                            <Select 
+                                              onValueChange={field.onChange} 
+                                              defaultValue={field.value || ((pixelsData as any)?.pixels && (pixelsData as any).pixels.length > 0 ? (pixelsData as any).pixels[0].pixelId : "none")}
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="bg-theme-primary-lighter border-theme-border text-white h-8">
+                                                  <SelectValue placeholder="اختر بكسل" />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="select-content-solid">
+                                                <SelectItem value="none" className="select-item">بدون بكسل</SelectItem>
+                                                {(pixelsData as any)?.pixels && (pixelsData as any).pixels.length > 0 ? (
+                                                  (pixelsData as any).pixels.map((pixel: any) => (
+                                                    <SelectItem key={pixel.pixelId} value={pixel.pixelId} className="hover:bg-theme-primary-light">
+                                                      <div className="flex items-center justify-between w-full">
+                                                        <span className="font-medium truncate">{pixel.pixelName}</span>
+                                                        <span className="text-xs text-muted-foreground ml-2 font-mono">{pixel.pixelCode}</span>
+                                                      </div>
+                                                    </SelectItem>
+                                                  ))
+                                                ) : (
+                                                  <SelectItem value="unavailable" className="select-item">
+                                                    لا توجد بكسلات
+                                                  </SelectItem>
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                            <FormMessage className="form-message" />
+                                          </FormItem>
+                                        )}
+                                      />
+
+                                      <FormField
+                                        control={completeCampaignForm.control}
+                                        name="optimizationEvent"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-theme-primary text-xs">حدث التحسين</FormLabel>
+                                            <Select 
+                                              onValueChange={field.onChange} 
+                                              defaultValue={field.value}
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="bg-theme-primary-lighter border-theme-border text-white h-8">
+                                                  <SelectValue placeholder="اختر حدث التحسين" />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="select-content-solid">
+                                                <SelectItem value="auto" className="hover:bg-theme-primary-light">
+                                                  <div className="flex items-center justify-between w-full">
+                                                    <span>🤖 تلقائي (أفضل حدث من البكسل)</span>
+                                                    <span className="text-xs ml-2 text-blue-500">⭐ مُوصى</span>
+                                                  </div>
+                                                </SelectItem>
+                                                {getAvailableOptimizationEvents().map((event) => (
+                                                  <SelectItem key={event.value} value={event.value} className="hover:bg-theme-primary-light">
+                                                    <div className="flex items-center justify-between w-full">
+                                                      <span>{event.label}</span>
+                                                      {event.value === 'ON_WEB_ORDER' && (
+                                                        <span className="text-xs ml-2 text-green-500">✅ افتراضي</span>
+                                                      )}
+                                                    </div>
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                            <FormDescription className="form-description text-gray-500 text-xs">
+                                              اختياري: اختر حدث التحسين المناسب لهدف حملتك. إذا لم تختر، سيتم استخدام أفضل حدث متاح من البكسل.
+                                            </FormDescription>
+                                            <FormMessage className="form-message" />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                                 )}
                               </div>
@@ -3454,7 +3858,7 @@ export default function PlatformAdsTikTokManagement() {
                                                           size="sm"
                                                           className="absolute top-0 right-0"
                                                           onClick={() => {
-                                                            const newUrls = field.value.filter((_, i) => i !== index);
+                                                            const newUrls = (field.value || []).filter((_, i) => i !== index);
                                                             field.onChange(newUrls);
                                                           }}
                                                         >
@@ -3504,10 +3908,10 @@ export default function PlatformAdsTikTokManagement() {
                                           <Loader2 className="h-6 w-6 animate-spin text-theme-primary" />
                                           <span className="mr-2 text-sm text-gray-400">جاري جلب الفورمات الموجودة...</span>
                                         </div>
-                                      ) : leadFormsData?.leadForms && leadFormsData.leadForms.length > 0 ? (
+                                      ) : (leadFormsData as any)?.leadForms && (leadFormsData as any).leadForms.length > 0 ? (
                                         <FormField
                                           control={completeCampaignForm.control}
-                                          name="selectedLeadFormId"
+                                          name="leadFormPrivacyPolicyUrl"
                                           render={({ field }) => (
                                             <FormItem>
                                               <FormLabel className="text-theme-primary text-sm">اختر الفورم الموجود من TikTok *</FormLabel>
@@ -3518,7 +3922,7 @@ export default function PlatformAdsTikTokManagement() {
                                                   </SelectTrigger>
                                                 </FormControl>
                                                 <SelectContent className="select-content-solid">
-                                                  {leadFormsData.leadForms.map((form: any) => (
+                                                  {(leadFormsData as any).leadForms.map((form: any) => (
                                                     <SelectItem 
                                                       key={form.id} 
                                                       value={form.id}
@@ -3763,84 +4167,7 @@ export default function PlatformAdsTikTokManagement() {
                                       )}
                                     />
 
-                                    {/* البكسل - يُخفى في توليد العملاء المحتملين */}
-                                    {!isLeadGeneration && (
-                                      <FormField
-                                        control={completeCampaignForm.control}
-                                        name="pixelId"
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-theme-primary text-sm">بكسل التتبع</FormLabel>
-                                            <Select 
-                                              onValueChange={field.onChange} 
-                                              defaultValue={field.value || (pixelsData?.pixels && pixelsData.pixels.length > 0 ? pixelsData.pixels[0].pixelId : "none")}
-                                            >
-                                              <FormControl>
-                                                <SelectTrigger className="theme-select-trigger h-10 text-sm">
-                                                  <SelectValue placeholder="اختر بكسل" />
-                                                </SelectTrigger>
-                                              </FormControl>
-                                              <SelectContent className="select-content-solid">
-                                                <SelectItem value="none" className="select-item">بدون بكسل</SelectItem>
-                                                {pixelsData?.pixels && pixelsData.pixels.length > 0 ? (
-                                                  pixelsData.pixels.map((pixel: any) => (
-                                                    <SelectItem key={pixel.pixelId} value={pixel.pixelId} className="hover:bg-theme-primary-light">
-                                                      <div className="flex items-center justify-between w-full">
-                                                        <span className="font-medium truncate">{pixel.pixelName}</span>
-                                                        <span className="text-xs text-muted-foreground ml-2 font-mono">{pixel.pixelCode}</span>
-                                                      </div>
-                                                    </SelectItem>
-                                                  ))
-                                                ) : (
-                                                  <SelectItem value="unavailable" className="select-item">
-                                                    لا توجد بكسلات
-                                                  </SelectItem>
-                                                )}
-                                              </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
-                                    )}
 
-                                    {/* حدث التحسين - يُخفى في توليد العملاء المحتملين */}
-                                    {!isLeadGeneration && (
-                                      <FormField
-                                        control={completeCampaignForm.control}
-                                        name="optimizationEvent"
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-theme-primary text-sm">حدث التحسين</FormLabel>
-                                            <Select 
-                                              onValueChange={field.onChange} 
-                                              defaultValue={field.value || "ON_WEB_ORDER"}
-                                              disabled={!completeCampaignForm.watch("pixelId") || completeCampaignForm.watch("pixelId") === "none"}
-                                            >
-                                              <FormControl>
-                                                <SelectTrigger className="theme-select-trigger h-10 text-sm">
-                                                  <SelectValue placeholder="اختر حدث" />
-                                                </SelectTrigger>
-                                              </FormControl>
-                                              <SelectContent className="select-content-solid">
-                                                {completeCampaignForm.watch("pixelId") && completeCampaignForm.watch("pixelId") !== "none" ? (
-                                                  getPixelEvents(completeCampaignForm.watch("pixelId") || "").map((event: any) => (
-                                                    <SelectItem key={event.type} value={event.type} className="hover:bg-theme-primary-light">
-                                                      {pixelEvents[event.type as keyof typeof pixelEvents] || event.name}
-                                                    </SelectItem>
-                                                  ))
-                                                ) : (
-                                                  <SelectItem value="disabled" className="select-item">
-                                                    اختر بكسل أولاً
-                                                  </SelectItem>
-                                                )}
-                                              </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
-                                    )}
                                   </div>
                                 </div>
                                 )}
@@ -4122,7 +4449,7 @@ export default function PlatformAdsTikTokManagement() {
                               if (filteredCampaign) {
                                 impressions = filteredCampaign.impressions || 0;
                                 clicks = filteredCampaign.clicks || 0;
-                                spend = parseFloat(filteredCampaign.spend || '0') || 0;
+                                spend = parseFloat(String(filteredCampaign.spend || '0')) || 0;
                               } else {
                                 // إذا لم تُجد في البيانات المفلترة، فالقيم تكون 0
                                 impressions = 0;
@@ -4135,7 +4462,7 @@ export default function PlatformAdsTikTokManagement() {
                               if (selectedDateRange.value === 'all') {
                                 impressions = campaign.impressions || 0;
                                 clicks = campaign.clicks || 0;
-                                spend = parseFloat(campaign.spend || '0') || 0;
+                                spend = parseFloat(String(campaign.spend || '0')) || 0;
                               } else {
                                 // للفترات الأخرى التي تعيد بيانات فارغة، كل حملة تكون 0
                                 impressions = 0;
@@ -4372,7 +4699,7 @@ export default function PlatformAdsTikTokManagement() {
                                 </TableCell>
                                 <TableCell className="text-theme-primary font-medium">{formatNumber(getAdGroupAnalytics(adGroup)?.impressions || 0)}</TableCell>
                                 <TableCell className="text-theme-primary font-medium">{formatNumber(getAdGroupAnalytics(adGroup)?.clicks || 0)}</TableCell>
-                                <TableCell className="text-theme-primary font-semibold">{formatCurrency(getAdGroupAnalytics(adGroup)?.spend || 0)}</TableCell>
+                                <TableCell className="text-theme-primary font-semibold">{formatCurrency(parseFloat(String(getAdGroupAnalytics(adGroup)?.spend || 0)))}</TableCell>
                                 <TableCell>
                                   <div className="flex gap-2">
                                     <Button 
@@ -4531,6 +4858,18 @@ export default function PlatformAdsTikTokManagement() {
                           ) : (
                             getFilteredAds().map((ad: TikTokAd) => {
                               const adAnalytics = getAdAnalytics(ad);
+                              
+                              // تسجيل للتشخيص - فقط للإعلانات التي تحتوي على فيديو
+                              if (ad.adFormat === 'SINGLE_VIDEO') {
+                                console.log('🎬 Ad Video Debug:', {
+                                  adId: ad.adId,
+                                  adFormat: ad.adFormat,
+                                  videoUrl: ad.videoUrl,
+                                  hasVideoUrl: !!ad.videoUrl,
+                                  adData: ad
+                                });
+                              }
+                              
                               return (
                               <TableRow key={ad.id} className="border-theme-primary/20 hover:bg-theme-primary-light/50 transition-colors duration-200">
                                 <TableCell className="pr-4">
@@ -4548,7 +4887,7 @@ export default function PlatformAdsTikTokManagement() {
                                     <div className="relative">
                                       <button
                                         onClick={() => {
-                                          toggleAdStatus(ad.id, ad.status === 'ENABLE' ? 'DISABLE' : 'ENABLE');
+                                          toggleAdStatus(ad.adId, ad.status === 'ENABLE' ? 'DISABLE' : 'ENABLE');
                                         }}
                                         disabled={toggleAdStatusMutation.isPending}
                                         className={`
@@ -4582,7 +4921,7 @@ export default function PlatformAdsTikTokManagement() {
                                         className="w-16 h-16 object-cover rounded-lg theme-border cursor-pointer hover:scale-105 transition-transform"
                                         onClick={() => {
                                           // فتح الصورة في مودال أو تبويب جديد
-                                          window.open(`/api/object-storage/public/${ad.imageUrls[0]}`, '_blank');
+                                          window.open(`/api/object-storage/public/${ad.imageUrls?.[0]}`, '_blank');
                                         }}
                                         onError={(e) => {
                                           e.currentTarget.src = '/placeholder-image.png';
@@ -4605,9 +4944,32 @@ export default function PlatformAdsTikTokManagement() {
                                       }}
                                     />
                                   ) : ad.adFormat === 'SINGLE_VIDEO' ? (
-                                    <div className="flex items-center gap-2 text-theme-primary/70">
-                                      <Video className="h-4 w-4" />
-                                      <span className="text-xs">فيديو (غير متاح)</span>
+                                    <div 
+                                      className="relative cursor-pointer group"
+                                      onClick={() => {
+                                        setSelectedTikTokAd(ad);
+                                        setVideoModalOpen(true);
+                                      }}
+                                    >
+                                      {ad.coverImageUrl ? (
+                                        <div className="relative">
+                                          <img 
+                                            src={ad.coverImageUrl} 
+                                            alt="Video Cover"
+                                            className="w-12 h-12 object-cover rounded-lg border border-gray-200 shadow-sm group-hover:shadow-md transition-all"
+                                          />
+                                          {/* مثلث التشغيل */}
+                                          <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="w-4 h-4 bg-white/90 rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                                              <div className="w-0 h-0 border-l-[6px] border-l-gray-700 border-y-[4px] border-y-transparent ml-0.5"></div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="w-12 h-12 bg-gradient-to-br from-pink-100 to-purple-100 rounded-lg border border-gray-200 shadow-sm flex items-center justify-center group-hover:shadow-md transition-all">
+                                          <Video className="h-4 w-4 text-pink-500" />
+                                        </div>
+                                      )}
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-2 text-theme-primary/50">
@@ -4617,13 +4979,13 @@ export default function PlatformAdsTikTokManagement() {
                                   )}
                                 </TableCell>
                                 {/* التكلفة */}
-                                <TableCell className="text-theme-primary font-medium">{formatCurrency(adAnalytics?.spend || 0)}</TableCell>
+                                <TableCell className="text-theme-primary font-medium">{formatCurrency(parseFloat(String(adAnalytics?.spend || 0)))}</TableCell>
                                 {/* التحويلات */}
                                 <TableCell className="text-theme-primary font-medium">{formatNumber(adAnalytics?.conversions || 0)}</TableCell>
                                 {/* تكلفة التحويل */}
                                 <TableCell className="text-theme-primary font-medium">{
                                   adAnalytics?.conversions && adAnalytics.conversions > 0 
-                                    ? formatCurrency(adAnalytics.spend / adAnalytics.conversions)
+                                    ? formatCurrency(parseFloat(String(adAnalytics.spend)) / adAnalytics.conversions)
                                     : '0.00 $'
                                 }</TableCell>
                                 {/* النتائج */}
@@ -4631,19 +4993,19 @@ export default function PlatformAdsTikTokManagement() {
                                 {/* تكلفة النتيجة */}
                                 <TableCell className="text-theme-primary font-medium">{
                                   adAnalytics?.leads && adAnalytics.leads > 0 
-                                    ? formatCurrency(adAnalytics.spend / adAnalytics.leads)
+                                    ? formatCurrency(parseFloat(String(adAnalytics.spend)) / adAnalytics.leads)
                                     : '0.00 $'
                                 }</TableCell>
                                 {/* تكلفة النقرة */}
                                 <TableCell className="text-theme-primary font-medium">{
                                   adAnalytics?.clicks && adAnalytics.clicks > 0 
-                                    ? formatCurrency(adAnalytics.spend / adAnalytics.clicks)
+                                    ? formatCurrency(parseFloat(String(adAnalytics.spend)) / adAnalytics.clicks)
                                     : '0.00 $'
                                 }</TableCell>
                                 {/* تكلفة الألف ظهور */}
                                 <TableCell className="text-theme-primary font-medium">{
                                   adAnalytics?.impressions && adAnalytics.impressions > 0 
-                                    ? formatCurrency((adAnalytics.spend / adAnalytics.impressions) * 1000)
+                                    ? formatCurrency((parseFloat(String(adAnalytics.spend)) / adAnalytics.impressions) * 1000)
                                     : '0.00 $'
                                 }</TableCell>
                                 {/* النقرات للوجهة */}
@@ -4689,11 +5051,11 @@ export default function PlatformAdsTikTokManagement() {
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex flex-col gap-1">
-                                    {ad.pixelId ? (
+                                    {(ad as any).pixelId ? (
                                       <div className="flex items-center gap-2">
                                         <Badge variant="outline" className="bg-theme-primary-light text-theme-primary border-theme-primary/30">
                                           <Target className="h-3 w-3 ml-1" />
-                                          {pixelsData?.pixels?.find(p => p.pixelId === ad.pixelId)?.pixelName || `بكسل ${ad.pixelId}`}
+                                          {(pixelsData as any)?.pixels?.find((p: any) => p.pixelId === (ad as any).pixelId)?.pixelName || `بكسل ${(ad as any).pixelId}`}
                                         </Badge>
                                         <Button
                                           size="sm"
@@ -4708,7 +5070,7 @@ export default function PlatformAdsTikTokManagement() {
                                               .then(res => res.json())
                                               .then(data => {
                                                 if (data.success) {
-                                                  queryClient.invalidateQueries({ queryKey: ['/api/tiktok/ads/all'] });
+                                                  queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === '/api/tiktok/ads' });
                                                   toast({
                                                     title: "تم فصل البكسل",
                                                     description: "تم فصل البكسل عن الإعلان بنجاح"
@@ -4741,7 +5103,7 @@ export default function PlatformAdsTikTokManagement() {
                                             .then(res => res.json())
                                             .then(data => {
                                               if (data.success) {
-                                                queryClient.invalidateQueries({ queryKey: ['/api/tiktok/ads/all'] });
+                                                queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === '/api/tiktok/ads' });
                                                 toast({
                                                   title: "تم ربط البكسل",
                                                   description: "تم ربط البكسل بالإعلان بنجاح"
@@ -4763,7 +5125,7 @@ export default function PlatformAdsTikTokManagement() {
                                           <SelectValue placeholder="اختر بكسل" />
                                         </SelectTrigger>
                                         <SelectContent className="select-content-solid">
-                                          {pixelsData?.pixels?.map((pixel) => (
+                                          {(pixelsData as any)?.pixels?.map((pixel: any) => (
                                             <SelectItem key={pixel.pixelId} value={pixel.pixelId}>
                                               <div className="flex items-center gap-2">
                                                 <Target className="h-3 w-3" />
@@ -4857,8 +5219,9 @@ export default function PlatformAdsTikTokManagement() {
                       </DialogHeader>
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-theme-primary">اسم البكسل</label>
+                          <label htmlFor="pixel-name-input" className="text-sm font-medium text-theme-primary">اسم البكسل</label>
                           <input 
+                            id="pixel-name-input"
                             className="theme-input"
                             placeholder="بكسل موقع التجارة الإلكترونية"
                             value={newPixelName}
@@ -4866,7 +5229,7 @@ export default function PlatformAdsTikTokManagement() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-theme-primary">نوع البكسل</label>
+                          <div className="text-sm font-medium text-theme-primary">نوع البكسل</div>
                           <Select value={newPixelMode} onValueChange={setNewPixelMode}>
                             <SelectTrigger className="theme-select-trigger">
                               <SelectValue placeholder="اختر نوع البكسل" />
@@ -4920,7 +5283,7 @@ export default function PlatformAdsTikTokManagement() {
                               <p className="mt-2 text-theme-primary">جارٍ تحميل البكسلات...</p>
                             </TableCell>
                           </TableRow>
-                        ) : (!pixelsData?.pixels?.length && !pixelsData?.dbPixels?.length) || (!pixelsData?.pixels && !pixelsData?.dbPixels) ? (
+                        ) : (!(pixelsData as any)?.pixels?.length && !(pixelsData as any)?.dbPixels?.length) || (!(pixelsData as any)?.pixels && !(pixelsData as any)?.dbPixels) ? (
                           <TableRow className="hover:bg-theme-primary-light/50">
                             <TableCell colSpan={7} className="text-center py-8 bg-gray-900/95 border-gray-700 backdrop-blur-sm">
                               <div className="flex flex-col items-center justify-center space-y-3">
@@ -4934,7 +5297,7 @@ export default function PlatformAdsTikTokManagement() {
                           </TableRow>
                         ) : (
                           // عرض البكسلات الفريدة بدون تكرار (السيرفر يدمجها بالفعل في pixels)
-                          (pixelsData?.pixels || []).map((pixel) => (
+                          ((pixelsData as any)?.pixels || []).map((pixel: any) => (
                             <TableRow key={pixel.id} className="border-theme-primary/20 hover:bg-theme-primary-light/50 transition-colors duration-200">
                               <TableCell className="font-mono text-sm text-theme-primary">{pixel.pixelId}</TableCell>
                               <TableCell className="font-medium text-theme-primary">{pixel.pixelName}</TableCell>
@@ -5326,7 +5689,7 @@ export default function PlatformAdsTikTokManagement() {
                                   if (filteredCampaign) {
                                     impressions = filteredCampaign.impressions || 0;
                                     clicks = filteredCampaign.clicks || 0;
-                                    spend = parseFloat(filteredCampaign.spend || '0') || 0;
+                                    spend = parseFloat(String(filteredCampaign.spend || '0')) || 0;
                                     conversions = filteredCampaign.conversions || 0;
                                   } else {
                                     // إذا لم تجد الحملة في البيانات المفلترة، فالقيم 0
@@ -5340,7 +5703,7 @@ export default function PlatformAdsTikTokManagement() {
                                   if (selectedDateRange.value === 'all') {
                                     impressions = campaign.impressions || 0;
                                     clicks = campaign.clicks || 0;
-                                    spend = parseFloat(campaign.spend || '0') || 0;
+                                    spend = parseFloat(String(campaign.spend || '0')) || 0;
                                     conversions = campaign.conversions || 0;
                                   } else {
                                     // للفترات الأخرى بدون بيانات مفلترة، القيم 0
@@ -6230,6 +6593,13 @@ export default function PlatformAdsTikTokManagement() {
       {/* TikTok iPhone-Style Video Modal */}
       <Dialog open={videoModalOpen} onOpenChange={setVideoModalOpen}>
         <DialogContent className="max-w-sm sm:max-w-md max-h-[95vh] p-0 bg-black border-0 rounded-3xl shadow-2xl overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>عرض فيديو الإعلان</DialogTitle>
+            <DialogDescription>
+              مشاهدة فيديو الإعلان من TikTok
+            </DialogDescription>
+          </DialogHeader>
+          
           {/* iPhone-style Header with X button */}
           <div className="relative bg-black">
             <div className="absolute top-4 right-4 z-20">
@@ -6255,21 +6625,84 @@ export default function PlatformAdsTikTokManagement() {
 
           {/* Video Container - iPhone aspect ratio */}
           <div className="relative bg-black flex items-center justify-center" style={{aspectRatio: '9/16', minHeight: '60vh'}}>
-            {selectedVideoData?.videoUrl ? (
-              <video 
-                src={selectedVideoData.videoUrl}
-                controls
-                autoPlay
-                className="w-full h-full object-cover rounded-none"
-                style={{
-                  filter: 'contrast(1.1) saturate(1.2)'
-                }}
-                onError={(e) => {
-                  console.error('Video failed to load:', e);
-                }}
-              >
-                متصفحك لا يدعم عرض الفيديو
-              </video>
+            {selectedTikTokAd ? (
+              <div className="w-full h-full">
+                {/* عرض الفيديو الفعلي إذا كان متوفراً */}
+                {selectedTikTokAd.actualVideoUrl ? (
+                  <div className="relative w-full h-full">
+                    <video 
+                      src={`/api/proxy/video?url=${encodeURIComponent(selectedTikTokAd.actualVideoUrl)}`}
+                      controls
+                      autoPlay
+                      loop
+                      muted
+                      className="w-full h-full object-cover rounded-none"
+                      style={{
+                        filter: 'contrast(1.1) saturate(1.2)'
+                      }}
+                      onError={(e) => {
+                        console.error('فشل في تحميل الفيديو عبر الـ proxy:', e);
+                        console.log('🔄 محاولة تحميل الفيديو مباشرة...');
+                        // محاولة تحميل الفيديو مباشرة كـ fallback
+                        const videoElement = e.target as HTMLVideoElement;
+                        if (selectedTikTokAd.actualVideoUrl) {
+                          videoElement.src = selectedTikTokAd.actualVideoUrl;
+                          videoElement.onerror = (e2: string | Event) => {
+                            console.error('فشل في تحميل الفيديو مباشرة أيضاً:', e2);
+                            // إخفاء الفيديو وإظهار fallback
+                            videoElement.style.display = 'none';
+                            const fallback = videoElement.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          };
+                        }
+                      }}
+                    >
+                      متصفحك لا يدعم عرض الفيديو
+                    </video>
+                  </div>
+                ) : selectedTikTokAd.coverImageUrl ? (
+                  /* عرض صورة الغلاف مع رسالة */
+                  <div className="relative w-full h-full">
+                    <img 
+                      src={selectedTikTokAd.coverImageUrl} 
+                      alt="Video Cover"
+                      className="w-full h-full object-cover"
+                      style={{
+                        filter: 'contrast(1.1) saturate(1.2)'
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <div className="text-center text-white">
+                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center shadow-2xl animate-pulse">
+                          <Video className="h-10 w-10 text-white" />
+                        </div>
+                        <h3 className="text-lg font-bold mb-2">{selectedTikTokAd.adName}</h3>
+                        <p className="text-sm text-gray-300 mb-4">جاري تحميل الفيديو...</p>
+                        <div className="text-xs text-gray-400">
+                          الفيديو غير متاح للعرض المباشر
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* لا توجد صورة غلاف */
+                  <div className="text-center text-white flex flex-col items-center justify-center h-full">
+                    <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center shadow-2xl">
+                      <Video className="h-10 w-10 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-3">{selectedTikTokAd.adName}</h3>
+                    <p className="text-gray-300 mb-6">إعلان فيديو TikTok</p>
+                    {selectedTikTokAd.videoId && (
+                      <div className="text-xs text-gray-400 font-mono bg-gray-800/50 px-3 py-2 rounded-lg mb-6">
+                        Video ID: {selectedTikTokAd.videoId}
+                      </div>
+                    )}
+                    <div className="text-sm text-gray-400">
+                      الفيديو غير متاح للعرض المباشر
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="text-white text-center">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center">
@@ -6278,28 +6711,6 @@ export default function PlatformAdsTikTokManagement() {
                 <p className="text-gray-300">لا يمكن عرض الفيديو</p>
               </div>
             )}
-            
-            {/* TikTok-style overlay buttons */}
-            <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-              {selectedVideoData?.videoUrl && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="bg-black/50 hover:bg-black/70 text-white border border-white/20 rounded-full backdrop-blur-sm"
-                  onClick={() => window.open(selectedVideoData.videoUrl, '_blank')}
-                >
-                  <ExternalLink className="h-4 w-4 ml-2" />
-                  فتح خارجي
-                </Button>
-              )}
-              
-              <div className="flex flex-col items-center gap-3">
-                {/* TikTok-style action buttons */}
-                <div className="w-12 h-12 bg-gradient-to-r from-pink-500 to-red-500 rounded-full flex items-center justify-center shadow-lg">
-                  <Play className="h-5 w-5 text-white" fill="white" />
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* TikTok-style Bottom Bar */}

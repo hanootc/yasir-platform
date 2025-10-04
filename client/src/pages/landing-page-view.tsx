@@ -1862,10 +1862,17 @@ export default function LandingPageView() {
         }
         
         
-        // Validate variant selections before submitting
+        // Validate variant selections before submitting (محسن للأجهزة المحمولة)
         const validationErrors = validateVariantSelections();
         if (validationErrors.length > 0) {
           setVariantErrors(validationErrors);
+          // عرض رسالة خطأ واضحة للمستخدم
+          toast({
+            title: "يرجى اختيار الخيارات المطلوبة",
+            description: validationErrors[0],
+            variant: "destructive",
+            duration: 5000, // عرض لمدة 5 ثوانٍ
+          });
           throw new Error(validationErrors[0]);
         }
         
@@ -1876,11 +1883,18 @@ export default function LandingPageView() {
           const medium = urlParams.get('utm_medium') || urlParams.get('medium');
           const campaign = urlParams.get('utm_campaign') || urlParams.get('campaign');
           
+          console.log('🔍 UTM Parameters:', { source, medium, campaign });
+          
           if (source) {
-            let orderSource = source.toLowerCase();
-            if (medium) orderSource += `_${medium.toLowerCase()}`;
-            if (campaign) orderSource += `_${campaign.toLowerCase()}`;
-            return orderSource;
+            const sourceLower = source.toLowerCase();
+            // تحويل مصادر UTM إلى القيم المسموحة في enum
+            if (sourceLower === 'fb' || sourceLower === 'facebook') return 'facebook_ad';
+            if (sourceLower === 'ig' || sourceLower === 'instagram') return 'instagram_ad';
+            if (sourceLower === 'tiktok' || sourceLower === 'tt') return 'tiktok_ad';
+            if (sourceLower === 'whatsapp' || sourceLower === 'wa') return 'whatsapp_message';
+            if (sourceLower === 'google' || sourceLower === 'search') return 'website_direct';
+            // أي مصدر آخر
+            return 'other';
           }
           
           // كشف المصدر من referrer
@@ -1898,6 +1912,22 @@ export default function LandingPageView() {
 
         const detectedOrderSource = getOrderSource();
         console.log('📊 Order source detected:', detectedOrderSource);
+        
+        // حفظ تفاصيل المصدر الأصلية للتتبع
+        const getSourceDetails = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const details = {
+            utm_source: urlParams.get('utm_source'),
+            utm_medium: urlParams.get('utm_medium'),
+            utm_campaign: urlParams.get('utm_campaign'),
+            utm_content: urlParams.get('utm_content'),
+            utm_term: urlParams.get('utm_term'),
+            utm_id: urlParams.get('utm_id'),
+            fbclid: urlParams.get('fbclid'),
+            referrer: document.referrer
+          };
+          return JSON.stringify(details);
+        };
 
         const orderData = {
           ...data,
@@ -1919,7 +1949,8 @@ export default function LandingPageView() {
           shapeCount: selectedShapeIds.length,
           sizeCount: selectedSizeIds.length,
           test: 'test',
-          orderSource: detectedOrderSource // إضافة مصدر الطلب
+          orderSource: detectedOrderSource, // إضافة مصدر الطلب
+          sourceDetails: getSourceDetails() // إضافة تفاصيل المصدر للتتبع
         };
         
         
@@ -2008,10 +2039,26 @@ export default function LandingPageView() {
       }
     },
     onError: (error: any) => {
+      console.error("Order submission error:", error);
+      
+      // رسالة خطأ محسنة للأجهزة المحمولة
+      let errorMessage = "حدث خطأ أثناء إرسال الطلب";
+      
+      if (error?.message) {
+        if (error.message.includes("اختيار") || error.message.includes("قطعة")) {
+          errorMessage = error.message;
+        } else if (error.message.includes("network") || error.message.includes("fetch")) {
+          errorMessage = "مشكلة في الاتصال. يرجى التحقق من الإنترنت والمحاولة مرة أخرى";
+        } else if (error.message.includes("validation") || error.message.includes("required")) {
+          errorMessage = "يرجى التأكد من ملء جميع الحقول المطلوبة";
+        }
+      }
+      
       toast({
         title: "خطأ في الإرسال",
-        description: error?.message || "حدث خطأ أثناء إرسال الطلب",
+        description: errorMessage,
         variant: "destructive",
+        duration: 6000, // عرض لمدة 6 ثوانٍ للقراءة
       });
     },
   });
@@ -2040,7 +2087,7 @@ export default function LandingPageView() {
         return {
           container: "bg-white rounded-lg shadow-md border border-gray-200 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto",
           field: `${baseFieldClasses} border-gray-300 focus:ring-green-500 focus:border-green-500`,
-          button: `${baseButtonClasses} bg-green-600 hover:bg-green-700`
+          button: `${baseButtonClasses} bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700`
         };
       
       case "testimonial_focus":
@@ -2054,7 +2101,7 @@ export default function LandingPageView() {
         return {
           container: "bg-white rounded-lg shadow-md border-l-4 border-green-500 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto",
           field: `${baseFieldClasses} border-green-200 focus:ring-green-500 focus:border-green-500`,
-          button: `${baseButtonClasses} bg-green-600 hover:bg-green-700`
+          button: `${baseButtonClasses} bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700`
         };
       
       case "countdown_urgency":
@@ -2697,7 +2744,8 @@ export default function LandingPageView() {
                       <Button
                         type="submit"
                         disabled={submitOrderMutation.isPending}
-                        className="flex-1 bg-green-600 hover:bg-green-700 h-14 text-lg font-bold force-white-submit-button animate-[buttonPulse_2s_ease-in-out_infinite] hover:animate-none" style={{color: "white", backgroundColor: "#16a34a", fontWeight: "bold", border: "none"}}
+                        className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 h-16 text-xl font-bold text-white dark:text-white force-white-submit-button animate-pulse hover:animate-none shadow-lg transform hover:scale-105 transition-all duration-300" 
+                        style={{color: "white !important", backgroundColor: "#16a34a !important", fontWeight: "bold", border: "none", minHeight: "64px"}}
                       >
                         {submitOrderMutation.isPending ? (
                           <>
@@ -3156,12 +3204,12 @@ export default function LandingPageView() {
                     {/* Colors */}
                     {productColors && productColors.length > 0 && (
                       <div>
-                        <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                        <div className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                           الألوان المتاحة ({selectedColorIds.length}/{(() => {
                             const qty = getSelectedOfferQuantity();
                             return qty;
                           })()}) - المتوفر: {productColors.length}
-                        </label>
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                           {productColors.map((color: any) => {
                             const isSelected = selectedColorIds.includes(color.id);
@@ -3201,9 +3249,9 @@ export default function LandingPageView() {
                     {/* Shapes */}
                     {productShapes && productShapes.length > 0 && (
                       <div>
-                        <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                        <div className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                           الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productShapes.length}
-                        </label>
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                           {productShapes.map((shape: any) => {
                             const isSelected = selectedShapeIds.includes(shape.id);
@@ -3243,9 +3291,9 @@ export default function LandingPageView() {
                     {/* Sizes */}
                     {productSizes && productSizes.length > 0 && (
                       <div>
-                        <label className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                        <div className={`block text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                           الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productSizes.length}
-                        </label>
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                           {productSizes.map((size: any) => {
                             const isSelected = selectedSizeIds.includes(size.id);
@@ -3381,9 +3429,11 @@ export default function LandingPageView() {
                     <Button
                       type="submit"
                       disabled={submitOrderMutation.isPending}
-                      className="w-full py-4 bg-red-600 hover:bg-red-700 font-bold text-lg rounded-lg transition-all duration-300 transform hover:scale-105"
+                      className="w-full py-6 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 font-bold text-xl text-white dark:text-white rounded-lg transition-all duration-300 transform hover:scale-105 animate-pulse hover:animate-none shadow-lg"
                       style={{
-                        color: 'white !important'
+                        color: 'white !important',
+                        backgroundColor: '#16a34a !important',
+                        minHeight: '64px'
                       }}
                     >
                       {submitOrderMutation.isPending ? (
@@ -4035,7 +4085,7 @@ export default function LandingPageView() {
                       <Button
                         type="submit"
                         disabled={submitOrderMutation.isPending}
-                        className="flex-1 bg-green-600 hover:bg-green-700 h-14 text-lg font-bold !text-white dark:!text-white animate-[buttonPulse_2s_ease-in-out_infinite] hover:animate-none" style={{color: "white", backgroundColor: "#16a34a", fontWeight: "bold", border: "none"}}
+                        className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 h-16 text-xl font-bold text-white dark:text-white animate-pulse hover:animate-none shadow-lg transform hover:scale-105 transition-all duration-300" style={{color: "white !important", backgroundColor: "#16a34a !important", fontWeight: "bold", border: "none", minHeight: "64px"}}
                       >
                         {submitOrderMutation.isPending ? (
                           <>
@@ -4143,7 +4193,7 @@ export default function LandingPageView() {
                     <div className="mt-3">
                       <Button 
                         onClick={() => window.open('tel:+964', '_blank')}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs"
+                        className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white px-3 py-1 rounded text-xs"
                       >
                         <Phone className="h-3 w-3 ml-1" />
                         اتصل الآن
@@ -4593,11 +4643,12 @@ export default function LandingPageView() {
                         <Button
                           type="submit"
                           disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-green-600 hover:bg-green-700 h-12 text-base font-bold"
+                          className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 h-16 text-xl font-bold text-white dark:text-white animate-pulse hover:animate-none shadow-lg transform hover:scale-105 transition-all duration-300"
+                          style={{color: "white !important", backgroundColor: "#16a34a !important", minHeight: "64px"}}
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -4739,7 +4790,7 @@ export default function LandingPageView() {
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
                 }}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-bold rounded-lg"
+                className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white py-3 text-base font-bold rounded-lg"
               >
                 🛒 اطلب الآن • {formatCurrency(parseFloat(productPrice || '0'))}
               </Button>
@@ -5225,7 +5276,7 @@ export default function LandingPageView() {
                         <Button
                           type="submit"
                           disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 h-12 text-base font-bold"
+                          className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 h-16 text-xl font-bold animate-pulse hover:animate-none shadow-lg transform hover:scale-105 transition-all duration-300" style={{minHeight: "64px"}}
                         >
                           {submitOrderMutation.isPending ? (
                             <>
@@ -5717,11 +5768,12 @@ export default function LandingPageView() {
                         <Button
                           type="submit"
                           disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-green-600 hover:bg-green-700 h-12 text-base font-bold"
+                          className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 h-16 text-xl font-bold text-white dark:text-white animate-pulse hover:animate-none shadow-lg transform hover:scale-105 transition-all duration-300"
+                          style={{color: "white !important", backgroundColor: "#16a34a !important", minHeight: "64px"}}
                         >
                           {submitOrderMutation.isPending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#757575] mr-2"></div>
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                               جارٍ الإرسال...
                             </>
                           ) : (
@@ -5790,7 +5842,7 @@ export default function LandingPageView() {
                 onClick={() => {
                   const orderForm = document.getElementById('order-form');
                 }}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-bold rounded-lg"
+                className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white py-3 text-base font-bold rounded-lg"
               >
                 🎯 اطلب الآن • {formatCurrency(parseFloat(productPrice || '0'))}
               </Button>
@@ -6225,7 +6277,7 @@ export default function LandingPageView() {
                         <Button
                           type="submit"
                           disabled={submitOrderMutation.isPending}
-                          className="flex-1 bg-red-600 hover:bg-red-700 h-12 text-base font-bold animate-pulse"
+                          className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 h-16 text-xl font-bold animate-pulse hover:animate-none shadow-lg transform hover:scale-105 transition-all duration-300" style={{minHeight: "64px"}}
                         >
                           {submitOrderMutation.isPending ? (
                             <>
@@ -6519,9 +6571,9 @@ export default function LandingPageView() {
                     {/* الألوان */}
                     {productColors.length > 0 && (
                       <div className="mb-4">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        <div className="text-sm font-medium text-gray-700 mb-2 block">
                           الألوان المتاحة ({selectedColorIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productColors.length}
-                        </label>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {productColors.map((color: any) => {
                             const isSelected = selectedColorIds.includes(color.id);
@@ -6579,9 +6631,9 @@ export default function LandingPageView() {
                     {/* الأشكال */}
                     {productShapes.length > 0 && (
                       <div className="mb-4">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        <div className="text-sm font-medium text-gray-700 mb-2 block">
                           الأشكال المتاحة ({selectedShapeIds.length}/{getSelectedOfferQuantity()}) - المتوفر: {productShapes.length}
-                        </label>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {productShapes.map((shape: any) => {
                             const isSelected = selectedShapeIds.includes(shape.id);
@@ -6632,9 +6684,9 @@ export default function LandingPageView() {
                     {/* الأحجام */}
                     {productSizes.length > 0 && (
                       <div className="mb-4">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        <div className="text-sm font-medium text-gray-700 mb-2 block">
                           الأحجام المتاحة ({selectedSizeIds.length}/{getSelectedOfferQuantity()})
-                        </label>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {productSizes.map((size: any) => {
                             const isSelected = selectedSizeIds.includes(size.id);

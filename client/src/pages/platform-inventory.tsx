@@ -410,8 +410,9 @@ export default function PlatformInventory() {
           <CardContent className="p-3 sm:p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
               <div className="sm:col-span-2 lg:col-span-2">
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">البحث</label>
+                <label htmlFor="search-input" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">البحث</label>
                 <Input
+                  id="search-input"
                   placeholder="اسم المنتج أو الرمز..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -420,8 +421,9 @@ export default function PlatformInventory() {
               </div>
               
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">من تاريخ</label>
+                <label htmlFor="date-from-inventory" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">من تاريخ</label>
                 <Input
+                  id="date-from-inventory"
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
@@ -430,8 +432,9 @@ export default function PlatformInventory() {
               </div>
               
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">إلى تاريخ</label>
+                <label htmlFor="date-to-inventory" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">إلى تاريخ</label>
                 <Input
+                  id="date-to-inventory"
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}

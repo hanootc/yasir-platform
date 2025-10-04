@@ -343,8 +343,9 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
           </DialogHeader>
           <form onSubmit={handleSubmitCreate} className="space-y-4">
             <div>
-              <label className="text-sm font-medium">اسم التصنيف *</label>
+              <label htmlFor="category-name-create" className="text-sm font-medium">اسم التصنيف *</label>
               <Input
+                id="category-name-create"
                 placeholder="مثال: إلكترونيات"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
@@ -353,8 +354,9 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">الوصف</label>
+              <label htmlFor="category-description" className="text-sm font-medium">الوصف</label>
               <Textarea
+                id="category-description"
                 placeholder="وصف مختصر للتصنيف (اختياري)"
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
@@ -363,7 +365,7 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">الأيقونة</label>
+              <div className="text-sm font-medium">الأيقونة</div>
               <div className="mt-1">
                 <IconSelector 
                   value={formData.icon}
@@ -372,7 +374,7 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">تفعيل التصنيف</label>
+              <div className="text-sm font-medium">تفعيل التصنيف</div>
               <Switch
                 checked={formData.isActive}
                 onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
@@ -409,8 +411,9 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
           </DialogHeader>
           <form onSubmit={handleSubmitEdit} className="space-y-4">
             <div>
-              <label className="text-sm font-medium">اسم التصنيف *</label>
+              <label htmlFor="category-name" className="text-sm font-medium">اسم التصنيف *</label>
               <Input
+                id="category-name"
                 placeholder="مثال: إلكترونيات"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
@@ -419,8 +422,9 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">الوصف</label>
+              <label htmlFor="category-description" className="text-sm font-medium">الوصف</label>
               <Textarea
+                id="category-description"
                 placeholder="وصف مختصر للتصنيف (اختياري)"
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
@@ -429,7 +433,7 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">الأيقونة</label>
+              <div className="text-sm font-medium">الأيقونة</div>
               <div className="mt-1">
                 <IconSelector 
                   value={formData.icon}
@@ -438,7 +442,7 @@ export function CategoriesManager({ platformId }: CategoriesManagerProps) {
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">تفعيل التصنيف</label>
+              <div className="text-sm font-medium">تفعيل التصنيف</div>
               <Switch
                 checked={formData.isActive}
                 onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}

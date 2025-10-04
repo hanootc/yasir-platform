@@ -227,15 +227,15 @@ export default function Products() {
                     onValueChange={setSelectedPlatform}
                     placeholder="اختر منصة..."
                   />
-                  <label className="text-sm font-medium text-theme-primary whitespace-nowrap">
+                  <div className="text-sm font-medium text-theme-primary whitespace-nowrap">
                     فلترة حسب المنصة:
-                  </label>
+                  </div>
                 </div>
 
                 {/* Category Filter */}
                 <div className="flex items-center gap-3">
                   <Select value={selectedCategoryFilter} onValueChange={setSelectedCategoryFilter}>
-                    <SelectTrigger className="w-[200px] theme-border">
+                    <SelectTrigger id="category-filter-products" className="w-[200px] theme-border">
                       <SelectValue placeholder="اختر التصنيف" />
                     </SelectTrigger>
                     <SelectContent className="bg-theme-primary-lighter theme-border">
@@ -254,7 +254,7 @@ export default function Products() {
                       )) : null}
                     </SelectContent>
                   </Select>
-                  <label className="text-sm font-medium text-theme-primary whitespace-nowrap">
+                  <label htmlFor="category-filter-products" className="text-sm font-medium text-theme-primary whitespace-nowrap">
                     فلترة حسب التصنيف:
                   </label>
                 </div>

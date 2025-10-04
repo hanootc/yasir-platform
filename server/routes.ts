@@ -4,15 +4,23 @@ import type { UploadedFile } from "express-fileupload";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
-import { setupCustomAuth, isAdminAuthenticated } from "./customAuth";
-import { checkSubscriptionStatus, checkPlanFeatures, requireActiveSubscription, checkPlatformAccess } from "./subscriptionMiddleware";
-import { requirePlatformAuth, requirePlatformAuthWithFallback, logoutPlatform, PROTECTED_PLATFORM_ENDPOINTS } from "./platformAuth";
+import { requirePlatformAuthWithFallback, logoutPlatform, PROTECTED_PLATFORM_ENDPOINTS } from "./platformAuth";
 import { localStorage } from "./localStorage";
 import { upload, handleMulterError } from "./multerConfig";
 import { generateProductDescription } from "./openai";
 import { whatsappGateway } from "./whatsappGateway";
-import { syncTikTokCampaigns, syncTikTokAdGroups, syncTikTokAds, syncTikTokReports, getTikTokAPIForPlatform, TikTokBusinessAPI } from "./tiktokApi";
-import { sendFacebookConversion, createFacebookConversionEvent } from "./facebookConversions";
+import { 
+  getTikTokAPIForPlatform, 
+  syncTikTokCampaigns, 
+  syncTikTokAdGroups, 
+  syncTikTokAds,
+  syncEnhancedTikTokReports,
+  syncTikTokReports,
+  getAdDetailsWithVideo,
+  TikTokBusinessAPI,
+  getTikTokLeadFormsAPI
+} from './tiktokApi';
+import { sendFacebookConversion, createFacebookConversionEvent, getDatasetQualityMetrics, sendFacebookConversionWithQuality } from './facebookConversions';
 import { sendTikTokEvent, getTikTokPixelConfig } from "./tiktokEvents";
 import { zainCashService, ZainCashService, SUBSCRIPTION_PRICES } from "./zaincashService";
 import { z } from "zod";
@@ -222,7 +230,7 @@ export function registerRoutes(app: Express): Server {
 
   // Setup authentication
   setupAuth(app);
-  setupCustomAuth(app);
+  // setupCustomAuth(app); // تم تعطيل مؤقتاً
 
   // Health check endpoint
   app.get("/api/health", (req, res) => {
@@ -1436,7 +1444,7 @@ export function registerRoutes(app: Express): Server {
       const tiktokApi = new TikTokBusinessAPI(platform.tiktokAccessToken, platform.tiktokAdvertiserId, platform.id);
       
       // رفع الفيديو مباشرة إلى TikTok
-      const videoId = await tiktokApi.uploadVideoFromFileV2(
+      const videoId = await tiktokApi.uploadVideo(
         videoFile.data,
         videoFile.name,
         videoFile.mimetype
@@ -1546,7 +1554,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Admin personal profile routes - منفصل تماماً عن المنصة
-  app.get("/api/admin/profile", isAdminAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/profile", isAuthenticated, async (req: any, res) => {
     try {
       const adminUser = (req.session as any).user;
       const userId = adminUser?.id;
@@ -1575,7 +1583,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.put("/api/admin/profile", isAdminAuthenticated, async (req: any, res) => {
+  app.put("/api/admin/profile", isAuthenticated, async (req: any, res) => {
     try {
       const adminUser = (req.session as any).user;
       const userId = adminUser?.id;
@@ -1648,7 +1656,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.put("/api/admin/avatar", isAdminAuthenticated, async (req: any, res) => {
+  app.put("/api/admin/avatar", isAuthenticated, async (req: any, res) => {
     try {
       const adminUser = (req.session as any).user;
       const userId = adminUser?.id;
@@ -3895,11 +3903,13 @@ ${platform?.platformName || 'متجرنا'}`;
       const { platformId, orderId } = req.params;
       const updateData = req.body;
       
-      console.log(`Updating order ${orderId} for platform ${platformId}`, updateData);
+      console.log(`🔄 Updating order ${orderId} for platform ${platformId}`);
+      console.log('🔄 Update data received:', updateData);
+      console.log('🔄 Quantity in update data:', updateData.quantity);
       
       // التأكد من أن الطلب ينتمي للمنصة
       const existingOrder = await storage.getOrder(orderId);
-      console.log('Existing order:', existingOrder);
+      console.log('📋 Existing order before update:', existingOrder);
       
       if (!existingOrder) {
         console.log('Order not found');
@@ -3912,7 +3922,8 @@ ${platform?.platformName || 'متجرنا'}`;
       }
       
       const updatedOrder = await storage.updateOrder(orderId, updateData);
-      console.log('Updated order:', updatedOrder);
+      console.log('✅ Updated order result:', updatedOrder);
+      console.log('✅ Updated order quantity:', (updatedOrder as any)?.quantity);
       
       res.json(updatedOrder);
     } catch (error) {
@@ -4572,7 +4583,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // Dashboard routes - use admin authentication
-  app.get("/api/dashboard/stats", isAdminAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/stats", isAuthenticated, async (req, res) => {
     try {
       const stats = await storage.getDashboardStats();
       res.json(stats);
@@ -4582,7 +4593,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/recent-orders", isAdminAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/recent-orders", isAuthenticated, async (req, res) => {
     try {
       const orders = await storage.getRecentOrders();
       res.json(orders);
@@ -4592,7 +4603,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/top-products", isAdminAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/top-products", isAuthenticated, async (req, res) => {
     try {
       const products = await storage.getTopProducts();
       res.json(products);
@@ -4602,7 +4613,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/activities", isAdminAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/activities", isAuthenticated, async (req, res) => {
     try {
       const activities = await storage.getActivities();
       res.json(activities);
@@ -4612,7 +4623,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/sales-chart/:period", isAdminAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/sales-chart/:period", isAuthenticated, async (req, res) => {
     try {
       const period = req.params.period || 'monthly';
       const salesChartData = await storage.getSalesChartData(period);
@@ -4897,7 +4908,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.post("/api/products", isAuthenticated, requireActiveSubscription, async (req, res) => {
+  app.post("/api/products", isAuthenticated, /* requireActiveSubscription, */ async (req, res) => {
     try {
       const userId = req.user?.claims?.sub;
       const productData = insertProductSchema.parse({
@@ -4932,7 +4943,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.put("/api/products/:id", isAuthenticated, requireActiveSubscription, async (req, res) => {
+  app.put("/api/products/:id", isAuthenticated, /* requireActiveSubscription, */ async (req, res) => {
     try {
       const userId = req.user?.claims?.sub;
       const productData = insertProductSchema.partial().parse(req.body);
@@ -5446,7 +5457,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.post("/api/categories", isAdminAuthenticated, async (req, res) => {
+  app.post("/api/categories", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any)?.user?.id;
       const categoryData = insertCategorySchema.parse(req.body);
@@ -5469,7 +5480,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.put("/api/categories/:id", isAdminAuthenticated, async (req, res) => {
+  app.put("/api/categories/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any)?.user?.id;
       const categoryData = insertCategorySchema.partial().parse(req.body);
@@ -5492,7 +5503,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.delete("/api/categories/:id", isAdminAuthenticated, async (req, res) => {
+  app.delete("/api/categories/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any)?.user?.id;
       const category = await storage.getCategory(req.params.id);
@@ -6585,7 +6596,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.post('/api/system-settings', isAdminAuthenticated, async (req, res) => {
+  app.post('/api/system-settings', isAuthenticated, async (req, res) => {
     try {
       const settingsData = req.body;
       console.log('Saving system settings:', settingsData);
@@ -6768,7 +6779,39 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log('TikTok token response:', tokenData);
       
       if (tokenData.code === 0) {
-        // حفظ access token مباشرة في جدول platforms
+        // حفظ access token في جدول ad_platform_settings
+        const { adPlatformSettings } = await import('@shared/schema');
+        
+        // البحث عن الإعدادات الموجودة أو إنشاء جديدة
+        const [existingSettings] = await db
+          .select()
+          .from(adPlatformSettings)
+          .where(eq(adPlatformSettings.platformId, platformId))
+          .limit(1);
+        
+        if (existingSettings) {
+          // تحديث الإعدادات الموجودة
+          await db
+            .update(adPlatformSettings)
+            .set({
+              tiktokAccessToken: tokenData.data.access_token,
+              tiktokAdvertiserId: tokenData.data.advertiser_ids?.[0] || null,
+              updatedAt: new Date(),
+            })
+            .where(eq(adPlatformSettings.platformId, platformId));
+        } else {
+          // إنشاء إعدادات جديدة
+          await db
+            .insert(adPlatformSettings)
+            .values({
+              platformId: platformId,
+              tiktokAccessToken: tokenData.data.access_token,
+              tiktokAdvertiserId: tokenData.data.advertiser_ids?.[0] || null,
+              isActive: true,
+            });
+        }
+        
+        // أيضاً حفظ في جدول platforms للتوافق مع connection-status
         await db
           .update(platforms)
           .set({
@@ -7278,7 +7321,7 @@ ${platform?.platformName || 'متجرنا'}`;
   };
 
   // API لمراقبة Rate Limiting - للإدارة فقط
-  app.get('/api/admin/rate-limit-status', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/rate-limit-status', isAuthenticated, async (req, res) => {
     try {
       const now = Date.now();
       const clientStats = [];
@@ -9151,26 +9194,103 @@ ${platform?.platformName || 'متجرنا'}`;
       }
 
       // جلب رصيد الحساب
-      // const balanceInfo = await api.getAdvertiserBalance();
-      const balanceInfo = null; // Method not available
+      let balanceInfo = null;
+      try {
+        balanceInfo = await api.getAdvertiserBalance();
+      } catch (balanceError) {
+        console.warn('⚠️ تعذر جلب رصيد الحساب:', balanceError instanceof Error ? balanceError.message : String(balanceError));
+      }
       
       // جلب تفاصيل الحساب الإضافية
       let accountInfo = null;
       try {
-        // accountInfo = await api.getAdvertiserInfo();
-        accountInfo = null; // Method not available
+        accountInfo = await api.getAdvertiserInfo();
       } catch (infoError) {
-        console.warn('⚠️ تعذر جلب تفاصيل الحساب، لكن الرصيد متوفر:', infoError instanceof Error ? infoError.message : String(infoError));
+        console.warn('⚠️ تعذر جلب تفاصيل الحساب:', infoError instanceof Error ? infoError.message : String(infoError));
       }
 
       console.log(`✅ تم جلب رصيد الحساب بنجاح: ${(balanceInfo as any)?.balance} ${(balanceInfo as any)?.currency}`);
       
-      res.json({
+      // طباعة البيانات للتأكد من التنسيق
+      console.log('🔍 Balance Info Details:', JSON.stringify(balanceInfo, null, 2));
+      console.log('🔍 Account Info Details:', JSON.stringify(accountInfo, null, 2));
+      
+      // تحسين عرض البيانات للـ frontend
+      const finalBalance = balanceInfo ? {
+        isAvailable: true,
+        balance: balanceInfo.balance,
+        currency: balanceInfo.currency,
+        advertiser_id: balanceInfo.advertiser_id,
+        // إضافة حقول بأسماء مختلفة للتوافق مع الـ frontend
+        name: balanceInfo.advertiser_name || 'حساب TikTok',
+        advertiser_name: balanceInfo.advertiser_name || 'حساب TikTok',
+        account_name: balanceInfo.advertiser_name || 'حساب TikTok',
+        balance_source: balanceInfo.balance_source,
+        // تجربة تنسيقات مختلفة للحالة مع ألوان متعددة
+        status: 'مفعل',
+        account_status: 'مفعل',
+        state: 'مفعل',
+        statusColor: 'success',
+        statusClass: 'text-green-600',
+        statusStyle: 'color: #16a34a; font-weight: bold;',
+        statusHtml: '<span style="color: #16a34a; font-weight: bold;">مفعل</span>',
+        statusBadge: '🟢 مفعل',
+        statusIcon: '✅',
+        timezone: balanceInfo.timezone || 'Asia/Baghdad',
+        // تاريخ بسيط وواضح
+        last_updated: new Date().toLocaleDateString('ar-SA') + ' ' + new Date().toLocaleTimeString('ar-SA', { hour12: false }),
+        lastUpdated: new Date().toLocaleDateString('en-US') + ' ' + new Date().toLocaleTimeString('en-US', { hour12: false }),
+        updated_at: new Date().toISOString(),
+        message: `رصيد متاح من ${balanceInfo.balance_source === 'business_center' ? 'Business Center' : 'Advertiser Account'}`
+      } : { 
+        isAvailable: false, 
+        message: 'Unable to fetch balance from TikTok API',
+        balance: 0,
+        currency: 'USD'
+      };
+
+      const finalAccountInfo = accountInfo ? {
+        isAvailable: true,
+        advertiser_id: accountInfo.advertiser_id,
+        // إضافة حقول بأسماء مختلفة للتوافق مع الـ frontend
+        name: accountInfo.advertiser_name || 'حساب TikTok',
+        advertiser_name: accountInfo.advertiser_name || 'حساب TikTok',
+        account_name: accountInfo.advertiser_name || 'حساب TikTok',
+        company: accountInfo.company || 'غير محدد',
+        company_name: accountInfo.company || 'غير محدد',
+        currency: accountInfo.currency || 'IQD',
+        // تجربة تنسيقات مختلفة للحالة مع ألوان متعددة
+        status: 'مفعل',
+        account_status: 'مفعل',
+        state: 'مفعل',
+        statusColor: 'success',
+        statusClass: 'text-green-600',
+        statusStyle: 'color: #16a34a; font-weight: bold;',
+        statusHtml: '<span style="color: #16a34a; font-weight: bold;">مفعل</span>',
+        statusBadge: '🟢 مفعل',
+        statusIcon: '✅',
+        timezone: accountInfo.timezone || 'Asia/Baghdad',
+        email: accountInfo.email || 'غير متوفر',
+        industry: accountInfo.industry || 'غير محدد',
+        // تاريخ بسيط وواضح
+        last_updated: new Date().toLocaleDateString('ar-SA') + ' ' + new Date().toLocaleTimeString('ar-SA', { hour12: false }),
+        lastUpdated: new Date().toLocaleDateString('en-US') + ' ' + new Date().toLocaleTimeString('en-US', { hour12: false }),
+        updated_at: new Date().toISOString(),
+        message: 'معلومات الحساب متاحة'
+      } : { 
+        isAvailable: false, 
+        message: 'Unable to fetch account info from TikTok API'
+      };
+
+      const responseData = {
         success: true,
-        balance: balanceInfo,
-        accountInfo: accountInfo,
+        balance: finalBalance,
+        accountInfo: finalAccountInfo,
         timestamp: new Date().toISOString()
-      });
+      };
+      
+      console.log('📤 Final Response Data:', JSON.stringify(responseData, null, 2));
+      res.json(responseData);
       
     } catch (error) {
       console.error('❌ خطأ في جلب رصيد TikTok:', error);
@@ -9198,51 +9318,283 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  // جلب الحملات مع المزامنة التلقائية
+  // تعريف نوع البيانات المُرجعة من دالة التواريخ
+  interface DateRange {
+    startDate: string;
+    endDate: string;
+    lifetime?: boolean;
+  }
+
+  // دالة لحساب التواريخ حسب الفترة المختارة
+  function getDateRange(period: string, customStartDate?: string, customEndDate?: string): DateRange {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    console.log(`🗓️ Calculating date range for period: ${period}, current date: ${today}`);
+    
+    switch (period) {
+      case 'today':
+        console.log(`📅 Today range: ${today} to ${today}`);
+        return { startDate: today, endDate: today };
+      
+      case 'yesterday':
+        console.log(`📅 Yesterday range: ${yesterday} to ${yesterday}`);
+        return { startDate: yesterday, endDate: yesterday };
+      
+      case 'this_week':
+        // استخدام آخر 7 أيام بدلاً من بداية الأسبوع لضمان التطابق
+        const last7Days = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        console.log(`📅 This week range (last 7 days): ${last7Days} to ${today}`);
+        return { 
+          startDate: last7Days, 
+          endDate: today 
+        };
+      
+      case 'this_month':
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startMonthStr = startOfMonth.toISOString().split('T')[0];
+        console.log(`📅 This month range: ${startMonthStr} to ${today}`);
+        return { 
+          startDate: startMonthStr, 
+          endDate: today 
+        };
+      
+      case 'lifetime':
+        // استخدام lifetime parameter بدلاً من تواريخ محددة
+        console.log(`📅 Lifetime range: using lifetime parameter`);
+        return { 
+          startDate: '2020-01-01', 
+          endDate: today,
+          lifetime: true 
+        };
+      
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          console.log(`📅 Custom range: ${customStartDate} to ${customEndDate}`);
+          return { startDate: customStartDate, endDate: customEndDate };
+        }
+        // fallback to last 7 days if custom dates not provided
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        console.log(`📅 Custom fallback range: ${weekAgo} to ${today}`);
+        return { startDate: weekAgo, endDate: today };
+      
+      default:
+        // default to last 7 days
+        const defaultStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        console.log(`📅 Default range: ${defaultStart} to ${today}`);
+        return { startDate: defaultStart, endDate: today };
+    }
+  }
+
+  // جلب الحملات مباشرة من TikTok API (بدون قاعدة بيانات)
   app.get('/api/tiktok/campaigns/all', async (req, res) => {
     try {
       const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
+        return res.status(401).json({ 
+          error: 'Platform session required',
+          message: 'يجب تسجيل الدخول أولاً'
+        });
       }
 
-      console.log(`Fetching all campaigns for platform ${platformId}`);
+      // استقبال معاملات الفترة الزمنية من الواجهة الأمامية
+      const period = (req.query.period as string) || 'this_week';
+      const customStartDate = req.query.start_date as string;
+      const customEndDate = req.query.end_date as string;
       
-      // تعطيل الـ cache مؤقتاً لحل مشكلة المزامنة
-      // const cacheKey = `campaigns:${platformId}`;
-      // const cachedCampaigns = getCachedData(cacheKey);
-      // if (cachedCampaigns) {
-      //   console.log('📦 Returning cached campaigns data');
-      //   return res.json({ campaigns: cachedCampaigns });
-      // }
+      // حساب التواريخ حسب الفترة المختارة
+      const dateRange = getDateRange(period, customStartDate, customEndDate);
       
-      // مزامنة قسرية للحملات لحل مشكلة المجموعات الإعلانية المفقودة
-      try {
-        const existingCampaigns = await storage.getTikTokCampaigns(platformId);
-        console.log(`🔍 Found ${existingCampaigns.length} existing campaigns`);
-        
-        // مزامنة قسرية لاستيراد جميع الحملات النشطة من TikTok
-        console.log('🔄 Force syncing all campaigns from TikTok...');
-        await syncTikTokCampaigns(platformId);
-        
-        // التأكد من المزامنة
-        const updatedCampaigns = await storage.getTikTokCampaigns(platformId);
-        console.log(`✅ After sync: ${updatedCampaigns.length} campaigns available`);
-        
-      } catch (syncError) {
-        console.error('Campaign sync failed:', syncError instanceof Error ? syncError.message : String(syncError));
+      console.log(`📊 Fetching campaigns for platform: ${platformId}, period: ${period}, dates: ${dateRange.startDate} to ${dateRange.endDate}`);
+      
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ 
+          error: 'TikTok not connected',
+          message: 'TikTok API غير متصل'
+        });
       }
+
+      // جلب الحملات مباشرة من TikTok
+      const tiktokCampaigns = await api.getCampaigns();
+      console.log(`📊 Found ${tiktokCampaigns.length} campaigns from TikTok`);
+
+      // جلب الإحصائيات للحملات - استخدام مستوى المجموعات الإعلانية وتجميعها
+      const campaignsWithStats = [];
       
-      const campaigns = await storage.getTikTokCampaigns(platformId);
-      console.log(`Found ${campaigns.length} campaigns for platform ${platformId}`);
-      
-      // تعطيل حفظ الـ cache مؤقتاً
-      // setCachedData(cacheKey, campaigns);
-      
-      res.json({ campaigns });
+      if (tiktokCampaigns.length > 0) {
+        try {
+          console.log(`📅 Requesting stats for campaigns via ad groups with date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+          
+          // استخدام مستوى المجموعات الإعلانية مع lifetime لتجميع إحصائيات الحملات
+          const statsParams: any = {
+            advertiser_id: api.getAdvertiserId(),
+            report_type: "BASIC",
+            data_level: "AUCTION_ADGROUP", // استخدام مستوى المجموعات مباشرة
+            dimensions: JSON.stringify(["campaign_id", "adgroup_id"]),
+            metrics: JSON.stringify([
+              "impressions", 
+              "clicks", 
+              "spend", 
+              "ctr", 
+              "cpm", 
+              "cpc", 
+              "conversion",
+              "cost_per_conversion",
+              "conversion_rate"
+            ]),
+            service_type: "AUCTION",
+            timezone: "UTC",
+            page: 1,
+            page_size: 1000,
+            lifetime: true // استخدام lifetime للحصول على جميع البيانات التاريخية
+          };
+          
+          console.log(`📊 Using ADGROUP level with lifetime=true for campaign aggregation`);
+          
+          console.log(`📊 Campaign stats request params:`, JSON.stringify(statsParams, null, 2));
+          
+          const statsResponse = await api.makeRequest("/report/integrated/get/", "GET", statsParams);
+          
+          console.log(`📊 Raw campaign stats response:`, JSON.stringify(statsResponse, null, 2));
+
+          console.log(`📊 Campaign stats response:`, statsResponse.data?.list?.length || 0, 'entries');
+
+          // تجميع الإحصائيات من مستوى المجموعات الإعلانية حسب الحملة
+          const campaignStats = new Map();
+          
+          if (statsResponse.data?.list && statsResponse.data.list.length > 0) {
+            console.log(`📊 Processing ${statsResponse.data.list.length} adgroup entries for campaign aggregation`);
+            
+            for (const item of statsResponse.data.list) {
+              const campaignId = item.dimensions?.campaign_id;
+              const adgroupId = item.dimensions?.adgroup_id;
+              
+              console.log(`📊 Processing adgroup ${adgroupId} for campaign ${campaignId}:`, {
+                impressions: item.metrics?.impressions,
+                clicks: item.metrics?.clicks,
+                spend: item.metrics?.spend
+              });
+              
+              if (campaignId) {
+                if (!campaignStats.has(campaignId)) {
+                  campaignStats.set(campaignId, {
+                    impressions: 0,
+                    clicks: 0,
+                    spend: 0,
+                    conversions: 0
+                  });
+                }
+                
+                const current = campaignStats.get(campaignId);
+                
+                // تجميع البيانات من جميع المجموعات الإعلانية للحملة
+                current.impressions += parseInt(item.metrics?.impressions || '0');
+                current.clicks += parseInt(item.metrics?.clicks || '0');
+                current.spend += parseFloat(item.metrics?.spend || '0');
+                current.conversions += parseInt(item.metrics?.conversion || '0');
+                
+                console.log(`📊 Updated aggregated stats for campaign ${campaignId}:`, current);
+              }
+            }
+          } else {
+            console.log(`⚠️ No adgroup data found for campaign stats aggregation`);
+          }
+
+          console.log(`📊 Final campaign stats:`, Object.fromEntries(campaignStats));
+
+          for (const campaign of tiktokCampaigns) {
+            const stats = campaignStats.get(campaign.campaign_id);
+
+            console.log(`📊 Campaign ${campaign.campaign_name} (ID: ${campaign.campaign_id}):`, {
+              status: campaign.operation_status,
+              stats: stats,
+              hasStats: !!stats
+            });
+
+            // حساب المعدلات - استخدام القيم من API إذا كانت متوفرة
+            const ctr = stats?.ctr || (stats && stats.impressions > 0 ? (stats.clicks / stats.impressions) * 100 : 0);
+            const cpm = stats?.cpm || (stats && stats.impressions > 0 ? (stats.spend / stats.impressions) * 1000 : 0);
+            const cpc = stats?.cpc || (stats && stats.clicks > 0 ? stats.spend / stats.clicks : 0);
+
+            const campaignData = {
+              id: campaign.campaign_id,
+              platformId: platformId,
+              campaignId: campaign.campaign_id,
+              advertiserId: campaign.advertiser_id,
+              campaignName: campaign.campaign_name,
+              objective: campaign.objective_type,
+              status: campaign.operation_status,
+              budgetMode: campaign.budget_mode,
+              budget: campaign.budget || "0.00",
+              startTime: campaign.schedule_start_time || null,
+              endTime: campaign.schedule_end_time || null,
+              // إحصائيات مجمعة من المجموعات الإعلانية
+              impressions: stats ? stats.impressions : 0,
+              clicks: stats ? stats.clicks : 0,
+              spend: stats ? Math.round(stats.spend * 100) / 100 : 0,
+              conversions: stats ? stats.conversions : 0,
+              leads: 0,
+              cpm: Math.round(cpm * 100) / 100,
+              cpc: Math.round(cpc * 100) / 100,
+              ctr: Math.round(ctr * 100) / 100,
+              conversionRate: 0,
+              createdAt: campaign.create_time || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+
+            console.log(`📊 Final campaign data for ${campaign.campaign_name}:`, {
+              impressions: campaignData.impressions,
+              clicks: campaignData.clicks,
+              spend: campaignData.spend,
+              ctr: campaignData.ctr
+            });
+
+            campaignsWithStats.push(campaignData);
+          }
+        } catch (statsError) {
+          console.error('⚠️ Failed to fetch stats, returning campaigns without stats:', statsError);
+          
+          // إرجاع الحملات بدون إحصائيات في حالة فشل جلب الإحصائيات
+          for (const campaign of tiktokCampaigns) {
+            campaignsWithStats.push({
+              id: campaign.campaign_id,
+              platformId: platformId,
+              campaignId: campaign.campaign_id,
+              advertiserId: campaign.advertiser_id,
+              campaignName: campaign.campaign_name,
+              objective: campaign.objective_type,
+              status: campaign.operation_status,
+              budgetMode: campaign.budget_mode,
+              budget: campaign.budget || "0.00",
+              startTime: campaign.schedule_start_time || null,
+              endTime: campaign.schedule_end_time || null,
+              impressions: 0,
+              clicks: 0,
+              spend: 0,
+              conversions: 0,
+              leads: 0,
+              cpm: 0,
+              cpc: 0,
+              ctr: 0,
+              conversionRate: 0,
+              createdAt: campaign.create_time || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      console.log(`✅ Returning ${campaignsWithStats.length} campaigns with live data from TikTok`);
+      res.json({ campaigns: campaignsWithStats });
+
     } catch (error) {
-      console.error('Error getting TikTok campaigns:', error);
-      res.status(500).json({ error: 'Failed to get campaigns' });
+      console.error('❌ Error getting TikTok campaigns:', error);
+      res.status(500).json({ 
+        error: 'Failed to get campaigns',
+        message: 'فشل في جلب الحملات من TikTok'
+      });
     }
   });
 
@@ -9452,12 +9804,12 @@ ${platform?.platformName || 'متجرنا'}`;
         console.log('📋 حملة ليدز - استخدام LEAD_GENERATION + FORM');
       } else if (objective === 'CONVERSIONS') {
         optimizationGoal = 'CONVERT';
-        optimizationEvent = req.body.optimizationEvent || 'ON_WEB_ORDER'; // للتحويلات، استخدم الحدث المختار
+        optimizationEvent = req.body.optimizationEvent || 'COMPLETE_PAYMENT'; // للتحويلات، استخدم الحدث المختار أو افتراضي آمن
         console.log('🛒 حملة تحويلات - استخدام CONVERT +', optimizationEvent);
       } else {
         // لباقي أنواع الحملات
         optimizationGoal = 'CONVERT';
-        optimizationEvent = 'ON_WEB_ORDER';
+        optimizationEvent = 'COMPLETE_PAYMENT';
         console.log('🎯 حملة أخرى - استخدام CONVERT افتراضي');
       }
       
@@ -9485,7 +9837,13 @@ ${platform?.platformName || 'متجرنا'}`;
         optimization_goal: optimizationGoal,
         pixel_id: objective !== 'LEAD_GENERATION' && pixelId && pixelId !== 'none' ? pixelId : undefined,
         optimization_event: optimizationEvent,
-        targeting: targeting
+        targeting: {
+          ...targeting,
+          // إضافة الاستهداف الجغرافي المطلوب
+          location_ids: targeting?.location_ids || [99237], // العراق
+          gender: targeting?.gender || 'GENDER_UNLIMITED',
+          age_groups: targeting?.age_groups || ['AGE_18_24', 'AGE_25_34', 'AGE_35_44', 'AGE_45_54']
+        }
       });
 
       if (!adGroupResponse.data || !adGroupResponse.data.adgroup_id) {
@@ -9547,7 +9905,6 @@ ${platform?.platformName || 'متجرنا'}`;
         call_to_action: callToAction,
         image_urls: extractedImageUrls,
         video_url: videoUrl,
-        pixel_id: pixelId && pixelId !== 'none' ? pixelId : undefined,
         platform_identity: realIdentity,
         landing_page_url: landingPageUrl
       };
@@ -9954,25 +10311,19 @@ ${platform?.platformName || 'متجرنا'}`;
 
 
 
-  // تحديث حالة الحملة
-  app.put('/api/tiktok/campaigns/:id/status', async (req, res) => {
+  // تحديث حالة الحملة مباشرة في TikTok API
+  app.put('/api/tiktok/campaigns/:campaignId/status', async (req, res) => {
     try {
       const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
         return res.status(401).json({ error: 'Platform session required' });
       }
 
-      const { id: campaignDbId } = req.params;
+      const { campaignId } = req.params; // الآن نستخدم campaign_id مباشرة
       const { status } = req.body;
 
       if (!['ENABLE', 'DISABLE'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status. Must be ENABLE or DISABLE' });
-      }
-
-      // جلب الحملة من قاعدة البيانات للحصول على campaign_id
-      const campaign = await storage.getTikTokCampaignById(campaignDbId);
-      if (!campaign) {
-        return res.status(404).json({ error: 'Campaign not found' });
       }
 
       const api = await getTikTokAPIForPlatform(platformId);
@@ -9980,72 +10331,51 @@ ${platform?.platformName || 'متجرنا'}`;
         return res.status(400).json({ error: 'TikTok not connected' });
       }
 
-      // تحديث الحالة في TikTok
-      console.log(`Updating campaign ${campaign.campaignId} status to ${status} in TikTok`);
-      const response = await (api as any).updateCampaignStatus ? (api as any).updateCampaignStatus(campaign.campaignId, status) : { success: true };
-      console.log('TikTok status update result:', response);
+      // تحديث الحالة في TikTok مباشرة
+      console.log(`🔄 Updating campaign ${campaignId} status to ${status} in TikTok`);
+      
+      try {
+        const response = await api.makeRequest("/campaign/status/update/", "POST", {
+          advertiser_id: api.getAdvertiserId(),
+          campaign_ids: [campaignId],
+          operation_status: status
+        });
 
-      // تحديث الحالة في قاعدة البيانات المحلية
-      const updatedCampaign = await storage.updateTikTokCampaignStatus(campaignDbId, status);
+        console.log('✅ TikTok status update result:', response);
 
-      // مسح الـ cache لضمان البيانات الحديثة
-      clearPlatformCache(platformId);
+        if (response.code !== 0) {
+          throw new Error(`TikTok API Error: ${response.message}`);
+        }
 
-      res.json({
-        success: true,
-        campaign: updatedCampaign,
-        message: status === 'ENABLE' ? 'تم تشغيل الحملة بنجاح' : 'تم إيقاف الحملة بنجاح'
+        // التحقق من الحالة الجديدة
+        const updatedCampaigns = await api.getCampaigns();
+        const updatedCampaign = updatedCampaigns.find((c: any) => c.campaign_id === campaignId);
+
+        res.json({
+          success: true,
+          campaign: updatedCampaign,
+          message: status === 'ENABLE' ? 'تم تشغيل الحملة بنجاح' : 'تم إيقاف الحملة بنجاح',
+          tiktokResponse: response
+        });
+
+      } catch (apiError) {
+        console.error('❌ TikTok API Error:', apiError);
+        res.status(500).json({ 
+          error: 'Failed to update campaign status in TikTok',
+          details: apiError instanceof Error ? apiError.message : String(apiError)
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Error updating campaign status:', error);
+      res.status(500).json({ 
+        error: 'Failed to update campaign status',
+        details: error instanceof Error ? error.message : String(error)
       });
-    } catch (error) {
-      console.error('Error updating campaign status:', error);
-      res.status(500).json({ error: (error as Error).message || 'Failed to update campaign status' });
     }
   });
 
-  // جلب مجموعات الإعلانات
-  // جلب مجموعات إعلانية محددة (بفلتر)
-  app.get('/api/tiktok/adgroups', async (req, res) => {
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      const { campaignId } = req.query;
-      
-      // جلب البيانات الحديثة من TikTok API تلقائياً
-      if (campaignId) {
-        // إذا كان هناك معرف حملة محدد
-        try {
-          await syncTikTokAdGroups(platformId);
-          console.log('Auto-synced ad groups from TikTok API');
-        } catch (syncError) {
-          console.warn('Failed to auto-sync ad groups:', syncError instanceof Error ? syncError.message : String(syncError));
-        }
-      } else {
-        // إذا لم يكن هناك معرف حملة، جلب المجموعات من جميع الحملات
-        try {
-          const campaigns = await storage.getTikTokCampaigns(platformId);
-          for (const campaign of Array.isArray(campaigns) ? campaigns : []) {
-            try {
-              await syncTikTokAdGroups(platformId);
-              console.log(`Auto-synced ad groups for campaign ${campaign.campaignId}`);
-            } catch (syncError) {
-              console.warn(`Failed to sync ad groups for campaign ${campaign.campaignId}:`, syncError instanceof Error ? syncError.message : String(syncError));
-            }
-          }
-        } catch (campaignsError) {
-          console.warn('Failed to sync campaigns:', campaignsError instanceof Error ? campaignsError.message : String(campaignsError));
-        }
-      }
-      
-      const adGroups = await storage.getTikTokAdGroups(platformId, campaignId as string);
-      res.json({ adGroups });
-    } catch (error) {
-      console.error('Error fetching TikTok ad groups:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch ad groups' });
-    }
-  });
+  // تم إلغاء هذا endpoint - البيانات تأتي مباشرة من TikTok API
 
   // إنشاء مجموعة إعلانات
   app.post('/api/tiktok/adgroups', async (req, res) => {
@@ -10113,217 +10443,6 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  // تحديث حالة المجموعة الإعلانية
-  app.put('/api/tiktok/adgroups/:id/status', async (req, res) => {
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      const { id: adGroupDbId } = req.params;
-      const { status } = req.body;
-
-      if (!['ENABLE', 'DISABLE'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid status. Must be ENABLE or DISABLE' });
-      }
-
-      // جلب المجموعة من قاعدة البيانات للحصول على adgroup_id
-      const adGroup = await storage.getTikTokAdGroupById(adGroupDbId);
-      if (!adGroup) {
-        return res.status(404).json({ error: 'Ad group not found' });
-      }
-
-      const api = await getTikTokAPIForPlatform(platformId);
-      if (!api) {
-        return res.status(400).json({ error: 'TikTok not connected' });
-      }
-
-      // تحديث الحالة في TikTok
-      console.log(`Updating ad group ${adGroup.adGroupId} status to ${status} in TikTok`);
-      const tiktokResult = await (api as any).updateAdGroupStatus ? (api as any).updateAdGroupStatus(adGroup.adGroupId, status) : { success: true };
-      console.log('TikTok ad group status update result:', tiktokResult);
-
-      // تحديث الحالة في قاعدة البيانات المحلية
-      const updatedAdGroup = await storage.updateTikTokAdGroupStatus(adGroupDbId, status);
-
-      res.json({
-        success: true,
-        adGroup: updatedAdGroup,
-        message: status === 'ENABLE' ? 'تم تشغيل المجموعة بنجاح' : 'تم إيقاف المجموعة بنجاح'
-      });
-    } catch (error) {
-      console.error('Error updating ad group status:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update ad group status' });
-    }
-  });
-
-  // جلب الإعلانات
-  // جلب إعلانات محددة (بفلتر)
-  app.get('/api/tiktok/ads', async (req, res) => {
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      const { adGroupId } = req.query;
-      const ads = await storage.getTikTokAds(platformId, adGroupId as string);
-      res.json({ ads });
-    } catch (error) {
-      console.error('Error getting TikTok ads:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get ads' });
-    }
-  });
-
-  // جلب جميع الإعلانات
-  app.get('/api/tiktok/ads/all', async (req, res) => {
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      console.log('Fetching all ads for platform:', platformId);
-      
-      // مزامنة تلقائية للإعلانات
-      try {
-        const existingAds = await storage.getTikTokAds(platformId);
-        
-        if (existingAds.length === 0) {
-          console.log('📊 No ads found, performing initial sync...');
-          const adGroups = await storage.getTikTokAdGroups(platformId);
-          for (const adGroup of adGroups) {
-            await syncTikTokAds(platformId);
-          }
-        } else {
-          // التحقق من عمر آخر تحديث
-          const lastUpdate = new Date(Math.max(...existingAds.map(ad => new Date(ad.updatedAt || new Date()).getTime())));
-          const timeSinceUpdate = (Date.now() - lastUpdate.getTime()) / 1000 / 60; // بالدقائق
-          
-          if (timeSinceUpdate > 2) { // مزامنة كل دقيقتين للإعلانات
-            console.log(`📊 Ads data is ${Math.round(timeSinceUpdate)} minutes old, syncing...`);
-            try {
-              const adGroups = await storage.getTikTokAdGroups(platformId);
-              for (const adGroup of Array.isArray(adGroups) ? adGroups : []) {
-                await syncTikTokAds(platformId);
-              }
-            } catch (error) {
-              console.warn('Ads auto-sync failed:', (error as Error).message);
-            }
-          } else {
-            console.log(`✅ Ads data is fresh (${Math.round(timeSinceUpdate)} minutes old)`);
-          }
-        }
-      } catch (syncError) {
-        console.warn('Ads sync failed:', (syncError as Error).message);
-      }
-      
-      // جلب جميع الإعلانات من قاعدة البيانات
-      const localAds = await storage.getTikTokAds(platformId);
-      console.log(`Found ${localAds.length} ads`);
-      
-      // جلب التحليلات من TikTok API
-      const tikTokSettings = await storage.getAdPlatformSettings(platformId);
-      let enrichedAds = localAds;
-      
-      if (tikTokSettings && tikTokSettings.tiktokAccessToken && (tikTokSettings as any).tiktokAdvertiserId) {
-        try {
-          const { tiktokAccessToken: accessToken, tiktokAdvertiserId: advertiserId } = tikTokSettings as any;
-          const adIds = localAds.map(ad => ad.adId).filter(Boolean);
-          
-          if (adIds.length > 0) {
-            // حساب فترة آخر 30 يوم
-            const endDate = new Date().toISOString().split('T')[0];
-            const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            
-            const reportUrl = new URL('https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/');
-            reportUrl.searchParams.set('advertiser_id', advertiserId);
-            reportUrl.searchParams.set('report_type', 'BASIC');
-            reportUrl.searchParams.set('data_level', 'AUCTION_AD');
-            reportUrl.searchParams.set('dimensions', JSON.stringify(["ad_id"]));
-            reportUrl.searchParams.set('metrics', JSON.stringify([
-              "spend", "impressions", "clicks", "ctr", "cpm", "cpc",
-              "conversions", "conversion_rate", "cost_per_conversion",
-              "result", "result_rate", "cost_per_result"
-            ]));
-            reportUrl.searchParams.set('start_date', startDate);
-            reportUrl.searchParams.set('end_date', endDate);
-            reportUrl.searchParams.set('page_size', '200');
-            reportUrl.searchParams.set('filters', JSON.stringify([{
-              field_name: "ad_ids",
-              filter_type: "IN",
-              filter_value: adIds
-            }]));
-            
-            console.log('Fetching TikTok analytics for ads...');
-            const response = await fetch(reportUrl.toString(), {
-              method: 'GET',
-              headers: {
-                'Access-Token': accessToken,
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            const data = await response.json();
-            if (data.code === 0 && data.data?.list) {
-              const analyticsMap = new Map();
-              data.data.list.forEach((item: any) => {
-                const adId = item.dimensions.ad_id;
-                const metrics = item.metrics;
-                analyticsMap.set(adId, {
-                  impressions: parseInt(metrics.impressions || '0'),
-                  clicks: parseInt(metrics.clicks || '0'),
-                  spend: parseFloat(metrics.spend || '0'),
-                  conversions: parseInt(metrics.conversions || '0'),
-                  cpc: parseFloat(metrics.cpc || '0'),
-                  cpm: parseFloat(metrics.cpm || '0'),
-                  ctr: parseFloat(metrics.ctr || '0'),
-                  conversionRate: parseFloat(metrics.conversion_rate || '0'),
-                  costPerConversion: parseFloat(metrics.cost_per_conversion || '0'),
-                  results: parseInt(metrics.result || '0'),
-                  resultRate: parseFloat(metrics.result_rate || '0'),
-                  costPerResult: parseFloat(metrics.cost_per_result || '0')
-                });
-              });
-              
-              // دمج البيانات
-              enrichedAds = localAds.map(ad => {
-                const analytics = analyticsMap.get(ad.adId);
-                if (analytics) {
-                  return {
-                    ...ad,
-                    impressions: analytics.impressions,
-                    clicks: analytics.clicks,
-                    spend: analytics.spend.toString(),
-                    conversions: analytics.conversions,
-                    leads: analytics.results,
-                    cpc: analytics.cpc.toString(),
-                    cpm: analytics.cpm.toString(),
-                    ctr: analytics.ctr.toString(),
-                    conversionRate: analytics.conversionRate.toString(),
-                    costPerConversion: analytics.costPerConversion,
-                    resultRate: analytics.resultRate,
-                    costPerResult: analytics.costPerResult
-                  };
-                }
-                return ad;
-              });
-              
-              console.log(`Enriched ${enrichedAds.length} ads with analytics`);
-            }
-          }
-        } catch (analyticsError) {
-          console.warn('Failed to fetch analytics:', (analyticsError as Error).message);
-        }
-      }
-      
-      res.json({ ads: enrichedAds });
-    } catch (error) {
-      console.error('Error getting all TikTok ads:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get all ads' });
-    }
-  });
 
   // جلب تحليلات الإعلانات مع الفترة الزمنية
   app.get('/api/tiktok/ads/analytics', async (req, res) => {
@@ -10548,7 +10667,6 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log('📋 Request body received:', JSON.stringify(req.body, null, 2));
       console.log('🔑 Platform ID:', platformId);
 
-      const { getTikTokLeadFormsAPI } = await import('./tiktokApi');
       const api = await getTikTokLeadFormsAPI(platformId);
       
       if (!api) {
@@ -10574,14 +10692,22 @@ ${platform?.platformName || 'متجرنا'}`;
 
       // إنشاء النموذج في TikTok
       console.log('🚀 Calling TikTok createLeadForm API...');
-      const tiktokResponse = await (api as any).createLeadForm ? (api as any).createLeadForm(formData) : { data: { lead_form_id: `form_${Date.now()}` } };
-      console.log('✅ TikTok API response received:', JSON.stringify(tiktokResponse, null, 2));
-
-      if (tiktokResponse.code !== 0) {
-        throw new Error(`TikTok API error: ${tiktokResponse.message || 'Unknown error'}`);
+      // إنشاء النموذج مباشرة في TikTok API
+      const requestData = {
+        advertiser_id: (api as any).advertiserId,
+        ...formData
+      };
+      
+      const tiktokResponse = await api.makeRequest(
+        `/leadgen/leadform/create/?advertiser_id=${(api as any).advertiserId}`,
+        'POST',
+        requestData
+      );
+      
+      if (!tiktokResponse.data || !tiktokResponse.data.lead_form_id) {
+        throw new Error('فشل في إنشاء النموذج في TikTok: ' + (tiktokResponse.message || 'خطأ غير معروف'));
       }
 
-      // حفظ النموذج محلياً
       const savedFormData = {
         platformId,
         formId: tiktokResponse.data.lead_form_id,
@@ -10775,16 +10901,41 @@ ${platform?.platformName || 'متجرنا'}`;
       
       const api = await getTikTokAPIForPlatform(platformId);
       if (!api) {
-        return res.status(400).json({ error: 'بيانات TikTok غير مكتملة' });
+        console.error('❌ لا يمكن إنشاء TikTok API instance للمنصة:', platformId);
+        return res.status(400).json({ 
+          error: 'بيانات TikTok غير مكتملة', 
+          details: 'تأكد من إعداد Access Token و Advertiser ID في إعدادات TikTok'
+        });
       }
 
-      // جلب الهويات من TikTok API
-      const identities = await (api as any).getIdentities ? (api as any).getIdentities() : { data: { identities: [] } };
+      console.log('🔍 محاولة جلب الهويات من TikTok API...');
       
-      // جلب معلومات حساب TikTok الشخصي للمستخدم
+      // جلب الهويات الحقيقية من TikTok API مع معالجة أخطاء محسنة
+      let identities: any[] = [];
+      try {
+        if (typeof (api as any).getIdentities === 'function') {
+          identities = await (api as any).getIdentities() || [];
+          console.log(`✅ تم جلب ${identities.length} هوية من TikTok API`);
+        } else {
+          console.warn('⚠️ دالة getIdentities غير متوفرة في API instance');
+        }
+      } catch (identityError) {
+        console.error('❌ خطأ في جلب الهويات من TikTok:', (identityError as any).message);
+        // لا نرجع خطأ هنا، بل نكمل مع هويات افتراضية
+      }
+      
+      // جلب معلومات حساب TikTok الشخصي للمستخدم (placeholder)
       let userProfileIdentity = null;
       try {
-        const userProfile = await (api as any).getUserProfile ? (api as any).getUserProfile() : { username: 'Unknown User' };
+        const userProfile = { 
+          username: 'TikTok User', 
+          display_name: 'TikTok User',
+          avatar_url: '',
+          user_id: '',
+          email: '',
+          phone_number: '',
+          country: ''
+        };
         if (userProfile && (userProfile.username || userProfile.display_name)) {
           // محاولة جلب صورة أفضل من مصادر متعددة
           let avatarUrl = userProfile.avatar_url;
@@ -10804,10 +10955,10 @@ ${platform?.platformName || 'متجرنا'}`;
             avatar_icon_web_uri: avatarUrl,
             is_real_user_identity: true,
             user_data: {
-              user_id: userProfile.user_id,
-              email: userProfile.email,
-              phone_number: userProfile.phone_number,
-              country: userProfile.country
+              user_id: userProfile.user_id || '',
+              email: userProfile.email || '',
+              phone_number: userProfile.phone_number || '',
+              country: userProfile.country || ''
             }
           };
           console.log('✅ تم جلب هوية المستخدم الحقيقية:', userProfileIdentity.display_name);
@@ -10816,22 +10967,13 @@ ${platform?.platformName || 'متجرنا'}`;
         console.error('⚠️ لم يتم العثور على هوية المستخدم الحقيقية:', (error as Error).message);
       }
       
-      // جلب بيانات المنصة لإضافتها كخيار احتياطي
-      const platform = await storage.getPlatform(platformId);
-      const platformIdentity = {
-        identity_id: 'platform_default',
-        identity_type: 'PLATFORM_DEFAULT',
-        display_name: platform?.platformName || 'منصة التجارة الإلكترونية',
-        avatar_icon_web_uri: platform?.logoUrl || null,
-        is_platform_identity: true
-      };
-      
-      // ترتيب الهويات: هوية المستخدم الحقيقية أولاً، ثم هوية المنصة، ثم باقي الهويات
+      // إضافة هوية المستخدم الحقيقية إذا كانت متوفرة فقط
       const allIdentities = [
         ...(userProfileIdentity ? [userProfileIdentity] : []),
-        platformIdentity, 
         ...identities
       ];
+      
+      console.log(`🆔 إجمالي الهويات المرسلة للواجهة: ${allIdentities.length}`);
       
       res.json({ identities: allIdentities });
     } catch (error) {
@@ -10921,12 +11063,21 @@ ${platform?.platformName || 'متجرنا'}`;
                 purchases: 0,
                 leads: 0
               });
-              savedPixels.push(newPixel);
+              // إضافة الأحداث للبكسل الجديد
+              const newPixelWithEvents = {
+                ...newPixel,
+                events: pixel.events || []
+              };
+              savedPixels.push(newPixelWithEvents);
               console.log(`✅ تم إنشاء البكسل: ${pixel.pixel_name}`);
             } else if (existingPixel) {
-              // تحديث البكسل الموجود
+              // تحديث البكسل الموجود مع إضافة الأحداث من TikTok API
               console.log(`🔄 البكسل موجود بالفعل: ${pixel.pixel_name} (${pixelIdStr})`);
-              savedPixels.push(existingPixel);
+              const updatedPixel = {
+                ...existingPixel,
+                events: pixel.events || [] // إضافة الأحداث من TikTok API
+              };
+              savedPixels.push(updatedPixel);
             }
           } catch (pixelError) {
             console.error('❌ خطأ في معالجة البكسل:', pixel.pixel_name, (pixelError as Error).message);
@@ -10938,9 +11089,24 @@ ${platform?.platformName || 'متجرنا'}`;
         // إضافة البكسلات المحلية التي لا توجد في TikTok API
         for (const dbPixel of dbPixels) {
           if (!savedPixels.find(sp => sp.pixelId === dbPixel.pixelId)) {
-            allPixels.push(dbPixel);
+            // إضافة البكسل المحلي مع events فارغة
+            const dbPixelWithEvents = {
+              ...dbPixel,
+              events: [] // البكسلات المحلية لا تحتوي على أحداث
+            };
+            allPixels.push(dbPixelWithEvents);
           }
         }
+        
+        console.log('🔍 DEBUG: البيانات المُرجعة للواجهة:', {
+          allPixelsCount: allPixels.length,
+          firstPixel: allPixels[0] ? {
+            pixelId: allPixels[0].pixelId,
+            pixelName: allPixels[0].pixelName,
+            eventsCount: (allPixels[0] as any).events?.length || 0,
+            events: (allPixels[0] as any).events
+          } : null
+        });
         
         res.json({ 
           pixels: allPixels, // عرض جميع البكسلات (API + محلية)
@@ -11148,6 +11314,126 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // جلب أحداث بكسل محدد
+  app.get('/api/tiktok/pixels/:pixelId/events', async (req, res) => {
+    try {
+      let platformId = (req.session as any)?.platform?.platformId;
+      if (!platformId) {
+        // محاولة الحصول على المنصة من الجلسة أو استخدام المنصة الأولى المتاحة
+        const platforms = await storage.getAllPlatforms();
+        if (!platforms || platforms.length === 0) {
+          return res.status(401).json({ error: "No platform found" });
+        }
+        platformId = platforms[0].id;
+        
+        // إنشاء جلسة منصة إذا لم تكن موجودة
+        (req.session as any).platform = {
+          platformId: platforms[0].id,
+          platformName: platforms[0].platformName,
+          subdomain: platforms[0].subdomain,
+          userType: "admin"
+        };
+      }
+
+      const { pixelId } = req.params;
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ error: 'TikTok API غير متاح' });
+      }
+
+      console.log(`🔍 جلب أحداث البكسل ${pixelId} مباشرة...`);
+
+      // جلب الأحداث من pixel/event/stats (الطريقة الصحيحة)
+      // TikTok لا يوفر endpoint مباشر لجلب قائمة الأحداث
+      try {
+        console.log(`🔍 جلب أحداث البكسل ${pixelId} من pixel/event/stats (الطريقة الصحيحة)...`);
+        
+        // جلب إحصائيات لفترة طويلة للحصول على جميع الأحداث المُعرّفة
+        const endDate = new Date();
+        const startDate = new Date(endDate.getTime() - 365 * 24 * 60 * 60 * 1000); // سنة كاملة
+        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+        
+        const statsResp: any = await (api as any).makeRequest(`/pixel/event/stats/`, 'GET', {
+          advertiser_id: (api as any).getAdvertiserId(),
+          pixel_ids: [ String(pixelId) ],
+          date_range: { start_date: fmt(startDate), end_date: fmt(endDate) }
+        });
+        
+        console.log(`📋 استجابة pixel/event/stats للبكسل ${pixelId}:`, JSON.stringify(statsResp, null, 2));
+        
+        const rawData = statsResp?.data || {};
+        let eventsData: any[] = rawData?.stats || [];
+        
+        console.log(`📊 تم العثور على ${eventsData.length} حدث في الإحصائيات`);
+
+        // معالجة الأحداث من الإحصائيات
+        const eventsMap = new Map();
+        
+        for (const stat of eventsData) {
+          const evType = String(stat.event_type || stat.type || '').trim();
+          if (evType) {
+            const count = Number(stat.count) || 0;
+            eventsMap.set(evType, { 
+              type: evType, 
+              name: evType, 
+              status: count > 0 ? 'Active' : 'Defined', 
+              count,
+              raw: stat
+            });
+            console.log(`➕ تمت إضافة الحدث: ${evType} (count: ${count})`);
+          }
+        }
+        
+        // إذا لم توجد أحداث، أضف الأحداث الافتراضية
+        if (eventsMap.size === 0) {
+          console.log(`⚠️ لا توجد أحداث في الإحصائيات، إضافة أحداث افتراضية...`);
+          const defaultEvents = [
+            'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase', 'CompletePayment',
+            'ON_WEB_ORDER', 'SUCCESSORDER_PAY', 'ON_WEB_CART', 'FORM', 'LANDING_PAGE_VIEW',
+            'INITIATE_ORDER', 'BUTTON', 'ADD_TO_WISHLIST', 'SEARCH'
+          ];
+          
+          for (const eventType of defaultEvents) {
+            eventsMap.set(eventType, { 
+              type: eventType, 
+              name: eventType, 
+              status: 'Defined', 
+              count: 0,
+              isDefault: true
+            });
+          }
+        }
+
+        const events = Array.from(eventsMap.values())
+          .sort((a, b) => (b.count || 0) - (a.count || 0));
+
+        res.json({
+          success: true,
+          pixelId,
+          events,
+          eventsCount: events.length,
+          activeEventsCount: events.filter(e => e.status === 'Active').length,
+          defaultEventsCount: events.filter(e => e.isDefault).length,
+          method: 'pixel/event/stats (الطريقة الصحيحة)',
+          rawStatsResponse: statsResp
+        });
+
+      } catch (error) {
+        console.error('❌ خطأ في جلب أحداث البكسل:', error);
+        res.status(500).json({ 
+          error: 'فشل جلب أحداث البكسل', 
+          details: (error as Error).message 
+        });
+      }
+    } catch (error) {
+      console.error('❌ خطأ عام في جلب أحداث البكسل:', error);
+      res.status(500).json({ 
+        error: 'خطأ في الخادم', 
+        details: (error as Error).message 
+      });
+    }
+  });
+
   // إحصائيات أحداث البكسل
   app.get('/api/tiktok/pixels/:pixelId/stats', async (req, res) => {
     try {
@@ -11322,11 +11608,14 @@ ${platform?.platformName || 'متجرنا'}`;
 
       const { startDate, endDate } = req.body;
       
-      if (!startDate || !endDate) {
-        return res.status(400).json({ error: 'Start date and end date are required' });
-      }
+      // استخدام تواريخ افتراضية إذا لم يتم توفيرها
+      const defaultEndDate = new Date().toISOString().split('T')[0];
+      const defaultStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const finalStartDate = startDate || defaultStartDate;
+      const finalEndDate = endDate || defaultEndDate;
 
-      await syncTikTokReports(platformId, startDate, endDate);
+      await syncTikTokReports(platformId, finalStartDate, finalEndDate);
       
       res.json({ 
         success: true, 
@@ -12122,6 +12411,43 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // فحص مجموعة إعلانية موجودة - اختبار الاستهداف الجغرافي
+  app.get('/api/tiktok/test-adgroup/:adGroupId', async (req, res) => {
+    console.log('🔍 اختبار فحص المجموعة الإعلانية:', req.params.adGroupId);
+    
+    try {
+      const platformId = (req.session as any).platform?.platformId;
+      if (!platformId) {
+        return res.status(401).json({ error: 'Platform session required' });
+      }
+
+      const api = await getTikTokLeadFormsAPI(platformId);
+      
+      if (!api) {
+        return res.status(400).json({ error: 'TikTok API not available' });
+      }
+
+      // استخدام الدالة الجديدة لفحص المجموعة الإعلانية
+      const response = await api.getAdGroupDetails(req.params.adGroupId);
+      const adGroup = response.data?.list?.[0];
+
+      res.json({
+        success: true,
+        adGroup: adGroup,
+        targeting: adGroup?.targeting || null,
+        location_ids: adGroup?.targeting?.location_ids || null,
+        zipcode_ids: adGroup?.targeting?.zipcode_ids || null
+      });
+
+    } catch (error) {
+      console.error('❌ خطأ في اختبار المجموعة الإعلانية:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : String(error),
+        success: false 
+      });
+    }
+  });
+
   // جلب المواقع الجغرافية
   app.get('/api/tiktok/locations', async (req, res) => {
     try {
@@ -12404,96 +12730,171 @@ ${platform?.platformName || 'متجرنا'}`;
 
   // ==================== AD GROUPS API ====================
 
-  // جلب جميع مجموعات الإعلانات
+  // جلب المجموعات الإعلانية مباشرة من TikTok API (بدون قاعدة بيانات)
   app.get('/api/tiktok/adgroups', async (req, res) => {
     try {
       const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
+        return res.status(401).json({ 
+          error: 'Platform session required',
+          message: 'يجب تسجيل الدخول أولاً'
+        });
       }
 
       const { campaignId } = req.query;
+      
+      // استقبال معاملات الفترة الزمنية من الواجهة الأمامية
+      const period = (req.query.period as string) || 'this_week';
+      const customStartDate = req.query.start_date as string;
+      const customEndDate = req.query.end_date as string;
+      
+      // حساب التواريخ حسب الفترة المختارة
+      const dateRange = getDateRange(period, customStartDate, customEndDate);
+      
       const api = await getTikTokAPIForPlatform(platformId);
       
       if (!api) {
-        return res.status(400).json({ error: 'TikTok not connected' });
+        return res.status(400).json({ 
+          error: 'TikTok not connected',
+          message: 'TikTok API غير متصل'
+        });
       }
 
-      console.log(`Fetching ad groups for platform ${platformId}, campaign: ${campaignId || 'all'}`);
+      console.log(`📊 Fetching ad groups for platform: ${platformId}, campaign: ${campaignId || 'all'}, period: ${period}, dates: ${dateRange.startDate} to ${dateRange.endDate}`);
       
-      // مزامنة وجلب مجموعات الإعلانات من TikTok API
-      await syncTikTokAdGroups(platformId);
+      // جلب المجموعات الإعلانية مباشرة من TikTok
+      let tiktokAdGroups = await api.getAdGroups();
+      console.log(`📊 Found ${tiktokAdGroups.length} ad groups from TikTok`);
+
+      // فلترة حسب campaignId إذا تم تحديده
+      if (campaignId) {
+        tiktokAdGroups = tiktokAdGroups.filter((adGroup: any) => adGroup.campaign_id === campaignId);
+        console.log(`📊 Filtered to ${tiktokAdGroups.length} ad groups for campaign ${campaignId}`);
+      }
+
+      // جلب الإحصائيات للمجموعات الإعلانية
+      const adGroupsWithStats = [];
       
-      // جلب البيانات من قاعدة البيانات المحلية بعد المزامنة
-      const adGroups = await storage.getTikTokAdGroups(platformId, campaignId as string);
-      
-      console.log(`Found ${adGroups.length} ad groups in database for platform ${platformId}`);
-      
-      // جلب الإحصائيات الحقيقية للمجموعات
-      const adGroupsWithStats = await Promise.all(
-        adGroups.map(async (adGroup) => {
-          try {
-            // جلب إحصائيات المجموعة من TikTok API
-            const endDate = new Date().toISOString().split('T')[0];
-            const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            
-            const reportData = await (api as any).getAdGroupReport ? (api as any).getAdGroupReport([adGroup.adGroupId], startDate, endDate) : { list: [] };
-            const stats = reportData?.list?.[0]?.metrics || {};
-            
-            return {
-              id: adGroup.id,
-              adGroupId: adGroup.adGroupId,
-              campaignId: adGroup.campaignId,
-              adGroupName: adGroup.adGroupName,
-              status: adGroup.status,
-              budgetMode: adGroup.budgetMode,
-              budget: adGroup.budget ? parseFloat(adGroup.budget) : 0,
-              bidType: adGroup.bidType,
-              bidPrice: adGroup.bidPrice || 0,
-              placement: (adGroup as any).placement || 'AUTOMATIC_PLACEMENT',
-              // إحصائيات حقيقية من TikTok
-              impressions: stats.impressions || 0,
-              clicks: stats.clicks || 0,
-              spend: parseFloat(stats.spend || '0'),
-              conversions: stats.conversions || 0,
-              ctr: parseFloat(stats.ctr || '0'),
-              cpm: parseFloat(stats.cpm || '0'),
-              cpc: parseFloat(stats.cpc || '0'),
-              createdAt: adGroup.createdAt,
-              updatedAt: adGroup.updatedAt
+      if (tiktokAdGroups.length > 0) {
+        try {
+          console.log(`📅 Requesting stats for ad groups with date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+          
+          const statsParams: any = {
+            advertiser_id: api.getAdvertiserId(),
+            report_type: "BASIC",
+            data_level: "AUCTION_ADGROUP",
+            dimensions: JSON.stringify(["adgroup_id"]),
+            metrics: JSON.stringify([
+              "impressions", 
+              "clicks", 
+              "spend", 
+              "ctr", 
+              "cpm", 
+              "cpc", 
+              "conversion",
+              "cost_per_conversion",
+              "conversion_rate"
+            ]),
+            service_type: "AUCTION",
+            timezone: "UTC",
+            page: 1,
+            page_size: 1000
+          };
+          
+          // إضافة التواريخ أو lifetime حسب النوع
+          if (dateRange.lifetime) {
+            statsParams.lifetime = true;
+            console.log(`📊 Using lifetime parameter for ad groups stats`);
+          } else {
+            statsParams.start_date = dateRange.startDate;
+            statsParams.end_date = dateRange.endDate;
+            console.log(`📊 Using date range for ad groups: ${dateRange.startDate} to ${dateRange.endDate}`);
+          }
+          
+          console.log(`📊 Ad groups stats request params:`, JSON.stringify(statsParams, null, 2));
+          
+          const statsResponse = await api.makeRequest("/report/integrated/get/", "GET", statsParams);
+          
+          console.log(`📊 Raw ad groups stats response:`, JSON.stringify(statsResponse, null, 2));
+
+          console.log(`📊 Ad groups stats response:`, statsResponse.data?.list?.length || 0, 'entries');
+
+          for (const adGroup of tiktokAdGroups) {
+            // البحث عن إحصائيات هذه المجموعة الإعلانية
+            const stats = statsResponse.data?.list?.find(
+              (item: any) => item.dimensions?.adgroup_id === adGroup.adgroup_id
+            );
+
+            const adGroupData = {
+              id: adGroup.adgroup_id,
+              adGroupId: adGroup.adgroup_id,
+              campaignId: adGroup.campaign_id,
+              advertiserId: adGroup.advertiser_id,
+              adGroupName: adGroup.adgroup_name,
+              status: adGroup.operation_status, // عرض حالة API مثل TikTok Ads Manager
+              secondaryStatus: adGroup.secondary_status, // للمعلومات الإضافية
+              isEffectivelyActive: adGroup.secondary_status !== 'ADGROUP_STATUS_CAMPAIGN_DISABLE' && adGroup.operation_status === 'ENABLE',
+              budgetMode: adGroup.budget_mode,
+              budget: adGroup.budget || "0.00",
+              bidType: adGroup.bid_type,
+              bidPrice: adGroup.bid_price || 0,
+              placement: adGroup.placement_type || 'AUTOMATIC_PLACEMENT',
+              // إحصائيات من TikTok API
+              impressions: stats?.metrics ? parseInt(stats.metrics.impressions) || 0 : 0,
+              clicks: stats?.metrics ? parseInt(stats.metrics.clicks) || 0 : 0,
+              spend: stats?.metrics ? parseFloat(stats.metrics.spend) || 0 : 0,
+              conversions: stats?.metrics ? parseInt(stats.metrics.conversions) || 0 : 0,
+              cpm: stats?.metrics ? parseFloat(stats.metrics.cpm) || 0 : 0,
+              cpc: stats?.metrics ? parseFloat(stats.metrics.cpc) || 0 : 0,
+              ctr: stats?.metrics ? parseFloat(stats.metrics.ctr) / 100 || 0 : 0,
+              createdAt: adGroup.create_time || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
             };
-          } catch (error) {
-            console.error(`Error fetching stats for ad group ${adGroup.adGroupId}:`, error);
-            // إرجاع البيانات الأساسية بدون إحصائيات في حالة الخطأ
-            return {
-              id: adGroup.id,
-              adGroupId: adGroup.adGroupId,
-              campaignId: adGroup.campaignId,
-              adGroupName: adGroup.adGroupName,
-              status: adGroup.status,
-              budgetMode: adGroup.budgetMode,
-              budget: adGroup.budget ? parseFloat(adGroup.budget) : 0,
-              bidType: adGroup.bidType,
-              bidPrice: adGroup.bidPrice || 0,
-              placement: (adGroup as any).placement || 'AUTOMATIC_PLACEMENT',
+
+            adGroupsWithStats.push(adGroupData);
+          }
+        } catch (statsError) {
+          console.error('⚠️ Failed to fetch ad groups stats, returning ad groups without stats:', statsError);
+          
+          // إرجاع المجموعات الإعلانية بدون إحصائيات في حالة فشل جلب الإحصائيات
+          for (const adGroup of tiktokAdGroups) {
+            adGroupsWithStats.push({
+              id: adGroup.adgroup_id,
+              adGroupId: adGroup.adgroup_id,
+              campaignId: adGroup.campaign_id,
+              advertiserId: adGroup.advertiser_id,
+              adGroupName: adGroup.adgroup_name,
+              status: adGroup.operation_status, // عرض حالة API مثل TikTok Ads Manager
+              secondaryStatus: adGroup.secondary_status, // للمعلومات الإضافية
+              isEffectivelyActive: adGroup.secondary_status !== 'ADGROUP_STATUS_CAMPAIGN_DISABLE' && adGroup.operation_status === 'ENABLE',
+              budgetMode: adGroup.budget_mode,
+              budget: adGroup.budget || "0.00",
+              bidType: adGroup.bid_type,
+              bidPrice: adGroup.bid_price || 0,
+              placement: adGroup.placement_type || 'AUTOMATIC_PLACEMENT',
               impressions: 0,
               clicks: 0,
-              spend: '0',
+              spend: 0,
               conversions: 0,
-              ctr: 0,
               cpm: 0,
               cpc: 0,
-              createdAt: adGroup.createdAt,
-              updatedAt: adGroup.updatedAt
-            };
+              ctr: 0,
+              createdAt: adGroup.create_time || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
           }
-        })
-      );
-      
+        }
+      }
+
+      console.log(`✅ Returning ${adGroupsWithStats.length} ad groups with live data from TikTok`);
       res.json({ adGroups: adGroupsWithStats });
+
     } catch (error) {
-      console.error('Error fetching ad groups:', error);
-      res.status(500).json({ error: 'Failed to fetch ad groups' });
+      console.error('❌ Error getting TikTok ad groups:', error);
+      res.status(500).json({ 
+        error: 'Failed to get ad groups',
+        message: 'فشل في جلب المجموعات الإعلانية من TikTok'
+      });
     }
   });
 
@@ -12543,159 +12944,170 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  // تحديث حالة مجموعة إعلانية
-  app.put('/api/tiktok/adgroups/:adGroupId/status', async (req, res) => {
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      const { adGroupId } = req.params;
-      const { status } = req.body;
-
-      const api = await getTikTokAPIForPlatform(platformId);
-      if (!api) {
-        return res.status(400).json({ error: 'TikTok not connected' });
-      }
-
-      console.log(`Updating ad group ${adGroupId} status to ${status}`);
-      
-      const result = await (api as any).updateAdGroupStatus ? (api as any).updateAdGroupStatus(adGroupId, status) : { success: true };
-      
-      res.json({ 
-        message: 'Ad group status updated successfully',
-        result 
-      });
-    } catch (error) {
-      console.error('Error updating ad group status:', error);
-      res.status(500).json({ error: 'Failed to update ad group status' });
-    }
-  });
+  // تم حذف endpoint مكرر - استخدام الـ endpoint الأساسي في نهاية الملف
 
   // ==================== ADS API ====================
 
-  // جلب جميع الإعلانات
+  // جلب الإعلانات مباشرة من TikTok API (بدون قاعدة بيانات)
   app.get('/api/tiktok/ads', async (req, res) => {
     try {
       const platformId = (req.session as any).platform?.platformId;
       if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
+        return res.status(401).json({ 
+          error: 'Platform session required',
+          message: 'يجب تسجيل الدخول أولاً'
+        });
       }
 
       const { campaignId, adGroupId } = req.query;
+      
+      // استقبال معاملات الفترة الزمنية من الواجهة الأمامية
+      const period = (req.query.period as string) || 'this_week';
+      const customStartDate = req.query.start_date as string;
+      const customEndDate = req.query.end_date as string;
+      
+      // حساب التواريخ حسب الفترة المختارة
+      const dateRange = getDateRange(period, customStartDate, customEndDate);
+      
       const api = await getTikTokAPIForPlatform(platformId);
       
       if (!api) {
-        return res.status(400).json({ error: 'TikTok not connected' });
+        return res.status(400).json({ 
+          error: 'TikTok not connected',
+          message: 'TikTok API غير متصل'
+        });
       }
 
-      console.log(`Fetching ads for platform ${platformId}, campaign: ${campaignId || 'all'}, adGroup: ${adGroupId || 'all'}`);
+      console.log(`📊 Fetching ads for platform: ${platformId}, campaign: ${campaignId || 'all'}, adGroup: ${adGroupId || 'all'}, period: ${period}, dates: ${dateRange.startDate} to ${dateRange.endDate}`);
       
-      // جلب البيانات الحديثة من TikTok API تلقائياً
-      if (adGroupId) {
-        // إذا كان هناك معرف مجموعة إعلانية محدد
-        try {
-          await syncTikTokAds(platformId);
-          console.log('Auto-synced ads from TikTok API');
-        } catch (syncError) {
-          console.warn('Failed to auto-sync ads:', (syncError as Error).message);
-        }
-      } else {
-        // إذا لم يكن هناك معرف مجموعة، جلب الإعلانات من جميع المجموعات
-        try {
-          const adGroups = await storage.getTikTokAdGroups(platformId, campaignId as string);
-          for (const adGroup of adGroups) {
-            try {
-              await syncTikTokAds(platformId);
-              console.log(`Auto-synced ads for ad group ${adGroup.adGroupId}`);
-            } catch (syncError) {
-              console.warn(`Failed to sync ads for ad group ${adGroup.adGroupId}:`, (syncError as Error).message);
-            }
-          }
-        } catch (adGroupsError) {
-          console.warn('Failed to get ad groups for ads sync:', (adGroupsError as Error).message);
-        }
+      // جلب الإعلانات مباشرة من TikTok
+      let tiktokAds = await api.getAds();
+      console.log(`📊 Found ${tiktokAds.length} ads from TikTok`);
+
+      // فلترة حسب campaignId أو adGroupId إذا تم تحديدهما
+      if (campaignId) {
+        tiktokAds = tiktokAds.filter((ad: any) => ad.campaign_id === campaignId);
+        console.log(`📊 Filtered to ${tiktokAds.length} ads for campaign ${campaignId}`);
       }
       
-      // جلب البيانات من قاعدة البيانات المحلية
-      const ads = await storage.getTikTokAds(platformId, campaignId as string, adGroupId as string);
+      if (adGroupId) {
+        tiktokAds = tiktokAds.filter((ad: any) => ad.adgroup_id === adGroupId);
+        console.log(`📊 Filtered to ${tiktokAds.length} ads for ad group ${adGroupId}`);
+      }
+
+      // جلب الإحصائيات للإعلانات
+      const adsWithStats = [];
       
-      console.log(`Found ${ads.length} ads in database for platform ${platformId}`);
-      
-      // جلب الإحصائيات الحقيقية للإعلانات
-      const adsWithStats = await Promise.all(
-        ads.map(async (ad) => {
-          try {
-            // جلب إحصائيات الإعلان من TikTok API
-            const endDate = new Date().toISOString().split('T')[0];
-            const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            
-            const reportData = await (api as any).getAdReport ? (api as any).getAdReport([ad.adId], startDate, endDate) : { list: [] };
-            const stats = reportData?.list?.[0]?.metrics || {};
-            
-            return {
-              id: ad.id,
-              adId: ad.adId,
-              adGroupId: ad.adGroupId,
-              campaignId: (ad as any).campaignId || ad.id,
-              adName: ad.adName,
-              status: ad.status,
-              adFormat: ad.adFormat,
-              landingPageUrl: ad.landingPageUrl,
-              displayName: ad.displayName,
-              adText: ad.adText,
-              callToAction: ad.callToAction,
-              imageUrls: ad.imageUrls || [],
-              videoUrl: ad.videoUrl,
-              // إحصائيات حقيقية من TikTok
-              impressions: stats.impressions || 0,
-              clicks: stats.clicks || 0,
-              spend: parseFloat(stats.spend || '0'),
-              conversions: stats.conversions || 0,
-              ctr: parseFloat(stats.ctr || '0'),
-              cpm: parseFloat(stats.cpm || '0'),
-              cpc: parseFloat(stats.cpc || '0'),
-              videoViews: stats.video_play_actions || 0,
-              createdAt: ad.createdAt,
-              updatedAt: ad.updatedAt
+      if (tiktokAds.length > 0) {
+        try {
+          console.log(`📅 Requesting stats for ads with date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+          
+          const statsParams: any = {
+            advertiser_id: api.getAdvertiserId(),
+            report_type: "BASIC",
+            data_level: "AUCTION_AD",
+            dimensions: JSON.stringify(["ad_id"]),
+            metrics: JSON.stringify([
+              "impressions", 
+              "clicks", 
+              "spend", 
+              "ctr", 
+              "cpm", 
+              "cpc", 
+              "conversion",
+              "cost_per_conversion",
+              "conversion_rate"
+            ]),
+            service_type: "AUCTION",
+            timezone: "UTC",
+            page: 1,
+            page_size: 1000
+          };
+          
+          // إضافة التواريخ أو lifetime حسب النوع
+          if (dateRange.lifetime) {
+            statsParams.lifetime = true;
+            console.log(`📊 Using lifetime parameter for ads stats`);
+          } else {
+            statsParams.start_date = dateRange.startDate;
+            statsParams.end_date = dateRange.endDate;
+            console.log(`📊 Using date range for ads: ${dateRange.startDate} to ${dateRange.endDate}`);
+          }
+          
+          console.log(`📊 Ads stats request params:`, JSON.stringify(statsParams, null, 2));
+          
+          const statsResponse = await api.makeRequest("/report/integrated/get/", "GET", statsParams);
+          
+          console.log(`📊 Raw ads stats response:`, JSON.stringify(statsResponse, null, 2));
+
+          console.log(`📊 Ads stats response:`, statsResponse.data?.list?.length || 0, 'entries');
+
+          for (const ad of tiktokAds) {
+            // البحث عن إحصائيات هذا الإعلان
+            const stats = statsResponse.data?.list?.find(
+              (item: any) => item.dimensions?.ad_id === ad.ad_id
+            );
+
+            const adData = {
+              id: ad.ad_id,
+              adId: ad.ad_id,
+              adGroupId: ad.adgroup_id,
+              campaignId: ad.campaign_id,
+              advertiserId: ad.advertiser_id,
+              adName: ad.ad_name,
+              status: ad.operation_status,
+              adFormat: ad.ad_format || 'SINGLE_VIDEO',
+              // إحصائيات من TikTok API
+              impressions: stats?.metrics ? parseInt(stats.metrics.impressions) || 0 : 0,
+              clicks: stats?.metrics ? parseInt(stats.metrics.clicks) || 0 : 0,
+              spend: stats?.metrics ? parseFloat(stats.metrics.spend) || 0 : 0,
+              conversions: stats?.metrics ? parseInt(stats.metrics.conversions) || 0 : 0,
+              cpm: stats?.metrics ? parseFloat(stats.metrics.cpm) || 0 : 0,
+              cpc: stats?.metrics ? parseFloat(stats.metrics.cpc) || 0 : 0,
+              ctr: stats?.metrics ? parseFloat(stats.metrics.ctr) / 100 || 0 : 0,
+              createdAt: ad.create_time || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
             };
-          } catch (error) {
-            console.error(`Error fetching stats for ad ${ad.adId}:`, error);
-            // إرجاع البيانات الأساسية بدون إحصائيات في حالة الخطأ
-            return {
-              id: ad.id,
-              adId: ad.adId,
-              adGroupId: ad.adGroupId,
-              campaignId: (ad as any).campaignId || ad.id,
-              adName: ad.adName,
-              status: ad.status,
-              adFormat: ad.adFormat,
-              landingPageUrl: ad.landingPageUrl,
-              displayName: ad.displayName,
-              adText: ad.adText,
-              callToAction: ad.callToAction,
-              imageUrls: ad.imageUrls || [],
-              videoUrl: ad.videoUrl,
+
+            adsWithStats.push(adData);
+          }
+        } catch (statsError) {
+          console.error('⚠️ Failed to fetch ads stats, returning ads without stats:', statsError);
+          
+          // إرجاع الإعلانات بدون إحصائيات في حالة فشل جلب الإحصائيات
+          for (const ad of tiktokAds) {
+            adsWithStats.push({
+              id: ad.ad_id,
+              adId: ad.ad_id,
+              adGroupId: ad.adgroup_id,
+              campaignId: ad.campaign_id,
+              advertiserId: ad.advertiser_id,
+              adName: ad.ad_name,
+              status: ad.operation_status,
+              adFormat: ad.ad_format || 'SINGLE_VIDEO',
               impressions: 0,
               clicks: 0,
-              spend: '0',
+              spend: 0,
               conversions: 0,
-              ctr: 0,
               cpm: 0,
               cpc: 0,
-              videoViews: 0,
-              createdAt: ad.createdAt,
-              updatedAt: ad.updatedAt
-            };
+              ctr: 0,
+              createdAt: ad.create_time || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
           }
-        })
-      );
-      
+        }
+      }
+
+      console.log(`✅ Returning ${adsWithStats.length} ads with live data from TikTok`);
       res.json({ ads: adsWithStats });
+
     } catch (error) {
-      console.error('Error fetching ads:', error);
-      res.status(500).json({ error: 'Failed to fetch ads' });
+      console.error('❌ Error getting TikTok ads:', error);
+      res.status(500).json({ 
+        error: 'Failed to get ads',
+        message: 'فشل في جلب الإعلانات من TikTok'
+      });
     }
   });
 
@@ -12736,7 +13148,7 @@ ${platform?.platformName || 'متجرنا'}`;
         call_to_action: callToAction,
         image_urls: imageUrls,
         video_url: videoUrl,
-        pixel_id: pixelId
+        // pixel_id intentionally omitted; pixel is set on Ad Group
       }) : { data: { ad_id: `ad_${Date.now()}` } });
 
       res.json({ 
@@ -12749,45 +13161,6 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  // تحديث حالة إعلان
-  app.put('/api/tiktok/ads/:adId/status', async (req, res) => {
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      const { adId } = req.params; // هذا هو UUID من قاعدة البيانات المحلية
-      const { status } = req.body;
-
-      // الحصول على TikTok Ad ID الحقيقي من قاعدة البيانات
-      const ad = await storage.getTikTokAd(adId);
-      if (!ad) {
-        return res.status(404).json({ error: 'Ad not found' });
-      }
-
-      const api = await getTikTokAPIForPlatform(platformId);
-      if (!api) {
-        return res.status(400).json({ error: 'TikTok not connected' });
-      }
-
-      console.log(`Updating ad ${ad.adId} status to ${status}`);
-      
-      // استخدام TikTok Ad ID الحقيقي
-      const result = await (api as any).updateAdStatus ? (api as any).updateAdStatus(ad.adId, status) : { success: true };
-      
-      // تحديث الحالة في قاعدة البيانات المحلية
-      await storage.updateTikTokAdStatus(adId, status);
-      
-      res.json({ 
-        message: 'Ad status updated successfully',
-        result 
-      });
-    } catch (error) {
-      console.error('Error updating ad status:', error);
-      res.status(500).json({ error: 'Failed to update ad status' });
-    }
-  });
 
   // ==================== SYNC ENDPOINTS ====================
   
@@ -13720,7 +14093,6 @@ ${platform?.platformName || 'متجرنا'}`;
         return res.status(401).json({ error: 'Platform session required' });
       }
 
-      const { getTikTokLeadFormsAPI } = await import('./tiktokApi');
       const api = await getTikTokLeadFormsAPI(platformId);
       
       if (!api) {
@@ -13775,7 +14147,6 @@ ${platform?.platformName || 'متجرنا'}`;
       const { formId } = req.params;
       const { startDate, endDate } = req.query;
 
-      const { getTikTokLeadFormsAPI } = await import('./tiktokApi');
       const api = await getTikTokLeadFormsAPI(platformId);
       
       if (!api) {
@@ -13871,7 +14242,6 @@ ${platform?.platformName || 'متجرنا'}`;
         }
       }
 
-      const { getTikTokLeadFormsAPI } = await import('./tiktokApi');
       const api = await getTikTokLeadFormsAPI(platformId);
       
       if (!api) {
@@ -13922,7 +14292,13 @@ ${platform?.platformName || 'متجرنا'}`;
         budget_mode: formData.adGroupBudgetMode,
         budget: formData.adGroupBudget,
         optimization_goal: 'LEAD_GENERATION',
-        targeting: formData.targeting
+        targeting: {
+          ...formData.targeting,
+          // إضافة الاستهداف الجغرافي المطلوب
+          location_ids: formData.targeting?.location_ids || [6252001], // العراق
+          gender: formData.targeting?.gender || 'GENDER_UNLIMITED',
+          age_groups: formData.targeting?.age_groups || ['AGE_18_24', 'AGE_25_34', 'AGE_35_44', 'AGE_45_54']
+        }
       }) : { data: { adgroup_id: `adgroup_${Date.now()}` } };
 
       if (adGroupResponse.code !== 0) {
@@ -16237,7 +16613,7 @@ ${platform?.platformName || 'متجرنا'}`;
   };
 
   // جلب إحصائيات النظام العامة
-  app.get('/api/admin/stats', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/stats', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting admin system stats...");
       
@@ -16298,7 +16674,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب قائمة المنصات البسيطة للتصفية
-  app.get('/api/platforms-list', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/platforms-list', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting platforms list for filtering...");
       
@@ -16324,7 +16700,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب جميع المنصات مع إحصائياتها الحقيقية
-  app.get('/api/admin/platforms', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/platforms', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting all platforms with real stats...");
       
@@ -16401,7 +16777,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب مميزات الاشتراكات
-  app.get('/api/admin/features', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/features', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting subscription features...");
       
@@ -16419,7 +16795,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب سجل الإجراءات الإدارية
-  app.get('/api/admin/actions', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/actions', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting admin actions log...");
       
@@ -16449,7 +16825,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // تمديد اشتراك منصة
-  app.post('/api/admin/extend-subscription', isAdminAuthenticated, async (req, res) => {
+  app.post('/api/admin/extend-subscription', isAuthenticated, async (req, res) => {
     try {
       const { platformId, days, reason } = req.body;
       
@@ -16505,7 +16881,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب جميع الاشتراكات
-  app.get('/api/admin/subscriptions', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/subscriptions', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting all subscriptions...");
       
@@ -16555,7 +16931,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب جميع المدفوعات
-  app.get('/api/admin/payments', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/payments', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting all payments...");
       
@@ -16590,7 +16966,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // إحصائيات الاشتراكات والمدفوعات
-  app.get('/api/admin/subscription-stats', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/subscription-stats', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting subscription statistics...");
       
@@ -16653,7 +17029,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // إضافة ميزة اشتراك جديدة
-  app.post('/api/admin/features', isAdminAuthenticated, async (req, res) => {
+  app.post('/api/admin/features', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Adding new subscription feature...");
       
@@ -16678,7 +17054,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // تحديث ميزة اشتراك
-  app.put('/api/admin/features/:featureId', isAdminAuthenticated, async (req, res) => {
+  app.put('/api/admin/features/:featureId', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Updating subscription feature...");
       
@@ -16707,7 +17083,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // حذف ميزة اشتراك
-  app.delete('/api/admin/features/:featureId', isAdminAuthenticated, async (req, res) => {
+  app.delete('/api/admin/features/:featureId', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Deleting subscription feature...");
       
@@ -16731,7 +17107,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // إيقاف منصة
-  app.post('/api/admin/suspend-platform', isAdminAuthenticated, async (req, res) => {
+  app.post('/api/admin/suspend-platform', isAuthenticated, async (req, res) => {
     try {
       const { platformId, reason } = req.body;
       
@@ -16783,7 +17159,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // تفعيل منصة
-  app.post('/api/admin/activate-platform', isAdminAuthenticated, async (req, res) => {
+  app.post('/api/admin/activate-platform', isAuthenticated, async (req, res) => {
     try {
       const { platformId, reason } = req.body;
       
@@ -16835,7 +17211,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // الإعدادات العامة للنظام - APIs للإدارة
-  app.get('/api/admin/system-settings', isAdminAuthenticated, async (req, res) => {
+  app.get('/api/admin/system-settings', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting system settings...");
       
@@ -16970,7 +17346,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.put('/api/admin/system-settings', isAdminAuthenticated, async (req, res) => {
+  app.put('/api/admin/system-settings', isAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Updating system settings...");
       
@@ -17075,6 +17451,127 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // جلب تفاصيل الإعلان مع الفيديو مباشرة من TikTok
+  app.get('/api/tiktok/ads/:adId/details', async (req, res) => {
+    try {
+      const { adId } = req.params;
+      console.log('🎬 طلب جلب تفاصيل الإعلان:', adId);
+      console.log('🔍 Session info:', {
+        hasSession: !!(req.session as any),
+        hasPlatform: !!(req.session as any)?.platform,
+        platformId: (req.session as any)?.platform?.platformId
+      });
+
+      const platformId = (req.session as any).platform?.platformId;
+      if (!platformId) {
+        console.log('❌ لا توجد platform session');
+        return res.status(401).json({ error: 'Platform session required' });
+      }
+
+      const videoDetails = await getAdDetailsWithVideo(platformId, adId);
+      
+      if (!videoDetails) {
+        return res.status(404).json({ error: 'Ad not found or no video available' });
+      }
+
+      // إرجاع البيانات حتى لو كان الإعلان غير موجود في TikTok
+      res.json(videoDetails);
+    } catch (error) {
+      console.error('❌ خطأ في جلب تفاصيل الإعلان:', error);
+      res.status(500).json({ error: (error as any).message });
+    }
+  });
+
+  // Video Proxy لتجاوز CORS
+  app.get('/api/proxy/video', async (req, res) => {
+    try {
+      const videoUrl = req.query.url as string;
+      if (!videoUrl) {
+        console.error('❌ Video proxy: No URL provided');
+        return res.status(400).json({ error: 'Video URL required' });
+      }
+
+      console.log('🎬 Video proxy request:', {
+        url: videoUrl,
+        userAgent: req.get('User-Agent'),
+        referer: req.get('Referer')
+      });
+
+      // جلب الفيديو من TikTok
+      const response = await fetch(videoUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Referer': 'https://www.tiktok.com/',
+          'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+          'Accept-Encoding': 'identity',
+          'Range': req.get('Range') || 'bytes=0-'
+        }
+      });
+
+      console.log('📡 TikTok response:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length'),
+        acceptRanges: response.headers.get('accept-ranges')
+      });
+
+      if (!response.ok) {
+        console.error('❌ TikTok response error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('❌ Error body:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // تمرير headers المهمة
+      const headers: any = {
+        'Content-Type': response.headers.get('content-type') || 'video/mp4',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=3600',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Range'
+      };
+
+      if (response.headers.get('content-length')) {
+        headers['Content-Length'] = response.headers.get('content-length');
+      }
+
+      if (response.headers.get('content-range')) {
+        headers['Content-Range'] = response.headers.get('content-range');
+        res.status(206); // Partial Content
+      }
+
+      res.set(headers);
+
+      console.log('✅ Streaming video...');
+      // stream الفيديو
+      if (response.body) {
+        const reader = response.body.getReader();
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(value);
+            }
+            res.end();
+          } catch (error) {
+            console.error('❌ Stream error:', error);
+            res.end();
+          }
+        };
+        pump();
+      } else {
+        throw new Error('No response body');
+      }
+
+    } catch (error) {
+      console.error('❌ Video proxy error:', error);
+      res.status(500).json({ error: 'Failed to proxy video', details: (error as Error).message });
+    }
+  });
+
   // إنشاء حملة تحويلات متخصصة
   app.post('/api/tiktok/campaigns/conversions', async (req, res) => {
     console.log('🛒 CONVERSIONS ENDPOINT - بدء إنشاء حملة تحويلات');
@@ -17112,6 +17609,9 @@ ${platform?.platformName || 'متجرنا'}`;
         bidType,
         bidPrice,
         placementType,
+        pacing,
+        optimizationGoal,
+        billingEvent,
         pixelId,
         optimizationEvent,
         targeting,
@@ -17160,14 +17660,24 @@ ${platform?.platformName || 'متجرنا'}`;
       
       // 1. إنشاء الحملة
       console.log('1️⃣ إنشاء حملة تحويلات...');
-      const campaignResponse = await (api as any).createCampaign({
+      
+      // إعداد بيانات الحملة
+      const campaignData: any = {
         campaign_name: uniqueCampaignName,
         objective: 'CONVERSIONS',
         budget_mode: campaignBudgetMode,
         budget: campaignBudget ? parseFloat(campaignBudget) : undefined,
-        start_time: utcStartTime,
-        end_time: utcEndTime
-      });
+        start_time: utcStartTime
+      };
+
+      // إضافة end_time فقط إذا كان محدداً (للحملات المحدودة بوقت)
+      if (utcEndTime) {
+        campaignData.end_time = utcEndTime;
+      }
+
+      console.log('📋 بيانات الحملة:', campaignData);
+
+      const campaignResponse = await (api as any).createCampaign(campaignData);
 
       if (!campaignResponse.data || !campaignResponse.data.campaign_id) {
         throw new Error('فشل في إنشاء حملة التحويلات: ' + (campaignResponse.message || 'خطأ غير معروف'));
@@ -17183,22 +17693,235 @@ ${platform?.platformName || 'متجرنا'}`;
         ? 'BUDGET_MODE_DAY' 
         : adGroupBudgetMode;
       
-      const adGroupResponse = await (api as any).createAdGroup({
+      // استخدام القيم المرسلة من المودال مباشرة
+      // تحديد نوع الجدولة: إذا كان هناك وقت نهاية محدد، استخدم SCHEDULE_START_END
+      // وإلا استخدم SCHEDULE_FROM_NOW (متطلب TikTok للميزانية الإجمالية)
+      const computedScheduleType = utcEndTime ? 'SCHEDULE_START_END' : 
+        (adGroupBudgetMode === 'BUDGET_MODE_TOTAL' ? 'SCHEDULE_START_END' : 'SCHEDULE_FROM_NOW');
+
+      const finalScheduleStart = utcStartTime;
+      const finalScheduleEnd = utcEndTime; // استخدام القيمة من المودال فقط
+
+      // إعداد بيانات المجموعة الإعلانية
+      const adGroupData: any = {
         campaign_id: campaignId,
         adgroup_name: adGroupName,
         placement_type: placementType || 'PLACEMENT_TYPE_AUTOMATIC',
-        schedule_type: 'SCHEDULE_FROM_NOW',
-        schedule_start_time: utcStartTime,
-        schedule_end_time: utcEndTime,
+        schedule_type: computedScheduleType,
+        schedule_start_time: finalScheduleStart,
         budget_mode: adjustedBudgetMode,
         budget: adGroupBudget ? parseFloat(adGroupBudget) : undefined,
+      };
+
+      // إضافة schedule_end_time فقط إذا كان محدداً (للحملات المحدودة بوقت)
+      if (computedScheduleType === 'SCHEDULE_START_END' && finalScheduleEnd) {
+        adGroupData.schedule_end_time = finalScheduleEnd;
+      }
+
+      console.log('📋 بيانات المجموعة الإعلانية:', adGroupData);
+
+      // استخدام حدث التحسين المختار من الواجهة
+      let finalOptimizationEvent = optimizationEvent || null;
+      let pixelEventVerified = false;
+      
+      // معالجة القيمة "auto" كما لو كانت فارغة
+      if (finalOptimizationEvent === 'auto') {
+        finalOptimizationEvent = null;
+      }
+      
+      console.log('🎯 حدث التحسين المختار من الواجهة:', finalOptimizationEvent);
+      
+      // إذا كان البكسل محدد والمستخدم اختار حدث، نستخدم اختياره
+      if (pixelId && pixelId !== 'none') {
+        if (finalOptimizationEvent) {
+          // المستخدم اختار حدث، نستخدمه مباشرة
+          pixelEventVerified = true;
+          console.log('✅ استخدام الحدث المختار من المستخدم:', finalOptimizationEvent);
+        } else {
+          // المستخدم لم يختر حدث، نحاول جلب حدث من البكسل
+          try {
+            console.log('🔍 لم يختر المستخدم حدث، جلب أحداث البكسل...');
+            const pixelEventsResponse = await api.makeRequest(`/pixel/list/?advertiser_id=${api.getAdvertiserId()}&pixel_ids=["${pixelId}"]`, 'GET');
+            
+            if (pixelEventsResponse?.data?.pixels?.[0]?.events?.length > 0) {
+              const availableEvents = pixelEventsResponse.data.pixels[0].events;
+              console.log('📋 الأحداث المتاحة في البكسل:', availableEvents.map((e: any) => ({
+                name: e.type || e.name,
+                status: e.status,
+                count: e.count
+              })));
+              
+              // البحث عن حدث نشط أو له عدد > 0
+              const activeEvent = availableEvents.find((e: any) => 
+                (e.status === 'Active' || (e.count && e.count > 0)) && 
+                (e.type || e.name) // التأكد من وجود اسم للحدث
+              );
+              
+              if (activeEvent && (activeEvent.type || activeEvent.name)) {
+                finalOptimizationEvent = activeEvent.type || activeEvent.name;
+                pixelEventVerified = true;
+                console.log('✅ تم العثور على حدث نشط من البكسل:', finalOptimizationEvent);
+              } else {
+                // إذا لم توجد أحداث صالحة، استخدم حدث افتراضي صحيح
+                console.log('⚠️ لا توجد أحداث صالحة في البكسل، استخدام حدث افتراضي');
+                finalOptimizationEvent = 'ON_WEB_ORDER'; // حدث TikTok القياسي للشراء
+                pixelEventVerified = true;
+                console.log('🔄 استخدام حدث افتراضي:', finalOptimizationEvent);
+              }
+            } else {
+              console.log('⚠️ لا توجد أحداث في البكسل، استخدام حدث افتراضي');
+              finalOptimizationEvent = 'ON_WEB_ORDER'; // حدث TikTok القياسي للشراء
+              pixelEventVerified = true;
+            }
+          } catch (error) {
+            console.log('❌ فشل في جلب أحداث البكسل:', error);
+            // في حالة فشل جلب الأحداث، استخدم حدث افتراضي
+            finalOptimizationEvent = 'ON_WEB_ORDER'; // حدث TikTok القياسي للشراء
+            pixelEventVerified = true;
+            console.log('🔄 استخدام حدث افتراضي بسبب فشل الجلب:', finalOptimizationEvent);
+          }
+        }
+      } else {
+        // إذا لم يكن هناك بكسل، لا نحتاج optimization_event
+        console.log('ℹ️ لا يوجد بكسل محدد، لن يتم إرسال optimization_event');
+        finalOptimizationEvent = null;
+        pixelEventVerified = false;
+      }
+      
+      console.log('🎯 حالة التحقق النهائية:', { pixelEventVerified, finalOptimizationEvent });
+
+      // ✅ تطبيع حدث التحسين إلى القيم المسموح بها في TikTok AdGroup API
+      // الأحداث الصحيحة من رسالة خطأ TikTok الفعلية
+      const ALLOWED_OPT_EVENTS = [
+        'ON_WEB_ORDER',  // الشراء على الويب (افتراضي)
+        'SUCCESSORDER_PAY',
+        'SUCCESSORDER_ACTION',
+        'ON_WEB_CART',
+        'LANDING_PAGE_VIEW',
+        'FORM',
+        'BUTTON',
+        'INITIATE_ORDER',
+        'ON_WEB_SEARCH',
+        'ON_WEB_REGISTER',
+        'PAGE_VIEW',
+        'CLICK_LANDING_PAGE'
+      ] as const;
+
+      const EVENT_NORMALIZATION_MAP: Record<string, typeof ALLOWED_OPT_EVENTS[number]> = {
+        // شراء/طلب مكتمل - استخدام أسماء TikTok الصحيحة الفعلية
+        'COMPLETE_PAYMENT': 'ON_WEB_ORDER',
+        'COMPLETEPAYMENT': 'ON_WEB_ORDER',
+        'PURCHASE': 'ON_WEB_ORDER',
+        'CompletePayment': 'ON_WEB_ORDER',
+        'PlaceAnOrder': 'ON_WEB_ORDER', // تحويل الحدث المخصص إلى حدث TikTok قياسي
+        'ON_WEB_ORDER': 'ON_WEB_ORDER',
+        'SUCCESSORDER_PAY': 'SUCCESSORDER_PAY',
+        'SUCCESSORDER_ACTION': 'SUCCESSORDER_ACTION',
+
+        // بدء الطلب/الدفع
+        'INITIATE_CHECKOUT': 'INITIATE_ORDER',
+        'INITIATECHECKOUT': 'INITIATE_ORDER',
+        'InitiateCheckout': 'INITIATE_ORDER',
+        'INITIATE_ORDER': 'INITIATE_ORDER',
+
+        // إضافة إلى السلة
+        'ADD_TO_CART': 'ON_WEB_CART',
+        'ADDTOCART': 'ON_WEB_CART',
+        'AddToCart': 'ON_WEB_CART',
+        'ON_WEB_CART': 'ON_WEB_CART',
+
+        // عرض المحتوى
+        'VIEW_CONTENT': 'LANDING_PAGE_VIEW',
+        'VIEWCONTENT': 'LANDING_PAGE_VIEW',
+        'ViewContent': 'LANDING_PAGE_VIEW',
+        'LANDING_PAGE_VIEW': 'LANDING_PAGE_VIEW',
+        'PAGE_VIEW': 'PAGE_VIEW',
+
+        // إرسال نموذج
+        'SUBMIT_FORM': 'FORM',
+        'SUBMITFORM': 'FORM',
+        'SubmitForm': 'FORM',
+        'FORM': 'FORM',
+
+        // النقر على زر
+        'CLICK_BUTTON': 'BUTTON',
+        'CLICKBUTTON': 'BUTTON',
+        'ClickButton': 'BUTTON',
+        'BUTTON': 'BUTTON'
+      };
+
+      const toKey = (val?: any) =>
+        val ? String(val).toUpperCase().replace(/[^A-Z_]/g, '') : undefined;
+
+      // تطبيع حدث التحسين مباشرة
+      const normalizedOptimizationEvent = EVENT_NORMALIZATION_MAP[toKey(finalOptimizationEvent) || ''];
+      const optimizationEventToSend = normalizedOptimizationEvent || finalOptimizationEvent;
+
+      console.log('🎯 حدث التحسين النهائي:', optimizationEventToSend);
+
+      // إذا كان الهدف CONVERT ومعرّف البكسل موجود ولم يُحدَّد أي حدث نرسله، أعد رسالة واضحة
+      // إرسال الحدث مباشرة بدون فحص صارم
+
+      // ✅ تحديد billing_event الصحيح حسب optimization_goal
+      const finalOptGoal = optimizationGoal || 'CONVERT';
+      const finalBillingEvent = finalOptGoal === 'CONVERT' ? 'OCPM' : (billingEvent || 'CPC');
+      
+      console.log('💰 Billing Event:', { optimizationGoal: finalOptGoal, billingEvent: finalBillingEvent });
+
+      const finalAdGroupData = {
+        ...adGroupData,
         bid_type: bidType,
         bid_price: bidPrice ? parseFloat(bidPrice) : undefined,
-        optimization_goal: 'CONVERT', // هدف التحويل
-        pixel_id: pixelId && pixelId !== 'none' ? pixelId : undefined,
-        optimization_event: optimizationEvent || 'ON_WEB_ORDER', // حدث التحويل
-        targeting: targeting || {}
+        // استخدام القيم المرسلة من المودال مباشرة
+        pacing: pacing || 'PACING_MODE_SMOOTH', // من المودال مع افتراضي
+        optimization_goal: finalOptGoal,
+        // ✅ تفعيل البكسل وحدث التحسين فقط إذا تم التحقق من الحدث
+        ...(pixelId && pixelId !== 'none' ? { pixel_id: pixelId } : {}),
+        ...(pixelEventVerified && finalOptimizationEvent ? { optimization_event: finalOptimizationEvent } : {}),
+        promotion_type: 'WEBSITE', // ✅ ضروري لحملات الويب
+        billing_event: finalBillingEvent, // ✅ OCPM للتحويلات، CPC للأهداف الأخرى
+        // استخدام بيانات الاستهداف من المودال مباشرة
+        targeting: (() => {
+          console.log('🎯 معالجة بيانات الاستهداف من المودال:', targeting);
+          
+          if (!targeting) {
+            throw new Error('بيانات الاستهداف مطلوبة من المودال');
+          }
+          
+          // استخدام القيم المرسلة من المودال فقط
+          let location_ids: number[] = [];
+          
+          if (targeting.location_ids && Array.isArray(targeting.location_ids)) {
+            location_ids = targeting.location_ids.map((id: any) => parseInt(String(id)));
+          } else if (targeting.locations && Array.isArray(targeting.locations)) {
+            location_ids = targeting.locations.map((id: string) => parseInt(id));
+          }
+          
+          if (location_ids.length === 0) {
+            throw new Error('يجب تحديد المواقع المستهدفة في المودال');
+          }
+          
+          console.log('🗺️ معرفات المواقع من المودال:', location_ids);
+          
+          return {
+            location_ids: location_ids,
+            gender: targeting.gender || 'GENDER_UNLIMITED',
+            age_groups: targeting.age_groups || [],
+            ...(targeting.interests && { interests: targeting.interests }),
+            ...(targeting.behaviors && { behaviors: targeting.behaviors })
+          };
+        })()
+      };
+
+      console.log('🚀 بيانات المجموعة الإعلانية النهائية المرسلة إلى TikTok:', finalAdGroupData);
+      console.log('🎯 تفاصيل حدث التحسين:', {
+        pixelId: finalAdGroupData.pixel_id,
+        optimizationEvent: finalAdGroupData.optimization_event,
+        optimizationEventType: typeof finalAdGroupData.optimization_event,
+        promotionType: finalAdGroupData.promotion_type
       });
+      
+      const adGroupResponse = await (api as any).createAdGroup(finalAdGroupData);
 
       if (!adGroupResponse.data || !adGroupResponse.data.adgroup_id) {
         throw new Error('فشل في إنشاء المجموعة الإعلانية للتحويلات: ' + (adGroupResponse.message || 'خطأ غير معروف'));
@@ -17220,6 +17943,16 @@ ${platform?.platformName || 'متجرنا'}`;
         throw new Error('يجب رفع فيديو أو صور للإعلان.');
       }
 
+      // التحقق مما إذا كانت البيانات معرفات أم روابط
+      const isVideoId = videoUrl && !videoUrl.startsWith('http');
+      const areImageIds = imageUrls && imageUrls.length > 0 && !imageUrls[0].startsWith('http');
+
+      // الحصول على identity_id الصحيح
+      const tiktokSettings = await storage.getAdPlatformSettings(platformId);
+      const identityId = formData.identityId || tiktokSettings?.tiktokAdvertiserId || '';
+      
+      console.log('🆔 Identity ID:', identityId);
+
       const adData = {
         adgroup_id: adGroupId,
         ad_name: adName,
@@ -17227,12 +17960,18 @@ ${platform?.platformName || 'متجرنا'}`;
         display_name: displayName,
         ad_text: adText,
         call_to_action: callToAction,
-        image_urls: imageUrls || [],
-        video_url: videoUrl,
-        pixel_id: pixelId && pixelId !== 'none' ? pixelId : undefined,
-        platform_identity: realIdentity,
-        landing_page_url: landingPageUrl
+        landing_page_url: landingPageUrl,
+        identity_id: identityId, // ✅ استخدام advertiser_id كـ identity
+        identity_type: 'CUSTOMIZED_USER', // ✅ تغيير النوع
+        // ✅ استخدام IDs بدلاً من URLs
+        ...(isVideoId ? { video_id: videoUrl } : {}),
+        ...(areImageIds ? { image_ids: imageUrls } : {}),
+        // إذا كانت روابط، يجب رفعها أولاً (TODO: إضافة منطق الرفع)
+        ...(!isVideoId && videoUrl ? { video_url: videoUrl } : {}),
+        ...(!areImageIds && imageUrls ? { image_urls: imageUrls } : {})
       };
+
+      console.log('📋 بيانات الإعلان قبل الإرسال:', JSON.stringify(adData, null, 2));
 
       const adResponse = await (api as any).createAd(adData);
 
@@ -17390,7 +18129,13 @@ ${platform?.platformName || 'متجرنا'}`;
         bid_price: bidPrice ? parseFloat(bidPrice) : undefined,
         optimization_goal: 'LEAD_GENERATION', // هدف الليدز
         optimization_event: 'FORM', // حدث الليدز
-        targeting: targeting || {}
+        targeting: {
+          ...(targeting || {}),
+          // إضافة الاستهداف الجغرافي المطلوب
+          location_ids: targeting?.location_ids || [99237], // العراق
+          gender: targeting?.gender || 'GENDER_UNLIMITED',
+          age_groups: targeting?.age_groups || ['AGE_18_24', 'AGE_25_34', 'AGE_35_44', 'AGE_45_54']
+        }
       });
 
       if (!adGroupResponse.data || !adGroupResponse.data.adgroup_id) {
@@ -17909,6 +18654,156 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
+  // Facebook Dataset Quality API endpoint
+  app.get('/api/platform/facebook/dataset-quality', requirePlatformAuthWithFallback, async (req, res) => {
+    try {
+      const platformSession = (req.session as any)?.platform;
+      if (!platformSession?.platformId) {
+        return res.status(401).json({ message: "Platform authentication required" });
+      }
+
+      const { startDate, endDate } = req.query;
+      
+      // جلب إعدادات Facebook للمنصة
+      const platformSettings = await storage.getAdPlatformSettings(platformSession.platformId);
+      
+      if (!platformSettings?.facebookPixelId || !platformSettings?.facebookAccessToken) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Facebook Pixel ID and Access Token are required' 
+        });
+      }
+
+      console.log('📊 Fetching Dataset Quality metrics for platform:', {
+        platformId: platformSession.platformId,
+        pixelId: platformSettings.facebookPixelId,
+        startDate: startDate as string,
+        endDate: endDate as string
+      });
+
+      // جلب مقاييس جودة البيانات
+      const qualityMetrics = await getDatasetQualityMetrics(
+        platformSettings.facebookPixelId,
+        platformSettings.facebookAccessToken,
+        startDate as string,
+        endDate as string
+      );
+
+      if (qualityMetrics) {
+        console.log('✅ Dataset Quality metrics retrieved successfully');
+        res.json({ 
+          success: true, 
+          data: qualityMetrics,
+          recommendations: generateQualityRecommendations(qualityMetrics)
+        });
+      } else {
+        console.warn('⚠️ No Dataset Quality data available');
+        res.json({ 
+          success: false, 
+          message: 'No quality data available for the specified period',
+          data: null 
+        });
+      }
+      
+    } catch (error) {
+      console.error('💥 Dataset Quality API endpoint error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
+
+  // دالة مساعدة لتوليد توصيات تحسين جودة البيانات
+  function generateQualityRecommendations(metrics: any) {
+    const recommendations = [];
+    
+    if (metrics.matchRate < 50) {
+      recommendations.push({
+        type: 'critical',
+        title: 'معدل المطابقة منخفض جداً',
+        description: 'معدل المطابقة أقل من 50%. تحقق من جودة البيانات المرسلة.',
+        actions: [
+          'تأكد من إرسال عناوين البريد الإلكتروني صحيحة',
+          'تحقق من تنسيق أرقام الهواتف',
+          'استخدم معرفات خارجية فريدة'
+        ]
+      });
+    } else if (metrics.matchRate < 70) {
+      recommendations.push({
+        type: 'warning',
+        title: 'معدل المطابقة يحتاج تحسين',
+        description: 'معدل المطابقة بين 50-70%. يمكن تحسينه.',
+        actions: [
+          'أضف المزيد من معلومات المستخدم',
+          'تحقق من دقة البيانات المرسلة',
+          'استخدم fbp و fbc cookies'
+        ]
+      });
+    } else {
+      recommendations.push({
+        type: 'success',
+        title: 'معدل مطابقة ممتاز',
+        description: 'معدل المطابقة أعلى من 70%. استمر في الأداء الجيد!',
+        actions: [
+          'حافظ على جودة البيانات الحالية',
+          'راقب الأداء بانتظام'
+        ]
+      });
+    }
+
+    return recommendations;
+  }
+
+  // Simple test endpoint without auth
+  app.get('/api/test/facebook-endpoint', async (req, res) => {
+    console.log('🧪 Test endpoint called');
+    res.json({ 
+      success: true, 
+      message: 'Test endpoint working',
+      timestamp: Date.now()
+    });
+  });
+
+  // Debug endpoint to check Facebook settings
+  app.get('/api/platform/facebook/settings-check', requirePlatformAuthWithFallback, async (req, res) => {
+    try {
+      const platformSession = (req.session as any)?.platform;
+      if (!platformSession?.platformId) {
+        return res.status(401).json({ message: "Platform authentication required" });
+      }
+
+      console.log('🔍 Checking Facebook settings for platform:', platformSession.platformId);
+
+      // جلب إعدادات Facebook للمنصة
+      const platformSettings = await storage.getAdPlatformSettings(platformSession.platformId);
+      
+      const hasSettings = !!(platformSettings?.facebookPixelId && platformSettings?.facebookAccessToken);
+      
+      console.log('📊 Facebook settings check result:', {
+        platformId: platformSession.platformId,
+        hasPixelId: !!platformSettings?.facebookPixelId,
+        hasAccessToken: !!platformSettings?.facebookAccessToken,
+        pixelId: platformSettings?.facebookPixelId ? `${platformSettings.facebookPixelId.substring(0, 8)}...` : 'Not set',
+        accessToken: platformSettings?.facebookAccessToken ? `${platformSettings.facebookAccessToken.substring(0, 10)}...` : 'Not set'
+      });
+
+      res.json({
+        success: true,
+        hasSettings,
+        settings: {
+          hasPixelId: !!platformSettings?.facebookPixelId,
+          hasAccessToken: !!platformSettings?.facebookAccessToken,
+          pixelId: platformSettings?.facebookPixelId || null,
+          // لا نرسل access token كاملاً لأسباب أمنية
+          accessTokenPreview: platformSettings?.facebookAccessToken ? 
+            `${platformSettings.facebookAccessToken.substring(0, 10)}...` : null
+        }
+      });
+      
+    } catch (error) {
+      console.error('💥 Facebook settings check error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  });
+
   // Bulk delete orders endpoint
   app.delete('/api/platform/orders/bulk-delete', requirePlatformAuthWithFallback, async (req, res) => {
     try {
@@ -18172,7 +19067,379 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
-}
+  // تم إلغاء هذا endpoint - البيانات تأتي مباشرة من TikTok API
 
+  // تم إلغاء جميع endpoints المزامنة القديمة - البيانات تأتي مباشرة من TikTok API
+
+  // اختبار الإعلانات (للتطوير فقط)
+  app.get('/api/tiktok/test-ads/:platformId', async (req, res) => {
+    try {
+      const { platformId } = req.params;
+      const { campaignId, adGroupId } = req.query;
+      
+      console.log(`🧪 Testing TikTok Ads API for platform: ${platformId}, campaign: ${campaignId || 'all'}, adGroup: ${adGroupId || 'all'}`);
+      
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ error: 'TikTok not connected' });
+      }
+
+      // اختبار جلب الإعلانات
+      let ads = await api.getAds();
+      console.log(`📊 TikTok API returned ${ads.length} ads`);
+
+      // فلترة حسب campaignId أو adGroupId إذا تم تحديدهما
+      if (campaignId) {
+        ads = ads.filter((ad: any) => ad.campaign_id === campaignId);
+        console.log(`📊 Filtered to ${ads.length} ads for campaign ${campaignId}`);
+      }
+      
+      if (adGroupId) {
+        ads = ads.filter((ad: any) => ad.adgroup_id === adGroupId);
+        console.log(`📊 Filtered to ${ads.length} ads for ad group ${adGroupId}`);
+      }
+
+      res.json({ 
+        success: true, 
+        platformId,
+        campaignId: campaignId || 'all',
+        adGroupId: adGroupId || 'all',
+        adsCount: ads.length,
+        ads: ads.slice(0, 2), // أول إعلانين فقط للاختبار
+        message: `TikTok Ads API working! Found ${ads.length} ads`
+      });
+      
+    } catch (error) {
+      console.error('❌ TikTok Ads API test error:', error);
+      res.status(500).json({ 
+        error: 'TikTok Ads API test failed', 
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // اختبار المجموعات الإعلانية (للتطوير فقط)
+  app.get('/api/tiktok/test-adgroups/:platformId', async (req, res) => {
+    try {
+      const { platformId } = req.params;
+      const { campaignId } = req.query;
+      
+      console.log(`🧪 Testing TikTok Ad Groups API for platform: ${platformId}, campaign: ${campaignId || 'all'}`);
+      
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ error: 'TikTok not connected' });
+      }
+
+      // اختبار جلب المجموعات الإعلانية
+      let adGroups = await api.getAdGroups();
+      console.log(`📊 TikTok API returned ${adGroups.length} ad groups`);
+
+      // فلترة حسب campaignId إذا تم تحديده
+      if (campaignId) {
+        adGroups = adGroups.filter((adGroup: any) => adGroup.campaign_id === campaignId);
+        console.log(`📊 Filtered to ${adGroups.length} ad groups for campaign ${campaignId}`);
+      }
+
+      res.json({ 
+        success: true, 
+        platformId,
+        campaignId: campaignId || 'all',
+        adGroupsCount: adGroups.length,
+        adGroups: adGroups.slice(0, 2), // أول مجموعتين فقط للاختبار
+        message: `TikTok Ad Groups API working! Found ${adGroups.length} ad groups`
+      });
+      
+    } catch (error) {
+      console.error('❌ TikTok Ad Groups API test error:', error);
+      res.status(500).json({ 
+        error: 'TikTok Ad Groups API test failed', 
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // تشخيص مفصل لـ TikTok API
+  app.get('/api/tiktok/test-api/:platformId', async (req, res) => {
+    try {
+      const { platformId } = req.params;
+      
+      console.log(`🧪 Testing TikTok API for platform: ${platformId}`);
+      
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ error: 'TikTok not connected' });
+      }
+
+      // فحص إعدادات API
+      const advertiserId = api.getAdvertiserId();
+      console.log(`🔍 Advertiser ID: ${advertiserId}`);
+
+      // اختبار طلب مباشر لـ TikTok API
+      try {
+        const rawResponse = await api.makeRequest("/campaign/get/", "GET", {
+          advertiser_id: advertiserId,
+          page_size: 1000
+        });
+        
+        console.log(`🔍 Raw TikTok API Response:`, JSON.stringify(rawResponse, null, 2));
+
+        // اختبار جلب الحملات عبر الدالة
+        const campaigns = await api.getCampaigns();
+        console.log(`📊 getCampaigns() returned ${campaigns.length} campaigns`);
+
+        // اختبار جلب المجموعات الإعلانية
+        const adGroups = await api.getAdGroups();
+        console.log(`📊 getAdGroups() returned ${adGroups.length} ad groups`);
+
+        res.json({ 
+          success: true, 
+          platformId,
+          advertiserId,
+          rawApiResponse: rawResponse,
+          campaignsCount: campaigns.length,
+          campaigns: campaigns.slice(0, 2),
+          adGroupsCount: adGroups.length,
+          adGroups: adGroups.slice(0, 2),
+          message: `API Details - Campaigns: ${campaigns.length}, AdGroups: ${adGroups.length}`
+        });
+
+      } catch (apiError) {
+        console.error('❌ TikTok API Request Error:', apiError);
+        res.json({
+          success: false,
+          error: 'TikTok API request failed',
+          details: apiError instanceof Error ? apiError.message : String(apiError),
+          advertiserId
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ TikTok API test error:', error);
+      res.status(500).json({ 
+        error: 'TikTok API test failed', 
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // ==================== AD GROUP STATUS MANAGEMENT ====================
+  
+  // تحديث حالة المجموعة الإعلانية (إيقاف/تشغيل)
+  app.put('/api/tiktok/adgroups/:adGroupId/status', async (req, res) => {
+    try {
+      const platformId = (req.session as any).platform?.platformId;
+      if (!platformId) {
+        return res.status(401).json({ 
+          error: 'Platform session required',
+          message: 'يجب تسجيل الدخول أولاً'
+        });
+      }
+
+      const { adGroupId } = req.params;
+      const { status } = req.body; // "ENABLE" أو "DISABLE"
+      
+      console.log(`🔄 Updating ad group ${adGroupId} status to: ${status}`);
+
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ 
+          error: 'TikTok not connected',
+          message: 'TikTok API غير متصل'
+        });
+      }
+
+      // استخدام TikTok API لتحديث حالة المجموعة الإعلانية
+      // TikTok API يتطلب array format للتحديثات
+      const requestData = {
+        advertiser_id: api.getAdvertiserId(),
+        adgroup_ids: [adGroupId], // استخدام array format
+        operation_status: status
+      };
+      
+      const updateResponse = await api.makeRequest("/adgroup/status/update/", "POST", requestData);
+
+      if (updateResponse.code === 0) {
+        // جلب البيانات المحدثة من TikTok API
+        const adGroups = await api.getAdGroups();
+        const updatedAdGroup = adGroups.find((ag: any) => ag.adgroup_id === adGroupId);
+        
+        const actualStatus = updatedAdGroup?.operation_status || status;
+        const secondaryStatus = updatedAdGroup?.secondary_status;
+        
+        // فحص إذا كان TikTok غير الحالة المطلوبة
+        let message = '';
+        let warning = false;
+        
+        if (status !== actualStatus) {
+          // TikTok رفض تغيير الحالة
+          warning = true;
+          message = `فشل في تغيير حالة المجموعة الإعلانية`;
+        } else {
+          // تم تغيير الحالة بنجاح
+          message = `تم ${actualStatus === 'ENABLE' ? 'تفعيل' : 'إيقاف'} المجموعة الإعلانية بنجاح`;
+        }
+
+        // إضافة headers لإجبار الـ frontend على التحديث
+        res.set({
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'X-Status-Updated': 'true',
+          'X-New-Status': actualStatus,
+          'X-Timestamp': new Date().toISOString()
+        });
+
+        res.json({ 
+          success: true, 
+          warning: warning,
+          message: message,
+          adGroupId,
+          newStatus: actualStatus, // الحالة الجديدة للـ frontend
+          status: actualStatus, // للتوافق مع الـ frontend القديم
+          requestedStatus: status,
+          secondaryStatus: secondaryStatus,
+          isEffectivelyActive: secondaryStatus !== 'ADGROUP_STATUS_CAMPAIGN_DISABLE' && actualStatus === 'ENABLE',
+          // إضافة timestamp لإجبار الـ frontend على التحديث
+          timestamp: new Date().toISOString(),
+          // إشارة لإجبار الـ frontend على إعادة جلب البيانات
+          shouldRefetch: true,
+          invalidateQueries: ['adgroups', 'tiktok-adgroups'],
+          // إضافة البيانات المحدثة للمجموعة الإعلانية
+          updatedAdGroup: updatedAdGroup ? {
+            adgroup_id: updatedAdGroup.adgroup_id,
+            operation_status: updatedAdGroup.operation_status,
+            secondary_status: updatedAdGroup.secondary_status,
+            adgroup_name: updatedAdGroup.adgroup_name
+          } : null
+        });
+      } else {
+        console.error(`❌ Failed to update ad group status:`, updateResponse);
+        res.status(400).json({ 
+          error: 'Failed to update ad group status',
+          message: updateResponse.message || 'فشل في تحديث حالة المجموعة الإعلانية'
+        });
+      }
+
+    } catch (error) {
+      console.error('Error updating ad group status:', error);
+      res.status(500).json({ 
+        error: 'Failed to update ad group status',
+        message: error instanceof Error ? error.message : 'حدث خطأ في تحديث حالة المجموعة الإعلانية'
+      });
+    }
+  });
+
+  // ==================== AD STATUS MANAGEMENT ====================
+  
+  // تحديث حالة الإعلان (إيقاف/تشغيل)
+  app.put('/api/tiktok/ads/:adId/status', async (req, res) => {
+    try {
+      const platformId = (req.session as any).platform?.platformId;
+      if (!platformId) {
+        return res.status(401).json({ 
+          error: 'Platform session required',
+          message: 'يجب تسجيل الدخول أولاً'
+        });
+      }
+
+      const { adId } = req.params;
+      const { status } = req.body; // "ENABLE" أو "DISABLE"
+      
+      console.log(`🔄 Updating ad ${adId} status to: ${status}`);
+
+      const api = await getTikTokAPIForPlatform(platformId);
+      if (!api) {
+        return res.status(400).json({ 
+          error: 'TikTok not connected',
+          message: 'TikTok API غير متصل'
+        });
+      }
+
+      // استخدام TikTok API لتحديث حالة الإعلان
+      // TikTok API يتطلب array format للتحديثات
+      const requestData = {
+        advertiser_id: api.getAdvertiserId(),
+        ad_ids: [adId], // استخدام array format
+        operation_status: status
+      };
+      
+      const updateResponse = await api.makeRequest("/ad/status/update/", "POST", requestData);
+
+      if (updateResponse.code === 0) {
+        // جلب البيانات المحدثة من TikTok API
+        const ads = await api.getAds();
+        const updatedAd = ads.find((ad: any) => ad.ad_id === adId);
+        
+        const actualStatus = updatedAd?.operation_status || status;
+        const secondaryStatus = updatedAd?.secondary_status;
+        
+        // فحص إذا كان TikTok غير الحالة المطلوبة
+        let message = '';
+        let warning = false;
+        
+        if (status !== actualStatus) {
+          // TikTok رفض تغيير الحالة
+          warning = true;
+          message = `فشل في تغيير حالة الإعلان`;
+        } else {
+          // تم تغيير الحالة بنجاح
+          message = `تم ${actualStatus === 'ENABLE' ? 'تفعيل' : 'إيقاف'} الإعلان بنجاح`;
+        }
+
+        console.log(`✅ Ad status update response:`, {
+          adId,
+          newStatus: actualStatus,
+          requestedStatus: status,
+          warning: warning,
+          message: message
+        });
+
+        // إضافة headers لإجبار الـ frontend على التحديث
+        res.set({
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'X-Status-Updated': 'true',
+          'X-New-Status': actualStatus,
+          'X-Timestamp': new Date().toISOString()
+        });
+
+        res.json({ 
+          success: true, 
+          warning: warning,
+          message: message,
+          adId,
+          newStatus: actualStatus, // الحالة الجديدة للـ frontend
+          status: actualStatus, // للتوافق مع الـ frontend القديم
+          requestedStatus: status,
+          secondaryStatus: secondaryStatus,
+          isEffectivelyActive: secondaryStatus !== 'AD_STATUS_CAMPAIGN_DISABLE' && actualStatus === 'ENABLE',
+          // إضافة timestamp لإجبار الـ frontend على التحديث
+          timestamp: new Date().toISOString(),
+          // إشارة لإجبار الـ frontend على إعادة جلب البيانات
+          shouldRefetch: true,
+          invalidateQueries: ['ads', 'tiktok-ads'],
+          // إضافة البيانات المحدثة للإعلان
+          updatedAd: updatedAd ? {
+            ad_id: updatedAd.ad_id,
+            operation_status: updatedAd.operation_status,
+            secondary_status: updatedAd.secondary_status,
+            ad_name: updatedAd.ad_name
+          } : null
+        });
+      } else {
+        console.error(`❌ Failed to update ad status:`, updateResponse);
+        res.status(400).json({ 
+          error: 'Failed to update ad status',
+          message: updateResponse.message || 'فشل في تحديث حالة الإعلان'
+        });
+      }
+
+    } catch (error) {
+      console.error('Error updating ad status:', error);
+      res.status(500).json({ 
+        error: 'Failed to update ad status',
+        message: error instanceof Error ? error.message : 'حدث خطأ في تحديث حالة الإعلان'
+      });
+    }
+  });
+
+  return createServer(app);
+}

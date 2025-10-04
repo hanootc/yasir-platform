@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import PerformanceChart from "@/components/PerformanceChart";
 import AudienceChart from "@/components/AudienceChart";
+import FacebookDatasetQuality from "@/components/FacebookDatasetQuality";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -1069,9 +1070,9 @@ export default function PlatformAdsMetaManagement() {
     staleTime: 30000,
   });
 
-  // Query لجلب إحصائيات شاملة للتحليلات الرئيسية
+  // Query لجلب إحصائيات شاملة للتحليلات الرئيسية - مربوط بالفترة الزمنية للجدول
   const { data: overallInsights, isLoading: overallInsightsLoading, refetch: refetchOverallInsights } = useQuery({
-    queryKey: ["/api/platform-ads/meta/overall-insights", selectedAccount, statsDateRange, campaignInsights, adInsights],
+    queryKey: ["/api/platform-ads/meta/overall-insights", selectedAccount, selectedDateRange.value, campaignInsights, adInsights],
     enabled: !!selectedAccount && activeTab === 'analytics' && !campaignInsightsLoading && !adInsightsLoading,
     queryFn: async () => {
       if (!selectedAccount) return null;
@@ -2591,7 +2592,7 @@ export default function PlatformAdsMetaManagement() {
                                               
                                               {/* Geographic Targeting Type */}
                                               <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
-                                                <label className="text-theme-primary font-medium mb-3 block">نوع الاستهداف الجغرافي</label>
+                                                <div className="text-theme-primary font-medium mb-3 block">نوع الاستهداف الجغرافي</div>
                                                 <div className="space-y-2">
                                                   <div className="flex items-center space-x-3">
                                                     <input
@@ -5097,14 +5098,7 @@ export default function PlatformAdsMetaManagement() {
                                    `$${overallInsights.totalSpend.toFixed(2)}` : '$0.00'}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {statsDateRange === 'today' ? 'اليوم' :
-                                   statsDateRange === 'yesterday' ? 'أمس' :
-                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
-                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
-                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
-                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
-                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
-                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                  {selectedDateRange.label}
                                 </p>
                               </div>
                               <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
@@ -5125,14 +5119,7 @@ export default function PlatformAdsMetaManagement() {
                                    Number(overallInsights.totalImpressions).toLocaleString('ar-IQ') : '0'}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {statsDateRange === 'today' ? 'اليوم' :
-                                   statsDateRange === 'yesterday' ? 'أمس' :
-                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
-                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
-                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
-                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
-                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
-                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                  {selectedDateRange.label}
                                 </p>
                               </div>
                               <div className="p-3 bg-green-100 dark:bg-green-900 rounded-full">
@@ -5153,14 +5140,7 @@ export default function PlatformAdsMetaManagement() {
                                    Number(overallInsights.totalClicks).toLocaleString('ar-IQ') : '0'}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {statsDateRange === 'today' ? 'اليوم' :
-                                   statsDateRange === 'yesterday' ? 'أمس' :
-                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
-                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
-                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
-                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
-                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
-                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                  {selectedDateRange.label}
                                 </p>
                               </div>
                               <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
@@ -5181,14 +5161,7 @@ export default function PlatformAdsMetaManagement() {
                                    Number(overallInsights.totalConversions).toLocaleString('ar-IQ') : '0'}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {statsDateRange === 'today' ? 'اليوم' :
-                                   statsDateRange === 'yesterday' ? 'أمس' :
-                                   statsDateRange === 'last_7d' ? 'آخر 7 أيام' :
-                                   statsDateRange === 'last_14d' ? 'آخر 14 يوم' :
-                                   statsDateRange === 'last_30d' ? 'آخر 30 يوم' :
-                                   statsDateRange === 'this_month' ? 'هذا الشهر' :
-                                   statsDateRange === 'last_month' ? 'الشهر الماضي' :
-                                   statsDateRange === 'lifetime' ? 'جميع البيانات' : 'الفترة المحددة'}
+                                  {selectedDateRange.label}
                                 </p>
                               </div>
                               <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-full">
@@ -5329,6 +5302,25 @@ export default function PlatformAdsMetaManagement() {
                           )}
                         </CardContent>
                       </Card>
+
+                      {/* Facebook Dataset Quality */}
+                      {(() => {
+                        console.log('🔍 Rendering FacebookDatasetQuality with dateRange:', {
+                          activeTab,
+                          selectedDateRange,
+                          startDate: selectedDateRange.startDate,
+                          endDate: selectedDateRange.endDate
+                        });
+                        return (
+                          <FacebookDatasetQuality 
+                            className="mt-6" 
+                            dateRange={{
+                              startDate: selectedDateRange.startDate,
+                              endDate: selectedDateRange.endDate
+                            }}
+                          />
+                        );
+                      })()}
                     </div>
                   </TabsContent>
                 </Tabs>

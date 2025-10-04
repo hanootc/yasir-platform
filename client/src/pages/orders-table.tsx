@@ -397,8 +397,9 @@ export default function OrdersTable() {
                 {/* Date Range Filter */}
                 <div className="flex flex-col md:flex-row gap-2 items-center">
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">من تاريخ:</label>
+                    <label htmlFor="date-from-orders-table" className="text-sm font-medium text-gray-700 whitespace-nowrap">من تاريخ:</label>
                     <Input
+                      id="date-from-orders-table"
                       type="date"
                       value={dateFrom}
                       onChange={(e) => setDateFrom(e.target.value)}
@@ -406,8 +407,9 @@ export default function OrdersTable() {
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">إلى تاريخ:</label>
+                    <label htmlFor="date-to-orders-table" className="text-sm font-medium text-gray-700 whitespace-nowrap">إلى تاريخ:</label>
                     <Input
+                      id="date-to-orders-table"
                       type="date"
                       value={dateTo}
                       onChange={(e) => setDateTo(e.target.value)}
@@ -480,11 +482,11 @@ export default function OrdersTable() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">جميع المنتجات</SelectItem>
-                        {products && Array.isArray(products) && products.map((product: any) => (
+                        {products && Array.isArray(products) ? products.map((product: any) => (
                           <SelectItem key={product.id} value={product.id}>
                             {product.name}
                           </SelectItem>
-                        ))}
+                        )) : null}
                       </SelectContent>
                     </Select>
                   </div>
@@ -605,7 +607,7 @@ export default function OrdersTable() {
                                 
                                 if (firstItem && firstItem.productId && products) {
                                   // Find product by ID from the products list
-                                  const product = products.find((p: any) => p.id === firstItem.productId);
+                                  const product = (products as any)?.find((p: any) => p.id === firstItem.productId);
                                   
                                   if (product) {
                                     return (

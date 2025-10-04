@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,24 +34,38 @@ export default function PlatformSalesChart({
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const text = await response.text();
-      console.log('📊 Raw response:', text);
-      return JSON.parse(text);
+      const result = await response.json();
+      return result;
     },
     enabled: !!platformId,
+    staleTime: 2 * 60 * 1000, // البيانات صالحة لمدة دقيقتين
+    refetchInterval: 5 * 60 * 1000, // تحديث كل 5 دقائق
   });
-
-  console.log('📊 Chart data received:', chartData);
-  console.log('📊 Chart error:', error);
-  console.log('📊 Platform ID:', platformId);
   
-  const salesData = Array.isArray((chartData as any)?.salesData) ? (chartData as any).salesData.map((item: any) => ({
-    name: item.label,
-    sales: item.revenue || 0,
-    orders: item.orders || 0
-  })) : [];
+  const salesData = useMemo(() => {
+    if (!chartData?.salesData || !Array.isArray(chartData.salesData)) {
+      return [];
+    }
+    
+    return chartData.salesData.map((item: any) => ({
+      name: item.label || 'غير محدد',
+      sales: Number(item.revenue) || 0,
+      orders: Number(item.orders) || 0
+    }));
+  }, [chartData]);
   
-  console.log('📊 Processed sales data:', salesData);
+  // إحصائيات محسوبة
+  const chartStats = useMemo(() => {
+    if (salesData.length === 0) {
+      return { totalSales: 0, totalOrders: 0, averageOrder: 0, hasData: false };
+    }
+    
+    const totalSales = salesData.reduce((sum: number, item: any) => sum + item.sales, 0);
+    const totalOrders = salesData.reduce((sum: number, item: any) => sum + item.orders, 0);
+    const averageOrder = totalOrders > 0 ? totalSales / totalOrders : 0;
+    
+    return { totalSales, totalOrders, averageOrder, hasData: true };
+  }, [salesData]);
 
   const renderChart = () => {
     if (isLoading) {
@@ -65,7 +79,7 @@ export default function PlatformSalesChart({
       );
     }
 
-    if (salesData.length === 0) {
+    if (!chartStats.hasData) {
       return (
         <div className="h-64 flex items-center justify-center">
           <div className="text-center">
@@ -73,9 +87,14 @@ export default function PlatformSalesChart({
               <TrendingUp className="text-theme-primary h-8 w-8" />
             </div>
             <h3 className="text-lg font-semibold text-theme-primary mb-2">لا توجد بيانات مبيعات</h3>
-            <p className="text-gray-500 dark:text-gray-400 text-xs max-w-sm">
-              ابدأ بإضافة منتجات وإنشاء طلبات لرؤية إحصائيات المبيعات هنا
+            <p className="text-gray-500 dark:text-gray-400 text-sm max-w-sm mb-4">
+              {error ? 'حدث خطأ في تحميل البيانات' : 'ابدأ بإضافة منتجات وإنشاء طلبات لرؤية إحصائيات المبيعات هنا'}
             </p>
+            {error && (
+              <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                خطأ: {error.message}
+              </div>
+            )}
           </div>
         </div>
       );
@@ -101,9 +120,8 @@ export default function PlatformSalesChart({
     return (
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          {chartType === 'area' && (
+          {chartType === 'area' ? (
             <AreaChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
               <defs>
                 <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
@@ -114,6 +132,7 @@ export default function PlatformSalesChart({
                   <stop offset="95%" stopColor="#06d6a0" stopOpacity={0.1}/>
                 </linearGradient>
               </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
               <XAxis 
                 dataKey="name" 
                 stroke="#6b7280"
@@ -157,9 +176,7 @@ export default function PlatformSalesChart({
                 activeDot={{ r: 6, stroke: '#06d6a0', strokeWidth: 2, fill: 'white' }}
               />
             </AreaChart>
-          )}
-          
-          {chartType === 'line' && (
+          ) : chartType === 'line' ? (
             <LineChart {...commonProps}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
               <XAxis 
@@ -203,9 +220,7 @@ export default function PlatformSalesChart({
                 activeDot={{ r: 7, stroke: '#06d6a0', strokeWidth: 2, fill: 'white' }}
               />
             </LineChart>
-          )}
-          
-          {chartType === 'bar' && (
+          ) : chartType === 'bar' ? (
             <BarChart {...commonProps}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
               <XAxis 
@@ -245,7 +260,7 @@ export default function PlatformSalesChart({
                 opacity={0.8}
               />
             </BarChart>
-          )}
+          ) : <div />}
         </ResponsiveContainer>
       </div>
     );
@@ -294,36 +309,35 @@ export default function PlatformSalesChart({
           </div>
           
           {/* Summary Stats */}
-          {salesData.length > 0 && (
+          {chartStats.hasData && (
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-theme-primary">
               <div className="flex space-x-4">
                 <div className="text-center">
                   <p className="text-xs text-gray-600 dark:text-gray-400">إجمالي المبيعات</p>
                   <p className="text-sm font-bold text-theme-primary">
-                    {formatCurrency(salesData.reduce((sum: number, item: any) => sum + (item.sales || 0), 0))}
+                    {formatCurrency(chartStats.totalSales)}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-600 dark:text-gray-400">إجمالي الطلبات</p>
                   <p className="text-sm font-bold text-theme-primary">
-                    {salesData.reduce((sum: number, item: any) => sum + (item.orders || 0), 0)}
+                    {chartStats.totalOrders}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-600 dark:text-gray-400">متوسط الطلب</p>
                   <p className="text-sm font-bold text-theme-primary">
-                    {formatCurrency(
-                      salesData.reduce((sum: number, item: any) => sum + (item.sales || 0), 0) / 
-                      Math.max(1, salesData.reduce((sum: number, item: any) => sum + (item.orders || 0), 0))
-                    )}
+                    {formatCurrency(chartStats.averageOrder)}
                   </p>
                 </div>
               </div>
               
-              <Badge className="bg-theme-gradient text-white text-xs px-2 py-0.5">
-                <TrendingUp className="w-3 h-3 mr-0.5" />
-                +12.5%
-              </Badge>
+              {chartStats.totalSales > 0 && (
+                <Badge className="bg-theme-gradient text-white text-xs px-2 py-0.5">
+                  <TrendingUp className="w-3 h-3 mr-0.5" />
+                  نشط
+                </Badge>
+              )}
             </div>
           )}
         </CardHeader>
@@ -332,8 +346,8 @@ export default function PlatformSalesChart({
           {renderChart()}
           
           {/* Enhanced Chart Legend with Period Controls */}
-          {salesData.length > 0 && (
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-theme-primary">
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-theme-primary">
+            {chartStats.hasData ? (
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full shadow-sm"></div>
@@ -343,41 +357,47 @@ export default function PlatformSalesChart({
                   <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-full shadow-sm"></div>
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">عدد الطلبات</span>
                 </div>
-                <Badge className="bg-theme-gradient text-white text-xs px-2 py-0.5">
-                  <TrendingUp className="w-3 h-3 mr-0.5" />
-                  +12.5%
-                </Badge>
+                {chartStats.totalSales > 0 && (
+                  <Badge className="bg-theme-gradient text-white text-xs px-2 py-0.5">
+                    <Activity className="w-3 h-3 mr-0.5" />
+                    نشط
+                  </Badge>
+                )}
               </div>
-              
-              {/* Period Controls */}
-              <div className="flex items-center space-x-1 bg-white dark:bg-gray-800 rounded-md p-0.5">
-                <Button 
-                  size="sm" 
-                  variant={period === 'monthly' ? 'default' : 'ghost'}
-                  onClick={() => onPeriodChange('monthly')}
-                  className={`${period === 'monthly' ? 'bg-theme-gradient text-white theme-shadow' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'} text-xs px-2 py-1 h-auto transition-all`}
-                >
-                  شهري
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant={period === 'weekly' ? 'default' : 'ghost'}
-                  onClick={() => onPeriodChange('weekly')}
-                  className={`${period === 'weekly' ? 'bg-theme-gradient text-white theme-shadow' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'} text-xs px-2 py-1 h-auto transition-all`}
-                >
-                  أسبوعي
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant={period === 'daily' ? 'default' : 'ghost'}
-                  onClick={() => onPeriodChange('daily')}
-                  className={`${period === 'daily' ? 'bg-theme-gradient text-white theme-shadow' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'} text-xs px-2 py-1 h-auto transition-all`}
-                >
-                  يومي
-                </Button>
+            ) : (
+              <div className="text-xs text-gray-500">
+                لا توجد بيانات للعرض
               </div>
+            )}
+            
+            {/* Period Controls */}
+            <div className="flex items-center space-x-1 bg-white dark:bg-gray-800 rounded-md p-0.5">
+              <Button 
+                size="sm" 
+                variant={period === 'monthly' ? 'default' : 'ghost'}
+                onClick={() => onPeriodChange('monthly')}
+                className={`${period === 'monthly' ? 'bg-theme-gradient text-white theme-shadow' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'} text-xs px-2 py-1 h-auto transition-all`}
+              >
+                شهري
+              </Button>
+              <Button 
+                size="sm" 
+                variant={period === 'weekly' ? 'default' : 'ghost'}
+                onClick={() => onPeriodChange('weekly')}
+                className={`${period === 'weekly' ? 'bg-theme-gradient text-white theme-shadow' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'} text-xs px-2 py-1 h-auto transition-all`}
+              >
+                أسبوعي
+              </Button>
+              <Button 
+                size="sm" 
+                variant={period === 'daily' ? 'default' : 'ghost'}
+                onClick={() => onPeriodChange('daily')}
+                className={`${period === 'daily' ? 'bg-theme-gradient text-white theme-shadow' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'} text-xs px-2 py-1 h-auto transition-all`}
+              >
+                يومي
+              </Button>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
     </div>

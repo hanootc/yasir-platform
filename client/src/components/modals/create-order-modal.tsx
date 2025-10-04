@@ -391,7 +391,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                   <div key={index} className="p-3 bg-gray-800 rounded-lg">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                       <div>
-                        <label className="text-sm font-medium text-white mb-1 block">المنتج</label>
+                        <div className="text-sm font-medium text-white mb-1 block">المنتج</div>
                         <Select
                           value={item.productId || ""}
                           onValueChange={(value) => {
@@ -426,7 +426,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                       </div>
 
                       <div>
-                        <label className="text-sm font-medium text-white mb-1 block">العرض</label>
+                        <div className="text-sm font-medium text-white mb-1 block">العرض</div>
                         {item.productId ? (
                           <Select
                             value={item.offer || ""}
@@ -484,8 +484,9 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                       </div>
 
                       <div className="w-20">
-                        <label className="text-sm font-medium text-white mb-1 block">الكمية</label>
+                        <label htmlFor={`quantity-${index}`} className="text-sm font-medium text-white mb-1 block">الكمية</label>
                         <Input
+                          id={`quantity-${index}`}
                           type="number"
                           min="1"
                           value={item.quantity}
@@ -512,7 +513,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                           {/* الألوان المتعددة */}
                           {hasColors && (
                             <div>
-                              <label className="text-sm font-medium text-white mb-1 block">الألوان (اختياري)</label>
+                              <div className="text-sm font-medium text-white mb-1 block">الألوان (اختياري)</div>
                               <div className="space-y-2">
                                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-600 rounded">
                                   {selectedProduct.colors.map((color: any) => (
@@ -569,7 +570,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                           {/* الأشكال المتعددة */}
                           {hasShapes && (
                             <div>
-                              <label className="text-sm font-medium text-white mb-1 block">الأشكال (اختياري)</label>
+                              <div className="text-sm font-medium text-white mb-1 block">الأشكال (اختياري)</div>
                               <div className="space-y-2">
                                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-600 rounded">
                                   {selectedProduct.shapes.map((shape: any) => (
@@ -624,7 +625,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                           {/* الأحجام المتعددة */}
                           {hasSizes && (
                             <div>
-                              <label className="text-sm font-medium text-white mb-1 block">الأحجام (اختياري)</label>
+                              <div className="text-sm font-medium text-white mb-1 block">الأحجام (اختياري)</div>
                               <div className="space-y-2">
                                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-gray-600 rounded">
                                   {selectedProduct.sizes.map((size: any) => (
@@ -674,7 +675,7 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <label className="text-sm font-medium text-white mb-1 block">السعر</label>
+                        <div className="text-sm font-medium text-white mb-1 block">السعر</div>
                         {item.productId && (
                           <span className="font-medium text-lg text-green-400">
                             {(() => {
@@ -771,9 +772,9 @@ export default function CreateOrderModal({ isOpen, onClose, platformId }: Create
                     checked={sendWhatsAppMessage}
                     onCheckedChange={setSendWhatsAppMessage}
                   />
-                  <label className="text-sm font-medium text-white">
+                  <div className="text-sm font-medium text-white">
                     إرسال رسالة تأكيد عبر WhatsApp
-                  </label>
+                  </div>
                 </div>
               </div>
             </div>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, Phone, MapPin, Package, Clock, MessageCircle, User, Mail, Calendar, DollarSign, Truck, Star, Copy, ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import PixelTracker from '@/components/PixelTracker';
@@ -171,12 +171,15 @@ export default function ThankYouPage() {
     enabled: !!order?.platformId,
   });
 
-  // توجيه تلقائي إلى WhatsApp بعد 4 ثوانٍ
+  // توجيه تلقائي إلى WhatsApp مع انتظار حدث شراء TikTok أو مهلة قصوى
   useEffect(() => {
     if (order && (platform as any)?.whatsappNumber) {
-      const timer = setTimeout(() => {
-        const message = `مرحباً، تم تأكيد طلبي رقم #${order?.orderNumber} بنجاح\n\nتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || "0").toLocaleString()} د.ع\n\nشكراً لكم`;
-        
+      let redirected = false;
+      const doRedirect = () => {
+        if (redirected) return;
+        redirected = true;
+        const message = `مرحباً، تم تأكيد طلبي رقم #${order?.orderNumber} بنجاح\n\نتفاصيل الطلب:\nالاسم: ${order?.customerName}\nالهاتف: ${order?.customerPhone}\nالعنوان: ${order?.customerAddress}, ${order?.customerGovernorate}\nالمبلغ: ${parseFloat(order?.totalAmount || order?.total || "0").toLocaleString()} د.ع\n\nشكراً لكم`;
+
         // تنسيق رقم WhatsApp
         let whatsappNumber = (platform as any).whatsappNumber;
         if (whatsappNumber.startsWith('07')) {
@@ -186,12 +189,40 @@ export default function ThankYouPage() {
         } else if (!whatsappNumber.startsWith('964')) {
           whatsappNumber = '964' + whatsappNumber;
         }
-        
+
         const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
-      }, 4000); // 4 ثوانٍ
-      
-      return () => clearTimeout(timer);
+
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+          window.location.href = whatsappUrl;
+        } else {
+          window.open(whatsappUrl, '_blank');
+        }
+      };
+
+      // إذا كان حدث الشراء قد تم إرساله سابقاً فقم بالتوجيه مباشرة بعد تأخير بسيط
+      if (localStorage.getItem('tiktok_purchase_sent') === 'true') {
+        const quickTimer = setTimeout(doRedirect, 400);
+        return () => clearTimeout(quickTimer);
+      }
+
+      // استمع لحدث الشراء، أو انتظر مهلة قصوى ثم وجّه
+      const onPurchase = () => {
+        window.removeEventListener('tiktok_purchase_sent', onPurchase as any);
+        doRedirect();
+      };
+      window.addEventListener('tiktok_purchase_sent', onPurchase as any, { once: true });
+
+      // مهلة قصوى (3.5 ثواني) حتى لا نعلق إذا لم يصل الحدث
+      const maxTimeout = setTimeout(() => {
+        window.removeEventListener('tiktok_purchase_sent', onPurchase as any);
+        doRedirect();
+      }, 3500);
+
+      return () => {
+        window.removeEventListener('tiktok_purchase_sent', onPurchase as any);
+        clearTimeout(maxTimeout);
+      };
     }
   }, [order, platform]);
 

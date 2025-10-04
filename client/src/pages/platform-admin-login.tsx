@@ -217,7 +217,7 @@ export default function PlatformAdminLogin() {
           <div className="text-center mt-6 pt-6 border-t">
             <p className="text-gray-600 dark:text-gray-400 text-sm">
               ليس لديك منصة؟{' '}
-              <a href="/register-platform" className="text-theme-primary hover:opacity-80 font-medium">
+              <a href="/register-platform" className="text-theme-primary hover:opacity-80 font-medium" aria-label="سجل منصة جديدة">
                 سجل منصة جديدة
               </a>
             </p>

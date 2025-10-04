@@ -44,6 +44,31 @@ interface TikTokEventPayload {
   };
 }
 
+// TikTok Standard Events Mapping
+// Reference: https://developers.tiktok.com/doc/events-api
+const TIKTOK_EVENT_MAP: Record<string, string> = {
+  // Web Events (للحملات على الويب)
+  'CompletePayment': 'CompletePayment',
+  'Purchase': 'CompletePayment',
+  'purchase': 'CompletePayment',
+  
+  // Pixel Events (للتحسين في TikTok Ads)
+  'ON_WEB_ORDER': 'CompletePayment',      // نفس CompletePayment
+  'SUCCESSORDER_PAY': 'CompletePayment',  // نفس CompletePayment
+  
+  // Other Events
+  'ViewContent': 'ViewContent',
+  'AddToCart': 'AddToCart',
+  'InitiateCheckout': 'InitiateCheckout',
+  'SubmitForm': 'SubmitForm',
+  'ClickButton': 'ClickButton',
+};
+
+// Normalize TikTok event name
+export function normalizeTikTokEvent(eventName: string): string {
+  return TIKTOK_EVENT_MAP[eventName] || eventName;
+}
+
 // Hash function for data privacy
 function hashData(data: string): string {
   if (!data) return '';
@@ -58,6 +83,9 @@ export async function sendTikTokEvent(
   eventData: any
 ): Promise<{ success: boolean; error?: string; data?: any }> {
   try {
+    // Normalize event name to TikTok standard
+    const normalizedEventName = normalizeTikTokEvent(eventName);
+    
     const eventId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Prepare user data (hashed for privacy)
@@ -119,7 +147,7 @@ export async function sendTikTokEvent(
     // Build TikTok payload
     const payload: TikTokEventPayload = {
       pixel_code: pixelCode,
-      event: eventName,
+      event: normalizedEventName,  // استخدام الاسم المُطبّع
       event_id: eventId,
       event_time: eventData.timestamp || Math.floor(Date.now() / 1000),
       timestamp: eventData.timestamp || Math.floor(Date.now() / 1000).toString(),
@@ -137,7 +165,8 @@ export async function sendTikTokEvent(
 
     console.log('🎬 TikTok Events API: Sending event', {
       pixelCode,
-      eventName,
+      originalEventName: eventName,
+      normalizedEventName,
       eventId,
       hasEmail: !!user.email,
       hasPhone: !!user.phone_number,
