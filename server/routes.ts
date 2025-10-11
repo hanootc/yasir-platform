@@ -4,6 +4,7 @@ import type { UploadedFile } from "express-fileupload";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
+import { isAdminAuthenticated } from "./customAuth";
 import { requirePlatformAuthWithFallback, logoutPlatform, PROTECTED_PLATFORM_ENDPOINTS } from "./platformAuth";
 import { localStorage } from "./localStorage";
 import { upload, handleMulterError } from "./multerConfig";
@@ -425,7 +426,7 @@ export function registerRoutes(app: Express): Server {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       const ext = path.extname(imageFile.name);
       const filename = `color-${uniqueSuffix}${ext}`;
-      const filepath = path.join('./public/uploads/images', filename);
+      const filepath = path.join(process.cwd(), 'public/uploads/images', filename);
 
       // حفظ الملف
       imageFile.mv(filepath, (err) => {
@@ -435,12 +436,15 @@ export function registerRoutes(app: Express): Server {
         }
 
         // إرجاع رابط الصورة المحلي
-        const imageUrl = `/uploads/images/${filename}`;
+        const relativePath = `/uploads/images/${filename}`;
+        const fullUrl = `https://sanadi.pro${relativePath}`;
         
-        console.log("✅ تم رفع صورة محلية:", imageUrl);
+        console.log("✅ تم رفع صورة محلية:", relativePath);
+        console.log("🔗 Full URL:", fullUrl);
         
         res.json({ 
-          imageUrl,
+          imageUrl: fullUrl,
+          url: fullUrl,
           filename: filename,
           originalName: imageFile.name,
           size: imageFile.size
@@ -870,7 +874,7 @@ export function registerRoutes(app: Express): Server {
 
       // تحديد مجلد الحفظ
       const category = req.query.category || 'products';
-      const uploadDir = `./public/uploads/${category}/`;
+      const uploadDir = path.join(process.cwd(), 'public/uploads', category);
       
       // إنشاء اسم ملف فريد
       const fileExtension = path.extname(imageFile.name);
@@ -881,12 +885,14 @@ export function registerRoutes(app: Express): Server {
       await imageFile.mv(filePath);
       
       const relativePath = `/uploads/${category}/${uniqueName}`;
+      const fullUrl = `https://sanadi.pro${relativePath}`;
       
       console.log("✅ Image saved to:", relativePath);
+      console.log("🔗 Full URL:", fullUrl);
 
       res.json({
-        uploadURL: relativePath,
-        url: relativePath,
+        uploadURL: fullUrl,
+        url: fullUrl,
         fileName: uniqueName,
         originalName: imageFile.name,
         size: imageFile.size
@@ -1554,7 +1560,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Admin personal profile routes - منفصل تماماً عن المنصة
-  app.get("/api/admin/profile", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/profile", isAdminAuthenticated, async (req: any, res) => {
     try {
       const adminUser = (req.session as any).user;
       const userId = adminUser?.id;
@@ -1583,7 +1589,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.put("/api/admin/profile", isAuthenticated, async (req: any, res) => {
+  app.put("/api/admin/profile", isAdminAuthenticated, async (req: any, res) => {
     try {
       const adminUser = (req.session as any).user;
       const userId = adminUser?.id;
@@ -1656,7 +1662,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.put("/api/admin/avatar", isAuthenticated, async (req: any, res) => {
+  app.put("/api/admin/avatar", isAdminAuthenticated, async (req: any, res) => {
     try {
       const adminUser = (req.session as any).user;
       const userId = adminUser?.id;
@@ -2489,6 +2495,88 @@ ${order.notes ? `📝 *ملاحظاتك:* ${order.notes}
     } catch (error) {
       console.error("خطأ في تحديث بروفايل المنصة:", error);
       res.status(500).json({ message: "فشل في تحديث بيانات المنصة" });
+    }
+  });
+
+  // Force sync endpoint لمزامنة فورية مع حذف الحملات المحذوفة
+  app.post('/api/tiktok/force-sync', async (req, res) => {
+    try {
+      const { platformId } = req.body;
+      
+      if (!platformId) {
+        return res.status(400).json({ error: 'Platform ID required' });
+      }
+
+      console.log('🔄 بدء المزامنة الفورية مع حذف الحملات المحذوفة...');
+      
+      // جلب الحملات المحلية قبل المزامنة
+      const localCampaignsBefore = await storage.getTikTokCampaigns(platformId);
+      console.log(`📋 الحملات المحلية قبل المزامنة: ${localCampaignsBefore.length}`);
+      
+      // مزامنة الحملات مع حذف المحذوفة
+      const campaigns = await syncTikTokCampaigns(platformId);
+      
+      // جلب الحملات المحلية بعد المزامنة
+      const localCampaignsAfter = await storage.getTikTokCampaigns(platformId);
+      console.log(`📋 الحملات المحلية بعد المزامنة: ${localCampaignsAfter.length}`);
+      
+      const deletedCount = localCampaignsBefore.length - localCampaignsAfter.length;
+
+      res.json({
+        success: true,
+        message: 'تم تنفيذ المزامنة الفورية بنجاح',
+        results: {
+          campaignsFromTikTok: Array.isArray(campaigns) ? campaigns.length : 0,
+          localCampaignsBefore: localCampaignsBefore.length,
+          localCampaignsAfter: localCampaignsAfter.length,
+          deletedCampaigns: deletedCount
+        }
+      });
+    } catch (error) {
+      console.error('Error in force sync:', error);
+      res.status(500).json({ 
+        error: 'Failed to sync',
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Debug endpoint للتحقق من إعدادات TikTok
+  app.get('/api/debug/tiktok-settings', async (req, res) => {
+    try {
+      const { platformId } = req.query;
+      
+      if (!platformId) {
+        return res.status(400).json({ error: 'Platform ID required' });
+      }
+
+      const platform = await storage.getPlatform(platformId as string);
+      if (!platform) {
+        return res.status(404).json({ error: 'Platform not found' });
+      }
+
+      const tiktokSettings = await storage.getAdPlatformSettings(platformId as string);
+
+      res.json({
+        success: true,
+        platform: {
+          id: platform.id,
+          name: platform.platformName,
+          tiktokAccessToken: platform.tiktokAccessToken ? '***' + platform.tiktokAccessToken.slice(-10) : null,
+          tiktokAdvertiserId: platform.tiktokAdvertiserId,
+          hasToken: !!platform.tiktokAccessToken,
+          hasAdvertiserId: !!platform.tiktokAdvertiserId
+        },
+        settings: tiktokSettings ? {
+          tiktokAccessToken: tiktokSettings.tiktokAccessToken ? '***' + tiktokSettings.tiktokAccessToken.slice(-10) : null,
+          tiktokAdvertiserId: tiktokSettings.tiktokAdvertiserId,
+          hasToken: !!tiktokSettings.tiktokAccessToken,
+          hasAdvertiserId: !!tiktokSettings.tiktokAdvertiserId
+        } : null
+      });
+    } catch (error) {
+      console.error('Error getting TikTok settings:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -4194,14 +4282,14 @@ ${platform?.platformName || 'متجرنا'}`;
       const platform = await storage.getPlatform(platformId);
       
       const productNames = productsWithLanding.map(product => {
-        // Construct the landing page URL if it exists
+        // Construct the landing page URL if it exists - السب دومين بعد الدومين الرئيسي
         let landingPageUrl = null;
         if (product.customUrl) {
-          // Use current domain with subdomain in path
-          landingPageUrl = `https://${platform?.subdomain}.${process.env.DOMAIN || 'sanadi.pro'}/${product.customUrl}`;
+          // استخدام التنسيق الصحيح: https://sanadi.pro/subdomain/path
+          landingPageUrl = `https://sanadi.pro/${platform?.subdomain}/${product.customUrl}`;
         } else if (product.landingPageId) {
-          // Use default URL pattern with landing page ID
-          landingPageUrl = `https://${platform?.subdomain}.${process.env.DOMAIN || 'sanadi.pro'}/landing/${product.landingPageId}`;
+          // استخدام نمط الرابط الافتراضي مع معرف صفحة الهبوط
+          landingPageUrl = `https://sanadi.pro/${platform?.subdomain}/landing/${product.landingPageId}`;
         }
         
         return {
@@ -4583,7 +4671,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // Dashboard routes - use admin authentication
-  app.get("/api/dashboard/stats", isAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/stats", isAdminAuthenticated, async (req, res) => {
     try {
       const stats = await storage.getDashboardStats();
       res.json(stats);
@@ -4593,7 +4681,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/recent-orders", isAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/recent-orders", isAdminAuthenticated, async (req, res) => {
     try {
       const orders = await storage.getRecentOrders();
       res.json(orders);
@@ -4603,7 +4691,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/top-products", isAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/top-products", isAdminAuthenticated, async (req, res) => {
     try {
       const products = await storage.getTopProducts();
       res.json(products);
@@ -4613,7 +4701,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/activities", isAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/activities", isAdminAuthenticated, async (req, res) => {
     try {
       const activities = await storage.getActivities();
       res.json(activities);
@@ -4623,7 +4711,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.get("/api/dashboard/sales-chart/:period", isAuthenticated, async (req, res) => {
+  app.get("/api/dashboard/sales-chart/:period", isAdminAuthenticated, async (req, res) => {
     try {
       const period = req.params.period || 'monthly';
       const salesChartData = await storage.getSalesChartData(period);
@@ -7321,7 +7409,7 @@ ${platform?.platformName || 'متجرنا'}`;
   };
 
   // API لمراقبة Rate Limiting - للإدارة فقط
-  app.get('/api/admin/rate-limit-status', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/rate-limit-status', isAdminAuthenticated, async (req, res) => {
     try {
       const now = Date.now();
       const clientStats = [];
@@ -9427,12 +9515,12 @@ ${platform?.platformName || 'متجرنا'}`;
         try {
           console.log(`📅 Requesting stats for campaigns via ad groups with date range: ${dateRange.startDate} to ${dateRange.endDate}`);
           
-          // استخدام مستوى المجموعات الإعلانية مع lifetime لتجميع إحصائيات الحملات
+          // استخدام مستوى الحملات مباشرة مع تواريخ صحيحة
           const statsParams: any = {
             advertiser_id: api.getAdvertiserId(),
             report_type: "BASIC",
-            data_level: "AUCTION_ADGROUP", // استخدام مستوى المجموعات مباشرة
-            dimensions: JSON.stringify(["campaign_id", "adgroup_id"]),
+            data_level: "AUCTION_CAMPAIGN", // استخدام مستوى الحملات مباشرة
+            dimensions: JSON.stringify(["campaign_id"]),
             metrics: JSON.stringify([
               "impressions", 
               "clicks", 
@@ -9447,11 +9535,22 @@ ${platform?.platformName || 'متجرنا'}`;
             service_type: "AUCTION",
             timezone: "UTC",
             page: 1,
-            page_size: 1000,
-            lifetime: true // استخدام lifetime للحصول على جميع البيانات التاريخية
+            page_size: 1000
           };
           
-          console.log(`📊 Using ADGROUP level with lifetime=true for campaign aggregation`);
+          // إضافة التواريخ بناءً على الفترة المختارة
+          if (period === 'all' || period === 'lifetime') {
+            // للحصول على جميع البيانات التاريخية
+            statsParams.lifetime = true;
+            console.log(`📅 Using lifetime=true for all historical data`);
+          } else {
+            // استخدام فترة زمنية محددة
+            statsParams.start_date = dateRange.startDate;
+            statsParams.end_date = dateRange.endDate;
+            console.log(`📅 Using date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+          }
+          
+          console.log(`📊 Using CAMPAIGN level directly for better stats accuracy`);
           
           console.log(`📊 Campaign stats request params:`, JSON.stringify(statsParams, null, 2));
           
@@ -9461,45 +9560,39 @@ ${platform?.platformName || 'متجرنا'}`;
 
           console.log(`📊 Campaign stats response:`, statsResponse.data?.list?.length || 0, 'entries');
 
-          // تجميع الإحصائيات من مستوى المجموعات الإعلانية حسب الحملة
+          // معالجة الإحصائيات من مستوى الحملات مباشرة
           const campaignStats = new Map();
           
           if (statsResponse.data?.list && statsResponse.data.list.length > 0) {
-            console.log(`📊 Processing ${statsResponse.data.list.length} adgroup entries for campaign aggregation`);
+            console.log(`📊 Processing ${statsResponse.data.list.length} campaign entries`);
             
             for (const item of statsResponse.data.list) {
               const campaignId = item.dimensions?.campaign_id;
-              const adgroupId = item.dimensions?.adgroup_id;
               
-              console.log(`📊 Processing adgroup ${adgroupId} for campaign ${campaignId}:`, {
+              console.log(`📊 Processing campaign ${campaignId}:`, {
                 impressions: item.metrics?.impressions,
                 clicks: item.metrics?.clicks,
-                spend: item.metrics?.spend
+                spend: item.metrics?.spend,
+                conversions: item.metrics?.conversion
               });
               
               if (campaignId) {
-                if (!campaignStats.has(campaignId)) {
-                  campaignStats.set(campaignId, {
-                    impressions: 0,
-                    clicks: 0,
-                    spend: 0,
-                    conversions: 0
-                  });
-                }
+                campaignStats.set(campaignId, {
+                  impressions: parseInt(item.metrics?.impressions || '0'),
+                  clicks: parseInt(item.metrics?.clicks || '0'),
+                  spend: parseFloat(item.metrics?.spend || '0'),
+                  conversions: parseInt(item.metrics?.conversion || '0'),
+                  ctr: parseFloat(item.metrics?.ctr || '0'),
+                  cpm: parseFloat(item.metrics?.cpm || '0'),
+                  cpc: parseFloat(item.metrics?.cpc || '0'),
+                  conversion_rate: parseFloat(item.metrics?.conversion_rate || '0')
+                });
                 
-                const current = campaignStats.get(campaignId);
-                
-                // تجميع البيانات من جميع المجموعات الإعلانية للحملة
-                current.impressions += parseInt(item.metrics?.impressions || '0');
-                current.clicks += parseInt(item.metrics?.clicks || '0');
-                current.spend += parseFloat(item.metrics?.spend || '0');
-                current.conversions += parseInt(item.metrics?.conversion || '0');
-                
-                console.log(`📊 Updated aggregated stats for campaign ${campaignId}:`, current);
+                console.log(`📊 Set stats for campaign ${campaignId}:`, campaignStats.get(campaignId));
               }
             }
           } else {
-            console.log(`⚠️ No adgroup data found for campaign stats aggregation`);
+            console.log(`⚠️ No campaign data found in stats response`);
           }
 
           console.log(`📊 Final campaign stats:`, Object.fromEntries(campaignStats));
@@ -9513,10 +9606,16 @@ ${platform?.platformName || 'متجرنا'}`;
               hasStats: !!stats
             });
 
-            // حساب المعدلات - استخدام القيم من API إذا كانت متوفرة
-            const ctr = stats?.ctr || (stats && stats.impressions > 0 ? (stats.clicks / stats.impressions) * 100 : 0);
-            const cpm = stats?.cpm || (stats && stats.impressions > 0 ? (stats.spend / stats.impressions) * 1000 : 0);
-            const cpc = stats?.cpc || (stats && stats.clicks > 0 ? stats.spend / stats.clicks : 0);
+            // حساب المعدلات - استخدام القيم من API إذا كانت متوفرة، وإلا حساب يدوي
+            const impressions = stats?.impressions || 0;
+            const clicks = stats?.clicks || 0;
+            const spend = stats?.spend || 0;
+            const conversions = stats?.conversions || 0;
+            
+            const ctr = stats?.ctr || (impressions > 0 ? (clicks / impressions) * 100 : 0);
+            const cpm = stats?.cpm || (impressions > 0 ? (spend / impressions) * 1000 : 0);
+            const cpc = stats?.cpc || (clicks > 0 ? spend / clicks : 0);
+            const conversionRate = stats?.conversion_rate || (clicks > 0 ? (conversions / clicks) * 100 : 0);
 
             const campaignData = {
               id: campaign.campaign_id,
@@ -9530,16 +9629,16 @@ ${platform?.platformName || 'متجرنا'}`;
               budget: campaign.budget || "0.00",
               startTime: campaign.schedule_start_time || null,
               endTime: campaign.schedule_end_time || null,
-              // إحصائيات مجمعة من المجموعات الإعلانية
-              impressions: stats ? stats.impressions : 0,
-              clicks: stats ? stats.clicks : 0,
-              spend: stats ? Math.round(stats.spend * 100) / 100 : 0,
-              conversions: stats ? stats.conversions : 0,
-              leads: 0,
+              // إحصائيات من TikTok API
+              impressions: impressions,
+              clicks: clicks,
+              spend: Math.round(spend * 100) / 100,
+              conversions: conversions,
+              leads: conversions, // استخدام conversions كـ leads
               cpm: Math.round(cpm * 100) / 100,
               cpc: Math.round(cpc * 100) / 100,
               ctr: Math.round(ctr * 100) / 100,
-              conversionRate: 0,
+              conversionRate: Math.round(conversionRate * 100) / 100,
               createdAt: campaign.create_time || new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
@@ -9554,10 +9653,12 @@ ${platform?.platformName || 'متجرنا'}`;
             campaignsWithStats.push(campaignData);
           }
         } catch (statsError) {
-          console.error('⚠️ Failed to fetch stats, returning campaigns without stats:', statsError);
+          console.error('⚠️ Failed to fetch campaign stats:', statsError);
+          console.log('📊 Returning campaigns without stats data');
           
           // إرجاع الحملات بدون إحصائيات في حالة فشل جلب الإحصائيات
           for (const campaign of tiktokCampaigns) {
+            console.log(`📊 Adding campaign without stats: ${campaign.campaign_name}`);
             campaignsWithStats.push({
               id: campaign.campaign_id,
               platformId: platformId,
@@ -9656,8 +9757,18 @@ ${platform?.platformName || 'متجرنا'}`;
 
   // Route محدد لإنشاء حملة كاملة مع Lead Generation
   app.post('/api/tiktok/campaigns/complete', async (req, res) => {
-    console.log('🎯 LEAD GENERATION ROUTE - إنشاء حملة كاملة');
+    console.log('🎯 COMPLETE CAMPAIGN ROUTE - إنشاء حملة كاملة');
     console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
+    
+    // فحص الفيديوهات المُرسلة
+    console.log('🔍 فحص الفيديوهات في الطلب:', {
+      videoUrl: req.body.videoUrl,
+      videoUrls: req.body.videoUrls,
+      hasVideoUrl: !!req.body.videoUrl,
+      hasVideoUrls: !!(req.body.videoUrls && req.body.videoUrls.length > 0),
+      imageUrls: req.body.imageUrls,
+      hasImageUrls: !!(req.body.imageUrls && req.body.imageUrls.length > 0)
+    });
     
     try {
       const platformId = (req.session as any).platform?.platformId;
@@ -9671,51 +9782,204 @@ ${platform?.platformName || 'متجرنا'}`;
       }
 
       const { 
-        objective,
+        // بيانات الحملة
+        campaignName, 
+        objective, 
+        campaignBudgetMode, 
+        campaignBudget, 
+        startTime, 
+        endTime,
+        // بيانات المجموعة الإعلانية
+        adGroupName,
+        adGroupBudgetMode,
+        adGroupBudget,
+        bidType,
+        bidPrice,
+        placementType,
+        targeting,
+        // بيانات الإعلان
+        adName,
+        adFormat,
+        landingPageUrl,
+        displayName,
+        adText,
+        callToAction,
+        imageUrls,
+        videoUrl,
+        videoUrls, // دعم عدة فيديوهات
+        pixelId,
+        optimizationEvent,
+        identityId,
+        // Lead Form Data
         leadFormName,
+        leadFormProductId,
+        leadFormTitle,
+        leadFormDescription,
+        leadFormPrivacyPolicyUrl,
+        leadFormSuccessMessage,
+        leadFormCustomFields,
         privacyPolicyUrl
       } = req.body;
 
-      console.log('🔍 فحص شروط إنشاء نموذج الليدز...');
-      console.log('  - objective:', objective);
+      // فحص المحتوى المرئي
+      console.log('🔍 فحص المحتوى المرئي:', {
+        videoUrl: videoUrl,
+        videoUrls: videoUrls,
+        videoUrlsLength: videoUrls ? videoUrls.length : 0,
+        imageUrls: imageUrls,
+        imageUrlsLength: imageUrls ? imageUrls.length : 0
+      });
       
-      let leadFormId = null;
+      const hasVideo = videoUrl || (videoUrls && videoUrls.length > 0);
+      const hasImages = imageUrls && imageUrls.length > 0;
       
-      // إنشاء Lead Form إذا كان الهدف هو LEAD_GENERATION
-      if (objective === 'LEAD_GENERATION') {
-        console.log('📋 إنشاء نموذج ليدز في TikTok باستخدام API الصحيح...');
-        
-        try {
-          const leadFormData = {
-            advertiser_id: api.getAdvertiserId(),
-            form_name: leadFormName || `نموذج طلب - ${Date.now()}`,
-            privacy_policy_url: privacyPolicyUrl || 'https://www.sanadi.pro/privacy-policy'
+      if (!hasVideo && !hasImages) {
+        throw new Error('يجب رفع فيديو أو صور للإعلان. يرجى رفع فيديو أو اختيار صور ثم المحاولة مرة أخرى.');
+      }
+
+      // إضافة timestamp لضمان اسم فريد
+      const uniqueCampaignName = `${campaignName}_${Date.now()}`;
+      
+      // الخطوة 1: إنشاء الحملة
+      console.log('1️⃣ إنشاء الحملة...');
+      const campaignData = {
+        campaign_name: uniqueCampaignName,
+        objective_type: objective,
+        budget_mode: campaignBudgetMode,
+        budget: campaignBudget ? parseFloat(campaignBudget) : undefined
+      };
+
+      const campaignResponse = await (api as any).createCampaign(campaignData);
+      if (!campaignResponse.data || !campaignResponse.data.campaign_id) {
+        throw new Error('فشل في إنشاء الحملة: ' + (campaignResponse.message || 'خطأ غير معروف'));
+      }
+
+      const campaignId = campaignResponse.data.campaign_id;
+      console.log('✅ تم إنشاء الحملة بنجاح:', campaignId);
+
+      // الخطوة 2: إنشاء المجموعة الإعلانية
+      console.log('2️⃣ إنشاء المجموعة الإعلانية...');
+      
+      const adGroupData = {
+        campaign_id: campaignId,
+        adgroup_name: adGroupName,
+        placement_type: placementType || 'PLACEMENT_TYPE_AUTOMATIC',
+        budget_mode: adGroupBudgetMode,
+        budget: adGroupBudget || '50',
+        bid_type: bidType || 'BID_TYPE_CUSTOM',
+        bid_price: bidPrice || null,
+        optimization_goal: 'CONVERT',
+        billing_event: 'CPC',
+        pixel_id: pixelId && pixelId !== 'none' ? pixelId : null,
+        optimization_event: optimizationEvent || 'COMPLETE_PAYMENT'
+      };
+
+      const adGroupResponse = await (api as any).createAdGroup(adGroupData);
+      if (!adGroupResponse.data || !adGroupResponse.data.adgroup_id) {
+        throw new Error('فشل في إنشاء المجموعة الإعلانية: ' + (adGroupResponse.message || 'خطأ غير معروف'));
+      }
+
+      const adGroupId = adGroupResponse.data.adgroup_id;
+      console.log('✅ تم إنشاء المجموعة الإعلانية بنجاح:', adGroupId);
+
+      // الخطوة 3: إنشاء الإعلان/الإعلانات
+      console.log('3️⃣ إنشاء الإعلان/الإعلانات...');
+      
+      const createdAds = [];
+      const videosToUse = [];
+      
+      if (videoUrls && Array.isArray(videoUrls) && videoUrls.length > 0) {
+        videosToUse.push(...videoUrls);
+        console.log(`📹 تم العثور على ${videoUrls.length} فيديو - سيتم إنشاء ${videoUrls.length} إعلان منفصل`);
+      } else if (videoUrl) {
+        videosToUse.push(videoUrl);
+        console.log('📹 تم العثور على فيديو واحد - سيتم إنشاء إعلان واحد');
+      }
+
+      if (videosToUse.length > 0) {
+        for (let i = 0; i < videosToUse.length; i++) {
+          const currentVideoId = videosToUse[i];
+          
+          // تخطي الفيديوهات الفارغة أو غير الصالحة
+          if (!currentVideoId || currentVideoId === 'null' || currentVideoId === 'undefined') {
+            console.warn(`⚠️ تخطي فيديو غير صالح في الموضع ${i + 1}:`, currentVideoId);
+            continue;
+          }
+          
+          const currentAdName = videosToUse.length > 1 
+            ? `${adName} - فيديو ${i + 1}` 
+            : adName;
+
+          console.log(`📱 إنشاء الإعلان ${i + 1}/${videosToUse.length}: ${currentAdName}`);
+
+          const adData = {
+            adgroup_id: adGroupId,
+            ad_name: currentAdName,
+            ad_format: adFormat,
+            display_name: displayName,
+            ad_text: adText,
+            call_to_action: callToAction,
+            video_id: currentVideoId,
+            landing_page_url: landingPageUrl
           };
 
-          console.log('📤 إرسال طلب إنشاء نموذج ليدز:', JSON.stringify(leadFormData, null, 2));
-          const leadFormResponse = await (api as any).createLeadForm(leadFormData);
-          
-          console.log('📥 استجابة إنشاء نموذج الليدز:', JSON.stringify(leadFormResponse, null, 2));
-          
-          if (leadFormResponse.data && leadFormResponse.data.form_id) {
-            leadFormId = leadFormResponse.data.form_id;
-            console.log('✅ تم إنشاء نموذج الليدز بنجاح:', leadFormId);
-          } else {
-            console.error('❌ فشل في إنشاء نموذج الليدز:', leadFormResponse);
+          const adResponse = await (api as any).createAd(adData);
+          if (!adResponse.data || (!adResponse.data.ad_ids && !adResponse.data.ad_id)) {
+            throw new Error(`فشل في إنشاء الإعلان ${i + 1}: ` + (adResponse.message || 'خطأ غير معروف'));
           }
-        } catch (leadFormError) {
-          console.error('❌ خطأ في إنشاء نموذج الليدز:', leadFormError);
-          console.error('Error details:', leadFormError instanceof Error ? leadFormError.message : String(leadFormError));
+
+          const adId = adResponse.data.ad_ids?.[0] || adResponse.data.ad_id;
+          createdAds.push({
+            adId: adId,
+            adName: currentAdName,
+            videoId: currentVideoId
+          });
+          console.log(`✅ تم إنشاء الإعلان ${i + 1}/${videosToUse.length} بنجاح:`, adId);
         }
+      } else if (hasImages) {
+        // إنشاء إعلان واحد بالصور
+        console.log('📸 إنشاء إعلان بالصور...');
+        
+        const adData = {
+          adgroup_id: adGroupId,
+          ad_name: adName,
+          ad_format: adFormat,
+          display_name: displayName,
+          ad_text: adText,
+          call_to_action: callToAction,
+          image_urls: imageUrls,
+          landing_page_url: landingPageUrl
+        };
+
+        const adResponse = await (api as any).createAd(adData);
+        if (!adResponse.data || (!adResponse.data.ad_ids && !adResponse.data.ad_id)) {
+          throw new Error('فشل في إنشاء إعلان الصور: ' + (adResponse.message || 'خطأ غير معروف'));
+        }
+
+        const adId = adResponse.data.ad_ids?.[0] || adResponse.data.ad_id;
+        createdAds.push({
+          adId: adId,
+          adName: adName,
+          imageUrls: imageUrls
+        });
+        console.log('✅ تم إنشاء إعلان الصور بنجاح:', adId);
       }
+
+      if (createdAds.length === 0) {
+        throw new Error('فشل في إنشاء أي إعلان');
+      }
+
+      console.log('✅ تم إنشاء الحملة الكاملة بنجاح!');
 
       res.json({
         success: true,
-        message: 'تم اختبار إنشاء Lead Form',
-        leadFormId,
-        objective,
-        isLeadGeneration: objective === 'LEAD_GENERATION',
-        apiEndpoint: '/lead/gen_form/create/'
+        message: 'تم إنشاء الحملة الكاملة بنجاح',
+        data: {
+          campaignId,
+          adGroupId,
+          ads: createdAds,
+          campaignName: uniqueCampaignName
+        }
       });
       
     } catch (error) {
@@ -9833,7 +10097,7 @@ ${platform?.platformName || 'متجرنا'}`;
         budget_mode: adjustedBudgetMode,
         budget: adGroupBudget ? parseFloat(adGroupBudget) : undefined,
         bid_type: bidType,
-        bid_price: bidPrice ? parseFloat(bidPrice) : undefined,
+        bid_price: bidPrice && !isNaN(parseFloat(bidPrice)) ? parseFloat(bidPrice) : undefined,
         optimization_goal: optimizationGoal,
         pixel_id: objective !== 'LEAD_GENERATION' && pixelId && pixelId !== 'none' ? pixelId : undefined,
         optimization_event: optimizationEvent,
@@ -9891,7 +10155,16 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log('🏢 بيانات الهوية الحقيقية:', realIdentity);
       
       // التحقق من وجود محتوى مرئي
-      if (!videoUrl && (!extractedImageUrls || extractedImageUrls.length === 0)) {
+      console.log('🔍 فحص المحتوى المرئي:', {
+        videoUrl: videoUrl,
+        extractedImageUrls: extractedImageUrls,
+        extractedImageUrlsLength: extractedImageUrls ? extractedImageUrls.length : 0
+      });
+      
+      const hasVideo = videoUrl;
+      const hasImages = extractedImageUrls && extractedImageUrls.length > 0;
+      
+      if (!hasVideo && !hasImages) {
         throw new Error('يجب رفع فيديو أو صور للإعلان. يرجى رفع فيديو أو اختيار صور ثم المحاولة مرة أخرى.');
       }
 
@@ -10165,97 +10438,6 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  // Route خاص للحملات الكاملة - يجب أن يكون قبل المسار العام
-  app.post('/api/tiktok/campaigns/complete', async (req, res) => {
-    console.log('🎯 SPECIFIC ROUTE HIT - Complete Campaign Creation');
-    console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
-    
-    try {
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        return res.status(401).json({ error: 'Platform session required' });
-      }
-
-      const api = await getTikTokAPIForPlatform(platformId);
-      if (!api) {
-        return res.status(400).json({ error: 'TikTok not connected' });
-      }
-
-      const { 
-        // بيانات الحملة
-        campaignName, 
-        objective, 
-        campaignBudgetMode, 
-        campaignBudget, 
-        startTime, 
-        endTime,
-        // بيانات المجموعة الإعلانية
-        adGroupName,
-        adGroupBudgetMode,
-        adGroupBudget,
-        bidType,
-        bidPrice,
-        placementType,
-        targeting,
-        // بيانات الإعلان
-        adName,
-        adFormat,
-        landingPageUrl,
-        displayName,
-        adText,
-        callToAction,
-        imageUrls,
-        videoUrl,
-        pixelId,
-        optimizationEvent,
-        identityId,
-        // Lead Form Data
-        leadFormName,
-        leadFormFields,
-        privacyPolicyUrl
-      } = req.body;
-
-      console.log('🔍 فحص شروط إنشاء نموذج الليدز...');
-      
-      let leadFormId = null;
-      
-      // إنشاء Lead Form إذا كان الهدف هو LEAD_GENERATION
-      if (objective === 'LEAD_GENERATION') {
-        console.log('📋 إنشاء نموذج ليدز في TikTok باستخدام API الصحيح...');
-        
-        try {
-          const leadFormData = {
-            advertiser_id: api.getAdvertiserId(),
-            form_name: leadFormName || `نموذج طلب - ${displayName}`,
-            privacy_policy_url: privacyPolicyUrl || 'https://www.sanadi.pro/privacy-policy'
-          };
-
-          const leadFormResponse = await (api as any).createLeadForm ? (api as any).createLeadForm(leadFormData) : { data: { form_id: `form_${Date.now()}` } };
-          
-          if (leadFormResponse.data && leadFormResponse.data.form_id) {
-            leadFormId = leadFormResponse.data.form_id;
-            console.log('✅ تم إنشاء نموذج الليدز بنجاح:', leadFormId);
-          } else {
-            console.error('❌ فشل في إنشاء نموذج الليدز:', leadFormResponse);
-          }
-        } catch (leadFormError) {
-          console.error('❌ خطأ في إنشاء نموذج الليدز:', leadFormError);
-        }
-      }
-
-      res.json({
-        success: true,
-        message: 'تم اختبار إنشاء Lead Form',
-        leadFormId,
-        objective,
-        isLeadGeneration: objective === 'LEAD_GENERATION'
-      });
-      
-    } catch (error) {
-      console.error('❌ Error in complete campaign route:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
-    }
-  });
 
   // إنشاء حملة جديدة (الطريقة العادية)
   app.post('/api/tiktok/campaigns', async (req, res) => {
@@ -12995,7 +13177,7 @@ ${platform?.platformName || 'متجرنا'}`;
         console.log(`📊 Filtered to ${tiktokAds.length} ads for ad group ${adGroupId}`);
       }
 
-      // جلب الإحصائيات للإعلانات
+      // إرجاع الإعلانات بسرعة أولاً، ثم جلب تفاصيل الفيديو
       const adsWithStats = [];
       
       if (tiktokAds.length > 0) {
@@ -13042,11 +13224,45 @@ ${platform?.platformName || 'متجرنا'}`;
 
           console.log(`📊 Ads stats response:`, statsResponse.data?.list?.length || 0, 'entries');
 
+          // جلب تفاصيل الفيديو لجميع الإعلانات بشكل متوازي
+          console.log(`🎬 جلب تفاصيل الفيديو لـ ${tiktokAds.length} إعلان بشكل متوازي...`);
+          const videoDetailsPromises = tiktokAds.map(async (ad: any) => {
+            try {
+              const details = await getAdDetailsWithVideo(platformId, ad.ad_id);
+              return { adId: ad.ad_id, details };
+            } catch (error) {
+              console.warn(`⚠️ فشل في جلب تفاصيل فيديو الإعلان ${ad.ad_id}:`, error);
+              return { adId: ad.ad_id, details: null };
+            }
+          });
+
+          const videoDetailsResults = await Promise.all(videoDetailsPromises);
+          const videoDetailsMap = new Map();
+          videoDetailsResults.forEach(result => {
+            videoDetailsMap.set(result.adId, result.details);
+          });
+
+          console.log(`✅ تم جلب تفاصيل الفيديو لـ ${videoDetailsResults.length} إعلان`);
+
           for (const ad of tiktokAds) {
             // البحث عن إحصائيات هذا الإعلان
             const stats = statsResponse.data?.list?.find(
               (item: any) => item.dimensions?.ad_id === ad.ad_id
             );
+
+            // استخراج الإحصائيات مع معالجة الأخطاء
+            const impressions = stats?.metrics ? parseInt(stats.metrics.impressions) || 0 : 0;
+            const clicks = stats?.metrics ? parseInt(stats.metrics.clicks) || 0 : 0;
+            const spend = stats?.metrics ? parseFloat(stats.metrics.spend) || 0 : 0;
+            const conversions = stats?.metrics ? parseInt(stats.metrics.conversion) || 0 : 0;
+            const costPerConversion = stats?.metrics ? parseFloat(stats.metrics.cost_per_conversion) || 0 : 0;
+            const cpm = stats?.metrics ? parseFloat(stats.metrics.cpm) || 0 : 0;
+            const cpc = stats?.metrics ? parseFloat(stats.metrics.cpc) || 0 : 0;
+            const ctr = stats?.metrics ? parseFloat(stats.metrics.ctr) || 0 : 0;
+            const conversionRate = stats?.metrics ? parseFloat(stats.metrics.conversion_rate) || 0 : 0;
+
+            // الحصول على تفاصيل الفيديو من الخريطة
+            const videoDetails = videoDetailsMap.get(ad.ad_id);
 
             const adData = {
               id: ad.ad_id,
@@ -13057,14 +13273,21 @@ ${platform?.platformName || 'متجرنا'}`;
               adName: ad.ad_name,
               status: ad.operation_status,
               adFormat: ad.ad_format || 'SINGLE_VIDEO',
+              // إضافة تفاصيل الفيديو مع الروابط المباشرة (بدون proxy)
+              videoId: videoDetails?.videoId || null,
+              videoUrl: videoDetails?.videoUrl || null,
+              coverImageUrl: (videoDetails as any)?.coverImageUrl || null,
+              hasVideo: videoDetails?.hasVideo || false,
               // إحصائيات من TikTok API
-              impressions: stats?.metrics ? parseInt(stats.metrics.impressions) || 0 : 0,
-              clicks: stats?.metrics ? parseInt(stats.metrics.clicks) || 0 : 0,
-              spend: stats?.metrics ? parseFloat(stats.metrics.spend) || 0 : 0,
-              conversions: stats?.metrics ? parseInt(stats.metrics.conversions) || 0 : 0,
-              cpm: stats?.metrics ? parseFloat(stats.metrics.cpm) || 0 : 0,
-              cpc: stats?.metrics ? parseFloat(stats.metrics.cpc) || 0 : 0,
-              ctr: stats?.metrics ? parseFloat(stats.metrics.ctr) / 100 || 0 : 0,
+              impressions: impressions,
+              clicks: clicks,
+              spend: Math.round(spend * 100) / 100,
+              conversions: conversions,
+              costPerConversion: Math.round(costPerConversion * 100) / 100,
+              cpm: Math.round(cpm * 100) / 100,
+              cpc: Math.round(cpc * 100) / 100,
+              ctr: Math.round(ctr * 100) / 100,
+              conversionRate: Math.round(conversionRate * 100) / 100,
               createdAt: ad.create_time || new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
@@ -13075,7 +13298,27 @@ ${platform?.platformName || 'متجرنا'}`;
           console.error('⚠️ Failed to fetch ads stats, returning ads without stats:', statsError);
           
           // إرجاع الإعلانات بدون إحصائيات في حالة فشل جلب الإحصائيات
+          // جلب تفاصيل الفيديو لجميع الإعلانات
+          console.log(`🎬 جلب تفاصيل الفيديو لـ ${tiktokAds.length} إعلان (بدون إحصائيات)...`);
+          const videoDetailsPromises = tiktokAds.map(async (ad: any) => {
+            try {
+              const details = await getAdDetailsWithVideo(platformId, ad.ad_id);
+              return { adId: ad.ad_id, details };
+            } catch (error) {
+              console.warn(`⚠️ فشل في جلب تفاصيل فيديو الإعلان ${ad.ad_id}:`, error);
+              return { adId: ad.ad_id, details: null };
+            }
+          });
+
+          const videoDetailsResults = await Promise.all(videoDetailsPromises);
+          const videoDetailsMap = new Map();
+          videoDetailsResults.forEach(result => {
+            videoDetailsMap.set(result.adId, result.details);
+          });
+
           for (const ad of tiktokAds) {
+            const videoDetails = videoDetailsMap.get(ad.ad_id);
+
             adsWithStats.push({
               id: ad.ad_id,
               adId: ad.ad_id,
@@ -13085,13 +13328,20 @@ ${platform?.platformName || 'متجرنا'}`;
               adName: ad.ad_name,
               status: ad.operation_status,
               adFormat: ad.ad_format || 'SINGLE_VIDEO',
+              // إضافة تفاصيل الفيديو مع الروابط المباشرة
+              videoId: videoDetails?.videoId || null,
+              videoUrl: videoDetails?.videoUrl || null,
+              coverImageUrl: (videoDetails as any)?.coverImageUrl || null,
+              hasVideo: videoDetails?.hasVideo || false,
               impressions: 0,
               clicks: 0,
               spend: 0,
               conversions: 0,
+              costPerConversion: 0,
               cpm: 0,
               cpc: 0,
               ctr: 0,
+              conversionRate: 0,
               createdAt: ad.create_time || new Date().toISOString(),
               updatedAt: new Date().toISOString()
             });
@@ -13108,6 +13358,41 @@ ${platform?.platformName || 'متجرنا'}`;
         error: 'Failed to get ads',
         message: 'فشل في جلب الإعلانات من TikTok'
       });
+    }
+  });
+
+  // جلب تفاصيل الفيديو لإعلان واحد (للاستخدام في الواجهة)
+  app.get('/api/tiktok/ad/:adId/video', async (req, res) => {
+    try {
+      const { adId } = req.params;
+      const platformId = (req.session as any).platform?.platformId;
+
+      if (!platformId) {
+        return res.status(401).json({ error: 'Platform session required' });
+      }
+
+      console.log(`🎬 جلب تفاصيل الفيديو للإعلان: ${adId}`);
+
+      const videoDetails = await getAdDetailsWithVideo(platformId, adId);
+      
+      if (!videoDetails) {
+        return res.status(404).json({ error: 'Video details not found' });
+      }
+
+      res.json({
+        success: true,
+        videoDetails: {
+          adId: adId,
+          videoId: videoDetails.videoId,
+          videoUrl: videoDetails.videoUrl,
+          coverImageUrl: (videoDetails as any).coverImageUrl,
+          hasVideo: videoDetails.hasVideo
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ خطأ في جلب تفاصيل فيديو الإعلان:', error);
+      res.status(500).json({ error: (error as any).message });
     }
   });
 
@@ -16613,7 +16898,7 @@ ${platform?.platformName || 'متجرنا'}`;
   };
 
   // جلب إحصائيات النظام العامة
-  app.get('/api/admin/stats', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/stats', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting admin system stats...");
       
@@ -16700,7 +16985,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب جميع المنصات مع إحصائياتها الحقيقية
-  app.get('/api/admin/platforms', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/platforms', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting all platforms with real stats...");
       
@@ -16777,7 +17062,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب مميزات الاشتراكات
-  app.get('/api/admin/features', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/features', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting subscription features...");
       
@@ -16795,7 +17080,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب سجل الإجراءات الإدارية
-  app.get('/api/admin/actions', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/actions', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting admin actions log...");
       
@@ -16825,7 +17110,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // تمديد اشتراك منصة
-  app.post('/api/admin/extend-subscription', isAuthenticated, async (req, res) => {
+  app.post('/api/admin/extend-subscription', isAdminAuthenticated, async (req, res) => {
     try {
       const { platformId, days, reason } = req.body;
       
@@ -16881,7 +17166,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب جميع الاشتراكات
-  app.get('/api/admin/subscriptions', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/subscriptions', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting all subscriptions...");
       
@@ -16931,7 +17216,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // جلب جميع المدفوعات
-  app.get('/api/admin/payments', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/payments', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting all payments...");
       
@@ -16966,7 +17251,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // إحصائيات الاشتراكات والمدفوعات
-  app.get('/api/admin/subscription-stats', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/subscription-stats', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting subscription statistics...");
       
@@ -17029,7 +17314,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // إضافة ميزة اشتراك جديدة
-  app.post('/api/admin/features', isAuthenticated, async (req, res) => {
+  app.post('/api/admin/features', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Adding new subscription feature...");
       
@@ -17054,7 +17339,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // تحديث ميزة اشتراك
-  app.put('/api/admin/features/:featureId', isAuthenticated, async (req, res) => {
+  app.put('/api/admin/features/:featureId', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Updating subscription feature...");
       
@@ -17083,7 +17368,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // حذف ميزة اشتراك
-  app.delete('/api/admin/features/:featureId', isAuthenticated, async (req, res) => {
+  app.delete('/api/admin/features/:featureId', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Deleting subscription feature...");
       
@@ -17107,7 +17392,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // إيقاف منصة
-  app.post('/api/admin/suspend-platform', isAuthenticated, async (req, res) => {
+  app.post('/api/admin/suspend-platform', isAdminAuthenticated, async (req, res) => {
     try {
       const { platformId, reason } = req.body;
       
@@ -17159,7 +17444,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // تفعيل منصة
-  app.post('/api/admin/activate-platform', isAuthenticated, async (req, res) => {
+  app.post('/api/admin/activate-platform', isAdminAuthenticated, async (req, res) => {
     try {
       const { platformId, reason } = req.body;
       
@@ -17211,7 +17496,7 @@ ${platform?.platformName || 'متجرنا'}`;
   });
 
   // الإعدادات العامة للنظام - APIs للإدارة
-  app.get('/api/admin/system-settings', isAuthenticated, async (req, res) => {
+  app.get('/api/admin/system-settings', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Getting system settings...");
       
@@ -17346,7 +17631,7 @@ ${platform?.platformName || 'متجرنا'}`;
     }
   });
 
-  app.put('/api/admin/system-settings', isAuthenticated, async (req, res) => {
+  app.put('/api/admin/system-settings', isAdminAuthenticated, async (req, res) => {
     try {
       console.log("🔧 Updating system settings...");
       
@@ -17446,39 +17731,75 @@ ${platform?.platformName || 'متجرنا'}`;
       console.log("✅ System settings updated successfully");
       res.json({ success: true });
     } catch (error) {
-      console.error("Error updating system settings:", error);
-      res.status(500).json({ error: "Internal server error" });
+      console.error('❌ Error updating system settings:', error);
+      res.status(500).json({ error: 'Failed to update system settings' });
     }
   });
 
-  // جلب تفاصيل الإعلان مع الفيديو مباشرة من TikTok
-  app.get('/api/tiktok/ads/:adId/details', async (req, res) => {
+  // Image Proxy لتجاوز CORS للصور
+  app.get('/api/proxy/image', async (req, res) => {
     try {
-      const { adId } = req.params;
-      console.log('🎬 طلب جلب تفاصيل الإعلان:', adId);
-      console.log('🔍 Session info:', {
-        hasSession: !!(req.session as any),
-        hasPlatform: !!(req.session as any)?.platform,
-        platformId: (req.session as any)?.platform?.platformId
+      const imageUrl = req.query.url as string;
+      if (!imageUrl) {
+        console.error('❌ Image proxy: No URL provided');
+        return res.status(400).json({ error: 'Image URL required' });
+      }
+
+      console.log('🖼️ Image proxy request:', imageUrl);
+
+      // جلب الصورة من TikTok
+      const response = await fetch(imageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Referer': 'https://www.tiktok.com/',
+          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
       });
 
-      const platformId = (req.session as any).platform?.platformId;
-      if (!platformId) {
-        console.log('❌ لا توجد platform session');
-        return res.status(401).json({ error: 'Platform session required' });
+      if (!response.ok) {
+        console.error('❌ TikTok image response error:', response.status, response.statusText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const videoDetails = await getAdDetailsWithVideo(platformId, adId);
-      
-      if (!videoDetails) {
-        return res.status(404).json({ error: 'Ad not found or no video available' });
+      // تمرير headers المهمة للصور
+      const headers: any = {
+        'Content-Type': response.headers.get('content-type') || 'image/jpeg',
+        'Cache-Control': 'public, max-age=3600',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS'
+      };
+
+      if (response.headers.get('content-length')) {
+        headers['Content-Length'] = response.headers.get('content-length');
       }
 
-      // إرجاع البيانات حتى لو كان الإعلان غير موجود في TikTok
-      res.json(videoDetails);
+      res.set(headers);
+
+      console.log('✅ Streaming image...');
+      // stream الصورة
+      if (response.body) {
+        const reader = response.body.getReader();
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(value);
+            }
+            res.end();
+          } catch (error) {
+            console.error('❌ Image stream error:', error);
+            res.end();
+          }
+        };
+        pump();
+      } else {
+        res.end();
+      }
+
     } catch (error) {
-      console.error('❌ خطأ في جلب تفاصيل الإعلان:', error);
-      res.status(500).json({ error: (error as any).message });
+      console.error('❌ Image proxy error:', error);
+      res.status(500).json({ error: 'Failed to proxy image', details: (error as Error).message });
     }
   });
 
@@ -17622,6 +17943,7 @@ ${platform?.platformName || 'متجرنا'}`;
         landingPageUrl,
         displayName,
         videoUrl,
+        videoUrls, // دعم عدة فيديوهات
         imageUrls
       } = formData;
 
@@ -17871,7 +18193,7 @@ ${platform?.platformName || 'متجرنا'}`;
       const finalAdGroupData = {
         ...adGroupData,
         bid_type: bidType,
-        bid_price: bidPrice ? parseFloat(bidPrice) : undefined,
+        bid_price: bidPrice && !isNaN(parseFloat(bidPrice)) ? parseFloat(bidPrice) : undefined,
         // استخدام القيم المرسلة من المودال مباشرة
         pacing: pacing || 'PACING_MODE_SMOOTH', // من المودال مع افتراضي
         optimization_goal: finalOptGoal,
@@ -17930,8 +18252,8 @@ ${platform?.platformName || 'متجرنا'}`;
       const adGroupId = adGroupResponse.data.adgroup_id;
       console.log('✅ تم إنشاء المجموعة الإعلانية للتحويلات بنجاح:', adGroupId);
 
-      // 3. إنشاء الإعلان
-      console.log('3️⃣ إنشاء إعلان التحويلات...');
+      // 3. إنشاء الإعلان/الإعلانات
+      console.log('3️⃣ إنشاء إعلان/إعلانات التحويلات...');
       
       const platformData = await storage.getPlatform(platformId);
       const realIdentity = {
@@ -17939,13 +18261,49 @@ ${platform?.platformName || 'متجرنا'}`;
         logo: platformData?.logoUrl || null
       };
 
-      if (!videoUrl && (!imageUrls || imageUrls.length === 0)) {
-        throw new Error('يجب رفع فيديو أو صور للإعلان.');
+      // تحديد الفيديوهات المراد استخدامها
+      const videosToUse = [];
+      
+      console.log('🔍 فحص الفيديوهات المرفوعة:', {
+        videoUrl: videoUrl,
+        videoUrls: videoUrls,
+        videoUrlsLength: videoUrls ? videoUrls.length : 0,
+        imageUrls: imageUrls,
+        imageUrlsLength: imageUrls ? imageUrls.length : 0
+      });
+      
+      // طباعة تفاصيل كل فيديو منفصل للتأكد من عدم التكرار
+      if (videoUrls && Array.isArray(videoUrls)) {
+        console.log('📹 تفاصيل الفيديوهات المرفوعة:');
+        videoUrls.forEach((video, index) => {
+          console.log(`  فيديو ${index + 1}: ${video}`);
+        });
+        
+        // فحص التكرارات
+        const uniqueVideos = [...new Set(videoUrls)];
+        if (uniqueVideos.length !== videoUrls.length) {
+          console.warn('⚠️ تحذير: يوجد فيديوهات مكررة في المصفوفة!');
+          console.log('الفيديوهات الأصلية:', videoUrls);
+          console.log('الفيديوهات الفريدة:', uniqueVideos);
+        }
+      }
+      
+      if (videoUrls && Array.isArray(videoUrls) && videoUrls.length > 0) {
+        // إذا تم رفع عدة فيديوهات، استخدمها جميعاً
+        videosToUse.push(...videoUrls);
+        console.log(`📹 تم العثور على ${videoUrls.length} فيديو - سيتم إنشاء ${videoUrls.length} إعلان منفصل`);
+      } else if (videoUrl) {
+        // إذا تم رفع فيديو واحد فقط
+        videosToUse.push(videoUrl);
+        console.log('📹 تم العثور على فيديو واحد - سيتم إنشاء إعلان واحد');
       }
 
-      // التحقق مما إذا كانت البيانات معرفات أم روابط
-      const isVideoId = videoUrl && !videoUrl.startsWith('http');
-      const areImageIds = imageUrls && imageUrls.length > 0 && !imageUrls[0].startsWith('http');
+      console.log('📊 إجمالي الفيديوهات للاستخدام:', videosToUse.length);
+
+      if (videosToUse.length === 0 && (!imageUrls || imageUrls.length === 0)) {
+        console.error('❌ لا توجد فيديوهات أو صور للاستخدام');
+        throw new Error('يجب رفع فيديو أو صور للإعلان.');
+      }
 
       // الحصول على identity_id الصحيح
       const tiktokSettings = await storage.getAdPlatformSettings(platformId);
@@ -17953,47 +18311,118 @@ ${platform?.platformName || 'متجرنا'}`;
       
       console.log('🆔 Identity ID:', identityId);
 
-      const adData = {
-        adgroup_id: adGroupId,
-        ad_name: adName,
-        ad_format: adFormat,
-        display_name: displayName,
-        ad_text: adText,
-        call_to_action: callToAction,
-        landing_page_url: landingPageUrl,
-        identity_id: identityId, // ✅ استخدام advertiser_id كـ identity
-        identity_type: 'CUSTOMIZED_USER', // ✅ تغيير النوع
-        // ✅ استخدام IDs بدلاً من URLs
-        ...(isVideoId ? { video_id: videoUrl } : {}),
-        ...(areImageIds ? { image_ids: imageUrls } : {}),
-        // إذا كانت روابط، يجب رفعها أولاً (TODO: إضافة منطق الرفع)
-        ...(!isVideoId && videoUrl ? { video_url: videoUrl } : {}),
-        ...(!areImageIds && imageUrls ? { image_urls: imageUrls } : {})
-      };
+      const createdAds = [];
 
-      console.log('📋 بيانات الإعلان قبل الإرسال:', JSON.stringify(adData, null, 2));
+      // إنشاء إعلان منفصل لكل فيديو
+      if (videosToUse.length > 0) {
+        for (let i = 0; i < videosToUse.length; i++) {
+          const currentVideoId = videosToUse[i];
+          const currentAdName = videosToUse.length > 1 
+            ? `${adName} - فيديو ${i + 1}` 
+            : adName;
 
-      const adResponse = await (api as any).createAd(adData);
+          console.log(`📱 إنشاء الإعلان ${i + 1}/${videosToUse.length}: ${currentAdName}`);
+          console.log(`🎬 الفيديو المستخدم للإعلان ${i + 1}: ${currentVideoId}`);
 
-      if (!adResponse.data || (!adResponse.data.ad_ids && !adResponse.data.ad_id)) {
-        throw new Error('فشل في إنشاء إعلان التحويلات: ' + (adResponse.message || 'خطأ غير معروف'));
+          // التحقق مما إذا كانت البيانات معرفات أم روابط
+          const isVideoId = currentVideoId && !currentVideoId.startsWith('http');
+          console.log(`🔍 نوع الفيديو: ${isVideoId ? 'معرف فيديو' : 'رابط فيديو'}`)
+
+          const adData = {
+            adgroup_id: adGroupId,
+            ad_name: currentAdName,
+            ad_format: adFormat,
+            display_name: displayName,
+            ad_text: adText,
+            call_to_action: callToAction,
+            landing_page_url: landingPageUrl,
+            identity_id: identityId,
+            identity_type: 'CUSTOMIZED_USER',
+            // استخدام الفيديو الحالي
+            ...(isVideoId ? { video_id: currentVideoId } : { video_url: currentVideoId })
+          };
+
+          console.log(`📋 بيانات الإعلان ${i + 1} قبل الإرسال:`, JSON.stringify(adData, null, 2));
+
+          try {
+            const adResponse = await (api as any).createAd(adData);
+
+            if (!adResponse.data || (!adResponse.data.ad_ids && !adResponse.data.ad_id)) {
+              throw new Error(`فشل في إنشاء الإعلان ${i + 1}: ` + (adResponse.message || 'خطأ غير معروف'));
+            }
+
+            // TikTok API ترجع ad_ids كمصفوفة أو ad_id مباشر
+            const adId = adResponse.data.ad_ids ? adResponse.data.ad_ids[0] : adResponse.data.ad_id;
+            createdAds.push({
+              adId: adId,
+              adName: currentAdName,
+              videoId: currentVideoId
+            });
+
+            console.log(`✅ تم إنشاء الإعلان ${i + 1}/${videosToUse.length} بنجاح:`);
+            console.log(`   📋 معرف الإعلان: ${adId}`);
+            console.log(`   🎬 معرف الفيديو المرتبط: ${currentVideoId}`);
+            console.log(`   📝 اسم الإعلان: ${currentAdName}`);
+          } catch (adError) {
+            console.error(`❌ فشل في إنشاء الإعلان ${i + 1}:`, adError);
+            // استمر في إنشاء باقي الإعلانات حتى لو فشل واحد
+          }
+        }
+      } else if (imageUrls && imageUrls.length > 0) {
+        // إنشاء إعلان واحد بالصور إذا لم توجد فيديوهات
+        const areImageIds = imageUrls.length > 0 && !imageUrls[0].startsWith('http');
+
+        const adData = {
+          adgroup_id: adGroupId,
+          ad_name: adName,
+          ad_format: adFormat,
+          display_name: displayName,
+          ad_text: adText,
+          call_to_action: callToAction,
+          landing_page_url: landingPageUrl,
+          identity_id: identityId,
+          identity_type: 'CUSTOMIZED_USER',
+          ...(areImageIds ? { image_ids: imageUrls } : { image_urls: imageUrls })
+        };
+
+        console.log('📋 بيانات إعلان الصور قبل الإرسال:', JSON.stringify(adData, null, 2));
+
+        const adResponse = await (api as any).createAd(adData);
+
+        if (!adResponse.data || (!adResponse.data.ad_ids && !adResponse.data.ad_id)) {
+          throw new Error('فشل في إنشاء إعلان الصور: ' + (adResponse.message || 'خطأ غير معروف'));
+        }
+
+        const adId = adResponse.data.ad_ids ? adResponse.data.ad_ids[0] : adResponse.data.ad_id;
+        createdAds.push({
+          adId: adId,
+          adName: adName,
+          imageIds: imageUrls
+        });
       }
 
-      // TikTok API ترجع ad_ids كمصفوفة أو ad_id مباشر
-      const adId = adResponse.data.ad_ids ? adResponse.data.ad_ids[0] : adResponse.data.ad_id;
+      if (createdAds.length === 0) {
+        throw new Error('فشل في إنشاء أي إعلان');
+      }
+
+      // استخدام معرف الإعلان الأول للاستجابة (للتوافق مع الكود الحالي)
+      const adId = createdAds[0].adId;
 
       const result = {
         campaignId: campaignId,
         adGroupId: adGroupId,
         adId: adId,
-        type: 'CONVERSIONS'
+        type: 'CONVERSIONS',
+        createdAds: createdAds, // إضافة معلومات جميع الإعلانات المُنشأة
+        totalAdsCreated: createdAds.length
       };
       
       console.log('✅ تم إنشاء حملة التحويلات بنجاح:', result.campaignId);
+      console.log(`📊 تم إنشاء ${createdAds.length} إعلان في المجموعة الإعلانية`);
 
       res.json({
         success: true,
-        message: 'تم إنشاء حملة التحويلات بنجاح',
+        message: `تم إنشاء حملة التحويلات بنجاح مع ${createdAds.length} إعلان`,
         ...result
       });
 
@@ -18126,7 +18555,7 @@ ${platform?.platformName || 'متجرنا'}`;
         budget_mode: adjustedBudgetMode,
         budget: adGroupBudget ? parseFloat(adGroupBudget) : undefined,
         bid_type: bidType,
-        bid_price: bidPrice ? parseFloat(bidPrice) : undefined,
+        bid_price: bidPrice && !isNaN(parseFloat(bidPrice)) ? parseFloat(bidPrice) : undefined,
         optimization_goal: 'LEAD_GENERATION', // هدف الليدز
         optimization_event: 'FORM', // حدث الليدز
         targeting: {

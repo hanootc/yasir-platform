@@ -110,7 +110,7 @@ import {
   type InsertAdminUser,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, count, sum, sql, and, gte, lte, inArray, or, like, isNull, isNotNull, exists, ilike } from "drizzle-orm";
+import { eq, desc, asc, count, sum, sql, and, gte, lte, inArray, or, like, isNull, isNotNull, exists, ilike, not } from "drizzle-orm";
 import { localStorage } from "./localStorage";
 
 export interface IStorage {
@@ -254,6 +254,7 @@ export interface IStorage {
   upsertTikTokCampaign(campaignId: string, campaign: Partial<InsertTiktokCampaign>): Promise<TiktokCampaign>;
   updateTikTokCampaignStats(campaignId: string, stats: any): Promise<void>;
   updateTikTokCampaignStatus(id: string, status: string): Promise<TiktokCampaign>;
+  deleteRemovedTikTokCampaigns(platformId: string, existingCampaignIds: string[]): Promise<number>;
   
   getTikTokAdGroups(platformId: string, campaignId?: string): Promise<TiktokAdGroup[]>;
   getTikTokAdGroup(id: string): Promise<TiktokAdGroup | undefined>;
@@ -3878,6 +3879,54 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tiktokCampaigns.id, id))
       .returning();
     return updatedCampaign;
+  }
+
+  async deleteRemovedTikTokCampaigns(platformId: string, existingCampaignIds: string[]): Promise<number> {
+    // أولاً: جلب الحملات التي سيتم حذفها
+    let whereCondition;
+    if (existingCampaignIds.length > 0) {
+      whereCondition = and(
+        eq(tiktokCampaigns.platformId, platformId),
+        not(inArray(tiktokCampaigns.campaignId, existingCampaignIds))
+      );
+    } else {
+      // إذا لم توجد حملات في TikTok، احذف جميع الحملات المحلية
+      whereCondition = eq(tiktokCampaigns.platformId, platformId);
+    }
+
+    const campaignsToDelete = await db.select({ id: tiktokCampaigns.id, campaignId: tiktokCampaigns.campaignId })
+      .from(tiktokCampaigns)
+      .where(whereCondition);
+
+    if (campaignsToDelete.length === 0) {
+      return 0;
+    }
+
+    const campaignIdsToDelete = campaignsToDelete.map(c => c.id);
+    console.log(`🗑️ سيتم حذف ${campaignIdsToDelete.length} حملة:`, campaignsToDelete.map(c => c.campaignId));
+
+    // ثانياً: جلب المجموعات الإعلانية المرتبطة بهذه الحملات
+    const adGroupsToDelete = await db.select({ id: tiktokAdGroups.id })
+      .from(tiktokAdGroups)
+      .where(inArray(tiktokAdGroups.campaignId, campaignIdsToDelete));
+    
+    const adGroupIdsToDelete = adGroupsToDelete.map(ag => ag.id);
+
+    // ثالثاً: حذف الإعلانات المرتبطة بهذه المجموعات الإعلانية
+    if (adGroupIdsToDelete.length > 0) {
+      await db.delete(tiktokAds)
+        .where(inArray(tiktokAds.adGroupId, adGroupIdsToDelete));
+    }
+
+    // رابعاً: حذف المجموعات الإعلانية المرتبطة بهذه الحملات
+    await db.delete(tiktokAdGroups)
+      .where(inArray(tiktokAdGroups.campaignId, campaignIdsToDelete));
+
+    // خامساً: حذف الحملات نفسها
+    const result = await db.delete(tiktokCampaigns)
+      .where(inArray(tiktokCampaigns.id, campaignIdsToDelete));
+    
+    return result.rowCount || 0;
   }
 
   // TikTok Ad Groups

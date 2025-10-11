@@ -457,6 +457,14 @@ export class TikTokBusinessAPI {
   }) {
     console.log('📊 إنشاء مجموعة إعلانية TikTok جديدة:', adGroupData.adgroup_name);
     
+    // Debug: فحص البيانات الواردة
+    console.log('🔍 Raw AdGroup Data:', {
+      bid_type: adGroupData.bid_type,
+      bid_price: adGroupData.bid_price,
+      bid_price_type: typeof adGroupData.bid_price,
+      all_data: JSON.stringify(adGroupData, null, 2)
+    });
+    
     try {
       // تطبيع الاستهداف للتأكد من وجود location_ids دائماً
       const normalizedTargeting = (() => {
@@ -498,6 +506,12 @@ export class TikTokBusinessAPI {
         ...(adGroupData.budget && { budget: adGroupData.budget }),
         ...(adGroupData.bid_type && { bid_type: adGroupData.bid_type }),
         ...(adGroupData.optimization_goal && { optimization_goal: adGroupData.optimization_goal }),
+        // إضافة الحقول المطلوبة للمزايدة المخصصة
+        ...(adGroupData.bid_type === 'BID_TYPE_CUSTOM' && { 
+          billing_event: 'OCPM',
+          deep_bid_type: 'DEFAULT',
+          bid_strategy: 'COST_CAP'
+        }),
         ...(adGroupData.pacing && { pacing: adGroupData.pacing }),
         ...(adGroupData.schedule_type && { schedule_type: adGroupData.schedule_type }),
         ...(adGroupData.schedule_start_time && { schedule_start_time: adGroupData.schedule_start_time }),
@@ -515,10 +529,36 @@ export class TikTokBusinessAPI {
         targeting: normalizedTargeting,
         // تكرار location_ids على المستوى الأعلى لتوافق أوسع مع تحقق TikTok
         location_ids: normalizedTargeting.location_ids,
-        ...(adGroupData.bid_price && { bid_price: adGroupData.bid_price }),
+        // إضافة cost_cap للمزايدة المخصصة (للحسابات العراقية)
+        ...(adGroupData.bid_type === 'BID_TYPE_CUSTOM' && adGroupData.bid_price && { 
+          cost_cap: Number(adGroupData.bid_price),
+          bid_price: Number(adGroupData.bid_price),
+          conversion_bid_price: Number(adGroupData.bid_price)
+        }),
         ...(adGroupData.start_time && { start_time: adGroupData.start_time }),
         ...(adGroupData.end_time && { end_time: adGroupData.end_time })
       };
+      
+      // التحقق من bid_price للمزايدة المخصصة
+      if (adGroupData.bid_type === 'BID_TYPE_CUSTOM' && (!adGroupData.bid_price || adGroupData.bid_price <= 0)) {
+        throw new Error('Please enter a cost per conversion');
+      }
+      
+      // تأكيد وجود bid_price في الطلب النهائي
+      console.log('💰 Final bid_price check:', {
+        bid_type: requestData.bid_type,
+        has_bid_price: 'bid_price' in requestData,
+        bid_price_value: (requestData as any).bid_price,
+        original_bid_price: adGroupData.bid_price
+      });
+      
+      console.log('💰 Bid Price Debug:', {
+        originalBidPrice: adGroupData.bid_price,
+        bidPriceType: typeof adGroupData.bid_price,
+        bidPriceExists: adGroupData.bid_price !== undefined && adGroupData.bid_price !== null,
+        finalBidPrice: requestData.bid_price,
+        bidType: adGroupData.bid_type
+      });
       
       console.log('📋 بيانات المجموعة الإعلانية:', JSON.stringify(requestData, null, 2));
       
@@ -1294,13 +1334,19 @@ export class TikTokBusinessAPI {
           'ad_format',
           'video_id',
           'image_ids',
-          'operation_status'
+          'operation_status',
+          'creative_authorized',
+          'creative_type',
+          'display_name',
+          'ad_text',
+          'call_to_action'
         ])
       });
 
       if (response.code === 0 && response.data && response.data.list && response.data.list.length > 0) {
         const adDetails = response.data.list[0];
         console.log('✅ تم جلب تفاصيل الإعلان بنجاح:', adDetails.ad_id);
+        console.log('🔍 تفاصيل الإعلان الكاملة:', JSON.stringify(adDetails, null, 2));
         return adDetails;
       } else {
         console.warn('⚠️ لم يتم العثور على الإعلان:', adId);
@@ -1412,13 +1458,33 @@ export async function syncTikTokCampaigns(platformId: string) {
     const campaigns = await api.getCampaigns();
     console.log(`📊 تم جلب ${campaigns.length} حملة من TikTok`);
     console.log("🔍 Campaigns type:", typeof campaigns, "Is array:", Array.isArray(campaigns));
+    console.log("📋 أول 3 حملات:", campaigns.slice(0, 3));
 
-    // حفظ الحملات في قاعدة البيانات
-    for (const campaign of campaigns) {
-      await storage.upsertTikTokCampaign(campaign.campaign_id, { ...campaign, platformId });
+    // جلب الحملات المحلية الموجودة
+    const localCampaigns = await storage.getTikTokCampaigns(platformId);
+    console.log(`📋 الحملات المحلية الموجودة: ${localCampaigns.length}`);
+
+    // إنشاء مجموعة من معرفات الحملات من TikTok
+    const tiktokCampaignIds = campaigns.map((c: any) => String(c.campaign_id)).filter(Boolean);
+    console.log(`🆔 معرفات الحملات من TikTok:`, tiktokCampaignIds);
+
+    // حذف الحملات المحذوفة من TikTok
+    const deletedCount = await storage.deleteRemovedTikTokCampaigns(platformId, tiktokCampaignIds);
+    if (deletedCount > 0) {
+      console.log(`🗑️ تم حذف ${deletedCount} حملة محذوفة من TikTok`);
     }
 
-    console.log(`✅ تم حفظ ${campaigns.length} حملة بنجاح`);
+    // حفظ/تحديث الحملات الموجودة في TikTok
+    for (const campaign of campaigns) {
+      // فحص أن الحملة تحتوي على campaign_id صحيح
+      if (campaign && campaign.campaign_id) {
+        await storage.upsertTikTokCampaign(campaign.campaign_id, { ...campaign, platformId });
+      } else {
+        console.warn('⚠️ تم تجاهل حملة بدون معرف صحيح:', campaign);
+      }
+    }
+
+    console.log(`✅ تم مزامنة ${campaigns.length} حملة بنجاح (حذف ${deletedCount} حملة محذوفة)`);
     return campaigns;
   } catch (error) {
     console.error("❌ خطأ في مزامنة الحملات:", error);
@@ -1508,6 +1574,7 @@ export async function getAdDetailsWithVideo(platformId: string, adId: string) {
     let videoUrl = null;
     let coverImageUrl = null;
     
+    // جلب معلومات الفيديو من TikTok API
     if (adDetails.video_id) {
       try {
         // جلب معلومات الفيديو من TikTok API
@@ -1539,7 +1606,15 @@ export async function getAdDetailsWithVideo(platformId: string, adId: string) {
       }
     }
     
-    // إذا لم نحصل على صورة غلاف، محاولة جلبها من creative materials
+    // محاولة استخدام أي URLs متوفرة في ad details
+    if (!coverImageUrl) {
+      coverImageUrl = adDetails.video_cover_url || adDetails.poster_url;
+      if (coverImageUrl) {
+        console.log('🖼️ من Ad Details المباشرة - Cover URL:', coverImageUrl);
+      }
+    }
+    
+    // رابعاً: إذا لم نحصل على صورة غلاف، محاولة جلبها من image_ids
     if (!coverImageUrl && adDetails.image_ids && adDetails.image_ids.length > 0) {
       try {
         console.log('🖼️ محاولة جلب صورة الغلاف من image_ids:', adDetails.image_ids);
@@ -1549,10 +1624,19 @@ export async function getAdDetailsWithVideo(platformId: string, adId: string) {
         });
         
         if (imageInfoResponse.data && imageInfoResponse.data.list && imageInfoResponse.data.list.length > 0) {
-          const imageInfo = imageInfoResponse.data.list[0];
-          console.log('🖼️ معلومات الصورة:', JSON.stringify(imageInfo, null, 2));
+          // البحث عن الصورة المطابقة لهذا الإعلان
+          let imageInfo = imageInfoResponse.data.list.find((img: any) => 
+            adDetails.image_ids.includes(img.image_id)
+          );
+          
+          // إذا لم نجد صورة مطابقة، استخدم الأولى
+          if (!imageInfo) {
+            imageInfo = imageInfoResponse.data.list[0];
+          }
+          
+          console.log(`🖼️ معلومات الصورة للإعلان ${adId}:`, JSON.stringify(imageInfo, null, 2));
           coverImageUrl = imageInfo.image_url || imageInfo.download_url;
-          console.log('✅ تم جلب صورة الغلاف من الصور:', coverImageUrl);
+          console.log(`✅ تم جلب صورة الغلاف للإعلان ${adId}:`, coverImageUrl);
         }
       } catch (error) {
         console.warn('⚠️ فشل في جلب معلومات الصورة:', error);

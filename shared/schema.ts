@@ -1307,6 +1307,7 @@ export const completeTiktokCampaignSchema = z.object({
   
   // Media files
   videoUrl: z.string().optional(),
+  videoUrls: z.array(z.string()).optional(), // دعم عدة فيديوهات
   imageUrls: z.array(z.string()).optional(),
   
   // Pixel tracking (optional)
@@ -1456,6 +1457,7 @@ export const completeMetaCampaignSchema = z.object({
   
   // Media files
   videoUrl: z.string().optional(),
+  videoUrls: z.array(z.string()).optional(), // دعم عدة فيديوهات
   imageUrls: z.array(z.string()).optional(),
   imageHash: z.string().optional(),
   thumbnailUrl: z.string().optional(),
@@ -2093,6 +2095,7 @@ export const leadGenerationCampaignSchema = z.object({
   
   // Media files
   videoUrl: z.string().optional(),
+  videoUrls: z.array(z.string()).optional(), // دعم عدة فيديوهات
   imageUrls: z.array(z.string()).optional(),
   
   // Lead Form data (specific to lead generation)

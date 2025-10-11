@@ -102,7 +102,7 @@ export async function setupCustomAuth(app: Express) {
       
     } catch (error) {
       console.error("خطأ في تسجيل الدخول:", error);
-      if (error && error.stack) {
+      if (error instanceof Error && error.stack) {
         console.error('STACK:', error.stack);
       }
       if (error instanceof z.ZodError) {

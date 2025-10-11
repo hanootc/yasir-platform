@@ -47,20 +47,25 @@ interface TikTokEventPayload {
 // TikTok Standard Events Mapping
 // Reference: https://developers.tiktok.com/doc/events-api
 const TIKTOK_EVENT_MAP: Record<string, string> = {
-  // Web Events (للحملات على الويب)
+  // Purchase Events (أحداث الشراء)
   'CompletePayment': 'CompletePayment',
-  'Purchase': 'CompletePayment',
-  'purchase': 'CompletePayment',
+  'Purchase': 'Purchase',
+  'purchase': 'Purchase',
+  'PlaceAnOrder': 'PlaceAnOrder',
   
-  // Pixel Events (للتحسين في TikTok Ads)
-  'ON_WEB_ORDER': 'CompletePayment',      // نفس CompletePayment
-  'SUCCESSORDER_PAY': 'CompletePayment',  // نفس CompletePayment
+  // Legacy Events (للتوافق مع الأنظمة القديمة)
+  'ON_WEB_ORDER': 'CompletePayment',
+  'SUCCESSORDER_PAY': 'CompletePayment',
   
-  // Other Events
+  // Standard Events (الأحداث المعيارية)
   'ViewContent': 'ViewContent',
+  'view_content': 'ViewContent',
   'AddToCart': 'AddToCart',
+  'add_to_cart': 'AddToCart',
   'InitiateCheckout': 'InitiateCheckout',
+  'initiate_checkout': 'InitiateCheckout',
   'SubmitForm': 'SubmitForm',
+  'lead': 'SubmitForm',
   'ClickButton': 'ClickButton',
 };
 
@@ -81,12 +86,17 @@ export async function sendTikTokEvent(
   pixelCode: string,
   eventName: string,
   eventData: any
-): Promise<{ success: boolean; error?: string; data?: any }> {
+): Promise<{ success: boolean; error?: string; data?: any; eventId?: string }> {
   try {
     // Normalize event name to TikTok standard
     const normalizedEventName = normalizeTikTokEvent(eventName);
     
-    const eventId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // إنشاء event_id ثابت ومشترك مع browser-side (نفس المنطق)
+    const baseId = eventData.transaction_id || eventData.order_number || eventData.content_id || eventData.product_id || eventData.landing_page_id;
+    const timestamp = eventData.timestamp ? (eventData.timestamp * 1000) : Date.now();
+    const eventId = eventData.event_id || (baseId 
+      ? `${eventName}_${baseId}_${timestamp.toString().slice(-8)}`
+      : `${eventName}_${timestamp}_${Math.floor(timestamp / 1000).toString().slice(-4)}`);
     
     // Prepare user data (hashed for privacy)
     const user: any = {};
@@ -137,7 +147,17 @@ export async function sendTikTokEvent(
       quantity: eventData.quantity || 1
     };
 
-    if (eventData.content_id) properties.content_id = eventData.content_id;
+    // استخراج content_id باستخدام utility محسن
+    const { extractServerContentId, validateContentId } = await import('./utils/content-id-extractor');
+    
+    // ضمان وجود content_id صالح دائماً
+    properties.content_id = extractServerContentId(eventData);
+    
+    // التحقق النهائي من صحة content_id
+    if (!validateContentId(properties.content_id)) {
+      console.error('🚨 TikTok Server: content_id validation failed!');
+      properties.content_id = `emergency_srv_${Date.now().toString().slice(-8)}`;
+    }
     if (eventData.content_name) properties.content_name = eventData.content_name;
     if (eventData.content_category) properties.content_category = eventData.content_category;
     if (eventData.order_id || eventData.transaction_id) {
@@ -168,9 +188,13 @@ export async function sendTikTokEvent(
       originalEventName: eventName,
       normalizedEventName,
       eventId,
+      baseId,
+      contentId: properties.content_id,
       hasEmail: !!user.email,
       hasPhone: !!user.phone_number,
-      value: properties.value
+      value: properties.value,
+      contentIdSource: eventData.content_id ? 'direct' : 'extracted',
+      deduplicationNote: 'Using consistent event_id for browser-server deduplication'
     });
 
     // Send to TikTok Events API
@@ -191,17 +215,28 @@ export async function sendTikTokEvent(
 
     if (response.ok && result.code === 0) {
       console.log('🎬 TikTok Events API: ✅ Success', result);
-      return { success: true, data: result };
+      
+      // تسجيل نجاح الإرسال للمراقبة
+      console.log('📊 TikTok Server Event Logged:', {
+        eventId,
+        eventName: normalizedEventName,
+        source: 'server',
+        deduplicationStatus: 'sent_successfully',
+        timestamp: new Date().toISOString()
+      });
+      
+      return { success: true, data: result, eventId };
     } else {
       console.warn('🎬 TikTok Events API: ❌ Error', result);
-      return { success: false, error: result.message || 'Unknown error' };
+      return { success: false, error: result.message || 'Unknown error', eventId };
     }
 
   } catch (error) {
     console.error('🎬 TikTok Events API: ❌ Exception', error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      eventId: eventData.event_id || 'unknown'
     };
   }
 }

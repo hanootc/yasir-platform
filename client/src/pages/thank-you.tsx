@@ -360,18 +360,23 @@ export default function ThankYouPage() {
     // إنشاء event_id ثابت للـ Purchase باستخدام نفس النمط
     const purchaseEventId = `purchase_${productId}_${orderTimestamp.toString().slice(-8)}`;
 
-    // إعداد البيانات الأساسية
+    // إعداد البيانات الأساسية محسنة لـ TikTok
     const eventData: any = {
       content_name: productName,
       content_category: productCategory,
       content_ids: [productId],
+      content_id: productId, // إضافة content_id منفرد أيضاً لـ TikTok
       content_type: 'product',
       value: orderValueIQD,
       currency: 'IQD',
       quantity: quantity,
       transaction_id: order.id,
       order_number: order.orderNumber,
+      order_id: order.id, // إضافة order_id لـ TikTok
       landing_page_id: order.landingPageId,
+      product_id: productId, // إضافة product_id صريح
+      sku: productId, // إضافة SKU
+      item_id: productId, // إضافة item_id
       customer_phone: order.customerPhone,
       customer_first_name: firstName,
       customer_last_name: lastName,
@@ -382,6 +387,9 @@ export default function ThankYouPage() {
       facebook_login_id: userIdentifiers.facebook_login_id, // +19.71% تحسين
       login_id: userIdentifiers.facebook_login_id, // نفس قيمة facebook_login_id
       action_source: 'website',
+      // بيانات إضافية لـ TikTok
+      event_source_url: window.location.href,
+      user_agent: navigator.userAgent,
       // إضافة timestamp ثابت للاستخدام في PixelTracker
       _timestamp: orderTimestamp,
       // إضافة event_id ثابت لمنع التكرار
@@ -393,6 +401,20 @@ export default function ThankYouPage() {
     if (email && email.includes('@') && email.includes('.')) {
       eventData.customer_email = email;
     }
+
+    // تسجيل بيانات حدث الشراء لـ TikTok
+    console.log('🎵 TikTok Purchase Event Data:', {
+      eventId: purchaseEventId,
+      contentId: productId,
+      productName,
+      orderValue: orderValueIQD,
+      currency: 'IQD',
+      quantity,
+      orderNumber: order.orderNumber,
+      customerId: stableExternalId,
+      hasEmail: !!eventData.customer_email,
+      hasPhone: !!eventData.customer_phone
+    });
 
     return eventData;
   };

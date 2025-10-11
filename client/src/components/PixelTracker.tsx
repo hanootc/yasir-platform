@@ -1,6 +1,8 @@
 import { useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { convertIQDToUSD } from '@/lib/utils';
+import { tiktokEventMonitor } from '@/utils/tiktok-event-monitor';
+import { extractContentId } from '@/utils/content-id-extractor';
 
 interface PixelTrackerProps {
   platformId: string;
@@ -555,17 +557,15 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
     const rawPhone = data?.customer_phone || data?.phone_number || data?.phone || '';
     const phone = formatPhoneToE164(rawPhone); // تحويل الرقم إلى E.164
     
-    // إنشاء event_id فريد للحدث
-    const eventId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // إنشاء event_id ثابت ومشترك مع server-side API
+    const baseId = data?.transaction_id || data?.order_number || data?.content_ids?.[0] || data?.product_id || data?.landing_page_id;
+    const timestamp = Date.now();
+    const eventId = baseId 
+      ? `${eventType}_${baseId}_${timestamp.toString().slice(-8)}`
+      : `${eventType}_${timestamp}_${Math.floor(timestamp / 1000).toString().slice(-4)}`;
     
-    // التأكد من وجود content_id من البيانات الحقيقية
-    const contentId = data?.content_ids?.[0] 
-      || data?.content_id 
-      || data?.product_id 
-      || data?.landing_page_id 
-      || data?.transaction_id 
-      || data?.order_number
-      || data?.id;
+    // استخراج content_id باستخدام utility محسن
+    const contentId = extractContentId(data);
     
     console.log('🎵 TikTok content_id resolution:', {
       content_ids: data?.content_ids,
@@ -577,17 +577,23 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
       finalContentId: contentId
     });
     
-    // تكوين بيانات الحدث
+    // تكوين بيانات الحدث مع validation قوي لـ content_id
     const eventData: any = {
       value: convertedValue,
       currency: 'USD',
       content_type: 'product',
-      content_name: data?.content_name || 'Purchase',
-      content_category: data?.content_category || '',
-      content_id: contentId, // ✅ من البيانات الحقيقية
+      content_name: data?.content_name || data?.product_name || 'Product',
+      content_category: data?.content_category || data?.product_category || 'General',
+      content_id: contentId, // ✅ مضمون أن يكون صالح من extractContentId
       quantity: data?.quantity || 1,
-      event_id: eventId // إضافة event_id للتتبع
+      event_id: eventId // إضافة event_id للتتبع والـ deduplication
     };
+
+    // التحقق النهائي من صحة content_id
+    if (!eventData.content_id || eventData.content_id.trim().length === 0) {
+      console.error('🚨 TikTok: content_id is still empty after extraction!');
+      eventData.content_id = `emergency_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    }
 
     // إضافة بيانات العميل إذا كانت متوفرة
     if (email && email.trim()) eventData.email = email.trim();
@@ -632,13 +638,37 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
             window.ttq.identify(userProperties);
           }
 
-          // ثم إرسال الحدث
+          // إرسال الحدث الأساسي
           console.log('🎵 TikTok track event:', tikTokEvent, cleanEventData);
           window.ttq.track(tikTokEvent, cleanEventData);
           console.log('🎵 TikTok track call completed');
 
-          // إرسال إلى TikTok API أيضاً (server-side)
-          sendToTikTokAPI(tikTokEvent, cleanEventData, data);
+          // إرسال حدث إضافي للشراء (Purchase + PlaceAnOrder)
+          if (tikTokEvent === 'PlaceAnOrder') {
+            // إرسال Purchase أيضاً (الحدث الجديد المُوصى به)
+            const purchaseEventId = `${eventId}_purchase`;
+            const purchaseEventData = { ...cleanEventData, event_id: purchaseEventId };
+            
+            console.log('🎵 TikTok track additional Purchase event:', purchaseEventData);
+            window.ttq.track('Purchase', purchaseEventData);
+            
+            // تسجيل الحدث الإضافي
+            tiktokEventMonitor.recordEvent(purchaseEventId, 'Purchase', 'browser', {
+              contentId,
+              value: convertedValue,
+              currency: 'USD'
+            });
+          }
+
+          // تسجيل الحدث الأساسي في نظام المراقبة
+          tiktokEventMonitor.recordEvent(eventId, tikTokEvent, 'browser', {
+            contentId,
+            value: convertedValue,
+            currency: 'USD'
+          });
+
+          // إرسال إلى TikTok API أيضاً (server-side) مع نفس event_id
+          sendToTikTokAPI(tikTokEvent, { ...cleanEventData, event_id: eventId }, { ...data, event_id: eventId });
 
           console.log('✅ TikTok event sent successfully:', tikTokEvent);
 
@@ -674,6 +704,23 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
   // إرسال البيانات إلى TikTok Events API
   const sendToTikTokAPI = async (eventName: string, eventData: any, originalData: any) => {
     try {
+      const serverEventData = {
+        ...eventData,
+        ...originalData,
+        timestamp: Math.floor(Date.now() / 1000),
+        event_source_url: window.location.href,
+        user_agent: navigator.userAgent,
+        ip: '',
+        // إضافة البيانات الشخصية بشكل صريح
+        customer_email: originalData?.customer_email || originalData?.email || eventData?.email || '',
+        customer_phone: originalData?.customer_phone || originalData?.phone_number || originalData?.phone || '',
+        // إضافة معرف الحدث
+        event_id: eventData?.event_id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        // إضافة content_id
+        content_id: eventData?.content_id || originalData?.content_ids?.[0] || originalData?.product_id || ''
+      };
+
+      // إرسال الحدث الأساسي
       await fetch('/api/tiktok/events', {
         method: 'POST',
         headers: {
@@ -682,23 +729,50 @@ export default function PixelTracker({ platformId, eventType, eventData }: Pixel
         body: JSON.stringify({
           platformId: platformId,
           eventName: eventName,
-          eventData: {
-            ...eventData,
-            ...originalData,
-            timestamp: Math.floor(Date.now() / 1000),
-            event_source_url: window.location.href,
-            user_agent: navigator.userAgent,
-            ip: '',
-            // إضافة البيانات الشخصية بشكل صريح
-            customer_email: originalData?.customer_email || originalData?.email || eventData?.email || '',
-            customer_phone: originalData?.customer_phone || originalData?.phone_number || originalData?.phone || '',
-            // إضافة معرف الحدث
-            event_id: eventData?.event_id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            // إضافة content_id
-            content_id: eventData?.content_id || originalData?.content_ids?.[0] || originalData?.product_id || ''
-          }
+          eventData: serverEventData
         })
       });
+
+      // إرسال حدث إضافي للشراء (Purchase + CompletePayment)
+      if (eventName === 'PlaceAnOrder') {
+        // إرسال Purchase أيضاً
+        const purchaseEventData = {
+          ...serverEventData,
+          event_id: `${serverEventData.event_id}_purchase_server`
+        };
+        
+        await fetch('/api/tiktok/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platformId: platformId,
+            eventName: 'Purchase',
+            eventData: purchaseEventData
+          })
+        });
+
+        // إرسال CompletePayment أيضاً (للتوافق مع الأنظمة القديمة)
+        const completePaymentEventData = {
+          ...serverEventData,
+          event_id: `${serverEventData.event_id}_completepayment_server`
+        };
+        
+        await fetch('/api/tiktok/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            platformId: platformId,
+            eventName: 'CompletePayment',
+            eventData: completePaymentEventData
+          })
+        });
+
+        console.log('🎵 TikTok Server: Sent PlaceAnOrder + Purchase + CompletePayment events');
+      }
     } catch (error) {
       // خطأ صامت
     }

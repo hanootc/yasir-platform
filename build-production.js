@@ -31,7 +31,7 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: 'dist/public',
+    outDir: '../dist/public',
     emptyOutDir: false,
   },
   resolve: {
@@ -55,6 +55,12 @@ export default defineConfig({
   
   // Remove temporary config
   execSync('rm vite.config.prod.ts', { stdio: 'inherit' });
+  
+  // Ensure frontend files are copied correctly
+  console.log('📁 Copying frontend files to dist/public...');
+  if (existsSync('client/dist/public')) {
+    execSync('cp -r client/dist/public/* dist/public/ 2>/dev/null || true', { stdio: 'inherit' });
+  }
 
   // Build backend
   console.log('⚙️ Building backend...');

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -222,6 +222,135 @@ interface TikTokAccountInfo {
   address?: string;
   createdTime?: string;
 }
+
+// TikTok Ad Video Component - يحمل تفاصيل الفيديو من TikTok API
+interface TikTokAdVideoProps {
+  ad: TikTokAd;
+  onVideoClick: (videoData: {videoUrl: string, coverUrl: string, videoId: string}) => void;
+}
+
+const TikTokAdVideo: React.FC<TikTokAdVideoProps> = ({ ad, onVideoClick }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [videoDetails, setVideoDetails] = useState<any>(null);
+  const [error, setError] = useState(false);
+  
+  // إعادة تعيين الحالة عند تغيير الإعلان
+  useEffect(() => {
+    setError(false);
+    setVideoDetails(null);
+  }, [ad.adId]);
+
+  // تحميل تفاصيل الفيديو عند النقر
+  const loadVideoDetails = async () => {
+    if (videoDetails || isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/tiktok/ad/${ad.adId}/video`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('❌ Response is not JSON:', text.substring(0, 200));
+        throw new Error('Server returned HTML instead of JSON');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.videoDetails) {
+        setVideoDetails(data.videoDetails);
+      } else {
+        setError(true);
+      }
+    } catch (error) {
+      console.error('خطأ في جلب تفاصيل الفيديو:', error);
+      setError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClick = () => {
+    if (videoDetails?.videoUrl) {
+      onVideoClick({
+        videoUrl: videoDetails.videoUrl,
+        coverUrl: videoDetails.coverImageUrl || '',
+        videoId: videoDetails.videoId || ad.adId
+      });
+    } else {
+      loadVideoDetails();
+    }
+  };
+
+  // إذا كان لدينا coverImageUrl من البيانات الأساسية، استخدمها
+  const coverImage = ad.coverImageUrl || videoDetails?.coverImageUrl;
+  
+  console.log(`🎬 TikTokAdVideo - Ad: ${ad.adId}`, {
+    adName: ad.adName,
+    coverImage,
+    coverImageUrl: ad.coverImageUrl,
+    hasVideo: ad.hasVideo,
+    videoUrl: ad.videoUrl?.substring(0, 100) + '...',
+    videoId: ad.videoId,
+    adFormat: ad.adFormat,
+    uniqueImageHash: coverImage?.split('x-signature=')[1]?.substring(0, 20)
+  });
+
+  if (isLoading) {
+    return (
+      <div className="relative cursor-pointer group">
+        <div className="w-12 h-12 bg-theme-primary-light rounded-lg flex items-center justify-center border border-gray-200">
+          <RefreshCw className="h-4 w-4 text-theme-primary animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className="relative cursor-pointer group"
+      onClick={handleClick}
+    >
+      {coverImage && !error ? (
+        <div className="relative">
+          <img 
+            key={`cover-${ad.adId}-${Date.now()}`}
+            src={`${coverImage}&t=${Date.now()}`} 
+            alt={`Video Cover - ${ad.adName}`}
+            className={`w-12 h-12 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all ${
+              ad.adId.endsWith('85') ? 'border-2 border-blue-400' : 'border-2 border-green-400'
+            }`}
+            onError={() => setError(true)}
+          />
+          {/* مثلث التشغيل */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-4 h-4 bg-white/90 rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+              <div className="w-0 h-0 border-l-[6px] border-l-gray-700 border-y-[4px] border-y-transparent ml-0.5"></div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="w-12 h-12 bg-gradient-to-br from-pink-100 to-purple-100 rounded-lg border border-gray-200 shadow-sm flex items-center justify-center group-hover:shadow-md transition-all">
+          <Video className="h-4 w-4 text-pink-500" />
+          {/* مؤشر أن الفيديو قابل للتحميل */}
+          {ad.hasVideo && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center">
+              <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+            </div>
+          )}
+          {/* مؤشر التحميل */}
+          {!videoDetails && !error && !ad.hasVideo && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Video Thumbnail Component
 const VideoThumbnail = ({ videoId, adName, session, onVideoClick }: {
@@ -570,6 +699,7 @@ export default function PlatformAdsTikTokManagement() {
     return uploadURL.split('?')[0]; // Return clean URL without query parameters
   };
 
+
   const handleVideoUpload = async (file: File, field: any) => {
     setUploading(true);
     try {
@@ -629,6 +759,75 @@ export default function PlatformAdsTikTokManagement() {
     }
   };
 
+  // دالة رفع عدة فيديوهات
+  const handleMultipleVideosUpload = async (files: File[]) => {
+    setUploading(true);
+    const uploadedVideoIds: string[] = [];
+    
+    try {
+      console.log(`📤 بدء رفع ${files.length} فيديو إلى TikTok...`);
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        console.log(`📹 رفع الفيديو ${i + 1}/${files.length}: ${file.name}`);
+        
+        try {
+          const formData = new FormData();
+          formData.append('video', file);
+
+          const response = await fetch('/api/upload/tiktok-video/direct', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.details || errorData.error || `فشل في رفع ${file.name}`);
+          }
+
+          const result = await response.json();
+          uploadedVideoIds.push(result.videoId);
+          console.log(`✅ تم رفع الفيديو ${i + 1}/${files.length}: ${result.videoId}`);
+          
+        } catch (fileError) {
+          console.error(`❌ فشل في رفع ${file.name}:`, fileError);
+          toast({
+            title: `❌ فشل في رفع ${file.name}`,
+            description: fileError instanceof Error ? fileError.message : "حدث خطأ غير متوقع",
+            variant: "destructive",
+          });
+        }
+      }
+
+      if (uploadedVideoIds.length > 0) {
+        // حفظ معرفات الفيديوهات في حقل videoUrls
+        completeCampaignForm.setValue('videoUrls', uploadedVideoIds);
+        
+        // مسح حقل الفيديو الواحد إذا كان موجوداً
+        completeCampaignForm.setValue('videoUrl', '');
+        
+        console.log(`✅ تم رفع ${uploadedVideoIds.length} فيديو بنجاح:`, uploadedVideoIds);
+        
+        toast({
+          title: "✅ تم رفع الفيديوهات بنجاح",
+          description: `تم رفع ${uploadedVideoIds.length} من أصل ${files.length} فيديو إلى TikTok`,
+        });
+      } else {
+        throw new Error('فشل في رفع جميع الفيديوهات');
+      }
+      
+    } catch (error) {
+      console.error('❌ خطأ في رفع الفيديوهات:', error);
+      toast({
+        title: "❌ خطأ في رفع الفيديوهات",
+        description: error instanceof Error ? error.message : "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleImageUpload = async (files: File[], field: any) => {
     setUploading(true);
     try {
@@ -669,13 +868,19 @@ export default function PlatformAdsTikTokManagement() {
     const files = Array.from(e.dataTransfer.files);
     
     if (type === 'video' && files.length > 0) {
-      const videoFile = files[0];
-      if (videoFile.type.startsWith('video/')) {
-        handleVideoUpload(videoFile, field);
+      const videoFiles = files.filter(file => file.type.startsWith('video/'));
+      if (videoFiles.length > 0) {
+        if (videoFiles.length === 1) {
+          // رفع فيديو واحد
+          handleVideoUpload(videoFiles[0], field);
+        } else {
+          // رفع عدة فيديوهات
+          handleMultipleVideosUpload(videoFiles);
+        }
       } else {
         toast({
           title: "❌ نوع الملف غير مدعوم",
-          description: "يرجى اختيار ملف فيديو صالح",
+          description: "يرجى اختيار ملفات فيديو صالحة",
           variant: "destructive",
         });
       }
@@ -1221,54 +1426,25 @@ export default function PlatformAdsTikTokManagement() {
       }
       const data = await response.json();
       console.log('📊 استجابة الإعلانات:', data);
+      console.log('🎬 عدد الإعلانات المستلمة:', data?.ads?.length || 0);
       
-      // جلب تفاصيل الفيديو للإعلانات
+      // عرض تفاصيل كل إعلان
       if (data?.ads && Array.isArray(data.ads)) {
-        console.log('🎬 بدء جلب تفاصيل الفيديو للإعلانات...');
-        const adsWithVideo = await Promise.all(
-          data.ads.map(async (ad: any) => {
-            if (ad.adFormat === 'SINGLE_VIDEO') {
-              try {
-                console.log('🎬 جلب تفاصيل الفيديو للإعلان:', ad.adId);
-                const videoResponse = await fetch(`/api/tiktok/ads/${ad.adId}/details`);
-                console.log('📡 Response status:', videoResponse.status, videoResponse.statusText);
-                
-                if (videoResponse.ok) {
-                  const videoDetails = await videoResponse.json();
-                  console.log('✅ تم جلب تفاصيل الفيديو:', {
-                    adId: ad.adId,
-                    videoUrl: videoDetails.videoUrl,
-                    coverImageUrl: videoDetails.coverImageUrl,
-                    hasVideo: videoDetails.hasVideo
-                  });
-                  
-                  return {
-                    ...ad,
-                    videoId: videoDetails.videoId_display,
-                    coverImageUrl: videoDetails.coverImageUrl,
-                    hasVideo: videoDetails.hasVideo,
-                    actualVideoUrl: videoDetails.videoUrl, // URL الفيديو الفعلي
-                    pixelId: videoDetails.pixelId,
-                    landingPageUrl: videoDetails.landingPageUrl,
-                    callToAction: videoDetails.callToAction,
-                    displayName: videoDetails.displayName
-                  };
-                } else {
-                  const errorText = await videoResponse.text();
-                  console.warn('⚠️ فشل في جلب تفاصيل الفيديو:', ad.adId, 'Status:', videoResponse.status, 'Error:', errorText);
-                }
-              } catch (error) {
-                console.warn('❌ خطأ في جلب تفاصيل الفيديو:', ad.adId, error);
-              }
-            }
-            return ad;
-          })
-        );
-        
-        console.log('✅ تم الانتهاء من جلب تفاصيل الفيديو');
-        return { ads: adsWithVideo };
+        data.ads.forEach((ad: any, index: number) => {
+          console.log(`📋 إعلان ${index + 1}:`, {
+            adId: ad.adId,
+            adName: ad.adName,
+            hasVideo: ad.hasVideo,
+            videoUrl: ad.videoUrl,
+            videoId: ad.videoId,
+            coverImageUrl: ad.coverImageUrl,
+            adFormat: ad.adFormat
+          });
+        });
       }
       
+      // البيانات جاهزة مع تفاصيل الفيديو من الـ backend
+      console.log('✅ تم جلب الإعلانات مع تفاصيل الفيديو');
       return data;
     },
     enabled: true, // تمكين دائماً للاختبار
@@ -1454,6 +1630,7 @@ export default function PlatformAdsTikTokManagement() {
       
       // Media files
       videoUrl: "",
+      videoUrls: [], // دعم عدة فيديوهات
       imageUrls: [],
       
       // Pixel tracking - اختياري
@@ -2504,7 +2681,7 @@ export default function PlatformAdsTikTokManagement() {
 
               {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-7 bg-theme-primary-light theme-border gap-2">
+            <TabsList className="grid w-full grid-cols-6 bg-theme-primary-light theme-border gap-2">
               <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-theme-gradient data-[state=active]:text-white">لوحة القيادة</TabsTrigger>
               <TabsTrigger value="campaigns" className="text-xs font-semibold data-[state=active]:bg-theme-gradient data-[state=active]:text-white border-2 border-transparent hover:border-theme-primary/50 bg-white/90 dark:bg-gray-800/90 text-theme-primary hover:bg-theme-primary/10 transition-all duration-300">
                 <span className="animate-gradient-move font-bold" style={{ 
@@ -2539,7 +2716,6 @@ export default function PlatformAdsTikTokManagement() {
                   transition: 'all 0.3s ease'
                 }}>الإعلانات</span>
               </TabsTrigger>
-              <TabsTrigger value="pixels" className="text-xs data-[state=active]:bg-theme-gradient data-[state=active]:text-white">البكسلات</TabsTrigger>
               <TabsTrigger value="leads" className="text-xs data-[state=active]:bg-theme-gradient data-[state=active]:text-white">العملاء المحتملين</TabsTrigger>
               <TabsTrigger value="analytics" className="text-xs data-[state=active]:bg-theme-gradient data-[state=active]:text-white">التقارير</TabsTrigger>
             </TabsList>
@@ -2884,10 +3060,25 @@ export default function PlatformAdsTikTokManagement() {
                                 collectAddress: data.collectAddress || false,
                               };
 
+                              // معالجة خاصة للفيديوهات المتعددة
+                              console.log('🔍 بيانات النموذج قبل المعالجة:', {
+                                videoUrl: data.videoUrl,
+                                videoUrls: data.videoUrls,
+                                videoUrlsLength: data.videoUrls ? data.videoUrls.length : 0
+                              });
+
                               const processedData = {
                                 ...data,
                                 leadFormCustomFields: customFields,
+                                // التأكد من إرسال videoUrls بشكل صحيح
+                                videoUrls: data.videoUrls || [],
                               };
+
+                              console.log('📤 البيانات المُرسلة إلى الخادم:', {
+                                videoUrl: processedData.videoUrl,
+                                videoUrls: processedData.videoUrls,
+                                videoUrlsLength: processedData.videoUrls ? processedData.videoUrls.length : 0
+                              });
 
                               createCompleteCampaignMutation.mutate(processedData as any);
                             })} className="compact-form">
@@ -2944,37 +3135,22 @@ export default function PlatformAdsTikTokManagement() {
                                                 completeCampaignForm.setValue("adName", `إعلان ${selectedProduct.name}`);
                                                 completeCampaignForm.setValue("displayName", selectedProduct.name);
                                                 
-                                                // تحديث رابط المنتج - تحويل إلى نفس تنسيق Facebook
+                                                // استخدام رابط المنتج الحقيقي مباشرة
                                                 if (selectedProductDetails?.landingPageUrl) {
                                                   const originalUrl = selectedProductDetails.landingPageUrl;
-                                                  const platformSubdomain = session?.subdomain || 'demo';
                                                   
-                                                  // استخراج المسار من الرابط الأصلي
-                                                  // من: https://hanoot.sanadi.pro/blwr-hwaa-asly-779095
-                                                  // إلى: https://sanadi.pro/hanoot/blwr-hwaa-asly-779095
-                                                  try {
-                                                    const url = new URL(originalUrl);
-                                                    const path = url.pathname; // /blwr-hwaa-asly-779095
-                                                    const convertedUrl = `${window.location.origin}/${platformSubdomain}${path}`;
-                                                    
-                                                    console.log('🔗 تحويل رابط المنتج:', {
-                                                      original: originalUrl,
-                                                      converted: convertedUrl,
-                                                      subdomain: platformSubdomain,
-                                                      path: path
-                                                    });
-                                                    
-                                                    completeCampaignForm.setValue("landingPageUrl", convertedUrl);
-                                                  } catch (error) {
-                                                    console.warn('خطأ في تحويل الرابط، استخدام الرابط الأصلي:', error);
-                                                    completeCampaignForm.setValue("landingPageUrl", originalUrl);
-                                                  }
+                                                  console.log('🔗 استخدام رابط المنتج الحقيقي:', {
+                                                    productId: selectedProduct.id,
+                                                    productName: selectedProduct.name,
+                                                    originalUrl: originalUrl
+                                                  });
+                                                  
+                                                  // استخدام الرابط الأصلي مباشرة بدون تعديل
+                                                  completeCampaignForm.setValue("landingPageUrl", originalUrl);
                                                 } else {
-                                                  // إذا لم يوجد رابط للمنتج، استخدم الدومين الأساسي
-                                                  const platformSubdomain = session?.subdomain || 'demo';
-                                                  const generatedUrl = `${window.location.origin}/${platformSubdomain}`;
-                                                  console.log('🔗 لا يوجد رابط للمنتج، استخدام الدومين الأساسي:', generatedUrl);
-                                                  completeCampaignForm.setValue("landingPageUrl", generatedUrl);
+                                                  console.warn('⚠️ لا يوجد رابط للمنتج المحدد:', selectedProduct.name);
+                                                  // عدم تعيين رابط افتراضي - ترك الحقل فارغ ليقوم المستخدم بإدخاله يدوياً
+                                                  completeCampaignForm.setValue("landingPageUrl", "");
                                                 }
                                                 
                                                 // تحديث نص الإعلان من وصف المنتج (10 كلمات فقط)
@@ -3730,72 +3906,126 @@ export default function PlatformAdsTikTokManagement() {
                                     </h4>
                                     
                                     {completeCampaignForm.watch("adFormat") === "SINGLE_VIDEO" && (
-                                      <FormField
-                                        control={completeCampaignForm.control}
-                                        name="videoUrl"
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-theme-primary font-semibold">
-                                              رفع فيديو الإعلان *
-                                            </FormLabel>
-                                            <FormControl>
-                                              <div className="space-y-2">
-                                                <div 
-                                                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                                                    dragOver ? 'border-green-400 bg-green-50' : 'border-theme-primary hover:border-theme-primary'
-                                                  } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
-                                                  onDragOver={handleDragOver}
-                                                  onDragLeave={handleDragLeave}
-                                                  onDrop={(e) => handleDrop(e, field, 'video')}
-                                                >
-                                                  <Video className={`h-8 w-8 mx-auto mb-2 ${dragOver ? 'text-green-500' : 'text-theme-primary'}`} />
-                                                  <p className="text-sm text-gray-600 mb-2">
-                                                    {uploading ? 'جاري رفع الفيديو...' : 'اسحب وأفلت الفيديو هنا أو اضغط للاختيار'}
-                                                  </p>
-                                                  <p className="text-xs text-gray-500">الحد الأقصى: 100 ميجابايت (MP4, MOV, AVI)</p>
-                                                  <Button 
-                                                    type="button" 
-                                                    variant="outline" 
-                                                    size="sm" 
-                                                    className="mt-2"
-                                                    onClick={() => videoInputRef.current?.click()}
-                                                    disabled={uploading}
+                                      <>
+                                        {/* رفع فيديو واحد */}
+                                        <FormField
+                                          control={completeCampaignForm.control}
+                                          name="videoUrl"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel className="text-theme-primary font-semibold">
+                                                رفع فيديو (واحد أو أكثر)
+                                              </FormLabel>
+                                              <FormControl>
+                                                <div className="space-y-2">
+                                                  <div 
+                                                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                                                      dragOver ? 'border-green-400 bg-green-50' : 'border-theme-primary hover:border-theme-primary'
+                                                    } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+                                                    onDragOver={handleDragOver}
+                                                    onDragLeave={handleDragLeave}
+                                                    onDrop={(e) => handleDrop(e, field, 'video')}
                                                   >
-                                                    <Upload className="h-4 w-4 mr-2" />
-                                                    {uploading ? 'جاري الرفع...' : 'اختر الفيديو'}
-                                                  </Button>
-                                                  <input
-                                                    ref={videoInputRef}
-                                                    type="file"
-                                                    accept="video/*"
-                                                    className="hidden"
-                                                    onChange={(e) => {
-                                                      const file = e.target.files?.[0];
-                                                      if (file) {
-                                                        handleVideoUpload(file, field);
-                                                      }
-                                                    }}
-                                                  />
-                                                </div>
-                                                {field.value && (
-                                                  <div className="flex items-center justify-between bg-theme-primary-light p-2 rounded">
-                                                    <span className="text-sm text-theme-primary">تم رفع الفيديو بنجاح</span>
+                                                    <Video className={`h-8 w-8 mx-auto mb-2 ${dragOver ? 'text-green-500' : 'text-theme-primary'}`} />
+                                                    <p className="text-sm text-gray-600 mb-2">
+                                                      {uploading ? 'جاري رفع الفيديو...' : 'اسحب وأفلت الفيديو/الفيديوهات هنا أو اضغط للاختيار'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">الحد الأقصى: 100 ميجابايت لكل فيديو (MP4, MOV, AVI) - يمكن رفع عدة فيديوهات</p>
                                                     <Button 
                                                       type="button" 
-                                                      variant="ghost" 
-                                                      size="sm"
-                                                      onClick={() => field.onChange("")}
+                                                      variant="outline" 
+                                                      size="sm" 
+                                                      className="mt-2"
+                                                      onClick={() => videoInputRef.current?.click()}
+                                                      disabled={uploading}
                                                     >
-                                                      <X className="h-4 w-4" />
+                                                      <Upload className="h-4 w-4 mr-2" />
+                                                      {uploading ? 'جاري الرفع...' : 'اختر الفيديو/الفيديوهات'}
                                                     </Button>
+                                                    <input
+                                                      ref={videoInputRef}
+                                                      type="file"
+                                                      accept="video/*"
+                                                      multiple
+                                                      className="hidden"
+                                                      onChange={(e) => {
+                                                        const files = e.target.files;
+                                                        if (files && files.length > 0) {
+                                                          if (files.length === 1) {
+                                                            // رفع فيديو واحد
+                                                            handleVideoUpload(files[0], field);
+                                                          } else {
+                                                            // رفع عدة فيديوهات
+                                                            handleMultipleVideosUpload(Array.from(files));
+                                                          }
+                                                        }
+                                                      }}
+                                                    />
                                                   </div>
-                                                )}
-                                              </div>
-                                            </FormControl>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
+                                                  {/* عرض الفيديو الواحد */}
+                                                  {field.value && (
+                                                    <div className="flex items-center justify-between bg-theme-primary-light p-2 rounded">
+                                                      <span className="text-sm text-theme-primary">تم رفع فيديو واحد بنجاح</span>
+                                                      <Button 
+                                                        type="button" 
+                                                        variant="ghost" 
+                                                        size="sm"
+                                                        onClick={() => field.onChange("")}
+                                                      >
+                                                        <X className="h-4 w-4" />
+                                                      </Button>
+                                                    </div>
+                                                  )}
+                                                  
+                                                  {/* عرض الفيديوهات المتعددة */}
+                                                  {(() => {
+                                                    const videoUrls = completeCampaignForm.watch("videoUrls");
+                                                    return videoUrls && videoUrls.length > 0 && (
+                                                      <div className="space-y-2">
+                                                        <p className="text-sm font-medium text-blue-600">
+                                                          تم رفع {videoUrls.length} فيديو - سيتم إنشاء {videoUrls.length} إعلان منفصل
+                                                        </p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                          {videoUrls.map((videoId: string, index: number) => (
+                                                          <div key={index} className="flex items-center justify-between bg-blue-50 p-2 rounded text-sm">
+                                                            <span className="text-blue-700">فيديو {index + 1}</span>
+                                                            <Button 
+                                                              type="button" 
+                                                              variant="ghost" 
+                                                              size="sm"
+                                                              onClick={() => {
+                                                                const currentUrls = completeCampaignForm.watch("videoUrls") || [];
+                                                                const newUrls = currentUrls.filter((_, i) => i !== index);
+                                                                completeCampaignForm.setValue("videoUrls", newUrls);
+                                                              }}
+                                                            >
+                                                              <X className="h-3 w-3" />
+                                                            </Button>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                      <Button 
+                                                        type="button" 
+                                                        variant="outline" 
+                                                        size="sm"
+                                                        onClick={() => {
+                                                          completeCampaignForm.setValue("videoUrls", []);
+                                                        }}
+                                                      >
+                                                        <X className="h-4 w-4 mr-2" />
+                                                        مسح جميع الفيديوهات
+                                                      </Button>
+                                                    </div>
+                                                  );
+                                                  })()}
+                                                </div>
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+
+                                      </>
                                     )}
                                     
                                     {completeCampaignForm.watch("adFormat") === "SINGLE_IMAGE" && (
@@ -4827,19 +5057,14 @@ export default function PlatformAdsTikTokManagement() {
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">التكلفة</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">التحويلات</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">تكلفة التحويل</span></TableHead>
-                            <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">النتائج</span></TableHead>
-                            <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">تكلفة النتيجة</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">تكلفة النقرة</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">تكلفة الألف ظهور</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">النقرات للوجهة</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">معدل النقر</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">معدل التحويل</span></TableHead>
-                            <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">معدل النتائج</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">التنسيق</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">المجموعة</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">الحملة</span></TableHead>
-                            <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">البكسل</span></TableHead>
-                            <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">صفحة الهبوط</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">الإنطباعات</span></TableHead>
                             <TableHead className="text-right text-theme-primary font-semibold px-2 py-2"><span className="bg-theme-primary-light px-2 py-1 rounded mx-1">الإجراءات</span></TableHead>
                           </TableRow>
@@ -4847,7 +5072,7 @@ export default function PlatformAdsTikTokManagement() {
                         <TableBody>
                           {getFilteredAds().length === 0 ? (
                             <TableRow className="hover:bg-theme-primary-light/50">
-                              <TableCell colSpan={21} className="text-center py-8 bg-gray-900/95 border-gray-700 backdrop-blur-sm">
+                              <TableCell colSpan={16} className="text-center py-8 bg-gray-900/95 border-gray-700 backdrop-blur-sm">
                                 <div className="flex flex-col items-center gap-2">
                                   <FileText className="h-12 w-12 text-theme-primary/60" />
                                   <p className="text-theme-primary">لا توجد إعلانات</p>
@@ -4933,7 +5158,7 @@ export default function PlatformAdsTikTokManagement() {
                                         </Badge>
                                       )}
                                     </div>
-                                  ) : ad.adFormat === 'SINGLE_VIDEO' && ad.videoUrl ? (
+                                  ) : ad.videoUrl && (ad.videoUrl.startsWith('v1') || ad.videoUrl.startsWith('v0')) ? (
                                     <VideoThumbnail 
                                       videoId={ad.videoUrl} 
                                       adName={ad.adName}
@@ -4943,34 +5168,15 @@ export default function PlatformAdsTikTokManagement() {
                                         setVideoModalOpen(true);
                                       }}
                                     />
-                                  ) : ad.adFormat === 'SINGLE_VIDEO' ? (
-                                    <div 
-                                      className="relative cursor-pointer group"
-                                      onClick={() => {
-                                        setSelectedTikTokAd(ad);
+                                  ) : (ad.hasVideo || ad.videoId || ad.coverImageUrl || ad.adFormat?.includes('VIDEO')) ? (
+                                    <TikTokAdVideo 
+                                      key={`video-component-${ad.adId}`}
+                                      ad={ad}
+                                      onVideoClick={(videoData) => {
+                                        setSelectedVideoData(videoData);
                                         setVideoModalOpen(true);
                                       }}
-                                    >
-                                      {ad.coverImageUrl ? (
-                                        <div className="relative">
-                                          <img 
-                                            src={ad.coverImageUrl} 
-                                            alt="Video Cover"
-                                            className="w-12 h-12 object-cover rounded-lg border border-gray-200 shadow-sm group-hover:shadow-md transition-all"
-                                          />
-                                          {/* مثلث التشغيل */}
-                                          <div className="absolute inset-0 flex items-center justify-center">
-                                            <div className="w-4 h-4 bg-white/90 rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                                              <div className="w-0 h-0 border-l-[6px] border-l-gray-700 border-y-[4px] border-y-transparent ml-0.5"></div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="w-12 h-12 bg-gradient-to-br from-pink-100 to-purple-100 rounded-lg border border-gray-200 shadow-sm flex items-center justify-center group-hover:shadow-md transition-all">
-                                          <Video className="h-4 w-4 text-pink-500" />
-                                        </div>
-                                      )}
-                                    </div>
+                                    />
                                   ) : (
                                     <div className="flex items-center gap-2 text-theme-primary/50">
                                       <ImageIcon className="h-4 w-4" />
@@ -4986,14 +5192,6 @@ export default function PlatformAdsTikTokManagement() {
                                 <TableCell className="text-theme-primary font-medium">{
                                   adAnalytics?.conversions && adAnalytics.conversions > 0 
                                     ? formatCurrency(parseFloat(String(adAnalytics.spend)) / adAnalytics.conversions)
-                                    : '0.00 $'
-                                }</TableCell>
-                                {/* النتائج */}
-                                <TableCell className="text-theme-primary font-medium">{formatNumber(adAnalytics?.leads || 0)}</TableCell>
-                                {/* تكلفة النتيجة */}
-                                <TableCell className="text-theme-primary font-medium">{
-                                  adAnalytics?.leads && adAnalytics.leads > 0 
-                                    ? formatCurrency(parseFloat(String(adAnalytics.spend)) / adAnalytics.leads)
                                     : '0.00 $'
                                 }</TableCell>
                                 {/* تكلفة النقرة */}
@@ -5022,12 +5220,6 @@ export default function PlatformAdsTikTokManagement() {
                                     ? ((adAnalytics.conversions / adAnalytics.clicks) * 100).toFixed(2) + '%'
                                     : '0.00%'
                                 }</TableCell>
-                                {/* معدل النتائج */}
-                                <TableCell className="text-theme-primary font-medium">{
-                                  adAnalytics?.clicks && adAnalytics.clicks > 0 && adAnalytics.leads 
-                                    ? ((adAnalytics.leads / adAnalytics.clicks) * 100).toFixed(2) + '%'
-                                    : '0.00%'
-                                }</TableCell>
                                 <TableCell>
                                   <Badge variant="outline" className="bg-theme-primary-light text-theme-primary border-theme-primary/30">
                                     {ad.adFormat === 'SINGLE_IMAGE' ? 'صورة مفردة' :
@@ -5048,105 +5240,6 @@ export default function PlatformAdsTikTokManagement() {
                                       return adGroup ? campaignsData?.campaigns?.find(c => c.id === adGroup.campaignId)?.campaignName || 'غير محدد' : 'غير محدد';
                                     })()}
                                   </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex flex-col gap-1">
-                                    {(ad as any).pixelId ? (
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="bg-theme-primary-light text-theme-primary border-theme-primary/30">
-                                          <Target className="h-3 w-3 ml-1" />
-                                          {(pixelsData as any)?.pixels?.find((p: any) => p.pixelId === (ad as any).pixelId)?.pixelName || `بكسل ${(ad as any).pixelId}`}
-                                        </Badge>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-6 w-6 p-0"
-                                          onClick={() => {
-                                            // فصل البكسل عن الإعلان
-                                            fetch(`/api/tiktok/ads/${ad.id}/pixel`, {
-                                              method: 'DELETE',
-                                              headers: { 'Content-Type': 'application/json' }
-                                            })
-                                              .then(res => res.json())
-                                              .then(data => {
-                                                if (data.success) {
-                                                  queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === '/api/tiktok/ads' });
-                                                  toast({
-                                                    title: "تم فصل البكسل",
-                                                    description: "تم فصل البكسل عن الإعلان بنجاح"
-                                                  });
-                                                } else {
-                                                  throw new Error(data.error);
-                                                }
-                                              })
-                                              .catch(err => {
-                                                toast({
-                                                  title: "خطأ",
-                                                  description: "فشل في فصل البكسل",
-                                                  variant: "destructive"
-                                                });
-                                              });
-                                          }}
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <Select
-                                        onValueChange={(pixelId) => {
-                                          // ربط البكسل بالإعلان
-                                          fetch(`/api/tiktok/ads/${ad.id}/pixel`, {
-                                            method: 'PUT',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ pixelId })
-                                          })
-                                            .then(res => res.json())
-                                            .then(data => {
-                                              if (data.success) {
-                                                queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === '/api/tiktok/ads' });
-                                                toast({
-                                                  title: "تم ربط البكسل",
-                                                  description: "تم ربط البكسل بالإعلان بنجاح"
-                                                });
-                                              } else {
-                                                throw new Error(data.error);
-                                              }
-                                            })
-                                            .catch(err => {
-                                              toast({
-                                                title: "خطأ",
-                                                description: "فشل في ربط البكسل",
-                                                variant: "destructive"
-                                              });
-                                            });
-                                        }}
-                                      >
-                                        <SelectTrigger className="w-40 h-8 theme-select-trigger">
-                                          <SelectValue placeholder="اختر بكسل" />
-                                        </SelectTrigger>
-                                        <SelectContent className="select-content-solid">
-                                          {(pixelsData as any)?.pixels?.map((pixel: any) => (
-                                            <SelectItem key={pixel.pixelId} value={pixel.pixelId}>
-                                              <div className="flex items-center gap-2">
-                                                <Target className="h-3 w-3" />
-                                                {pixel.pixelName}
-                                              </div>
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  {ad.landingPageUrl ? (
-                                    <a href={ad.landingPageUrl} target="_blank" rel="noopener noreferrer" className="text-theme-primary hover:underline text-sm">
-                                      <ExternalLink className="inline h-3 w-3 ml-1" />
-                                      عرض الصفحة
-                                    </a>
-                                  ) : (
-                                    <span className="text-theme-primary/50 text-sm">غير محدد</span>
-                                  )}
                                 </TableCell>
                                 {/* الإنطباعات */}
                                 <TableCell className="text-theme-primary font-medium">{formatNumber(adAnalytics?.impressions || 0)}</TableCell>
@@ -5181,267 +5274,6 @@ export default function PlatformAdsTikTokManagement() {
               </Card>
             </TabsContent>
 
-            {/* Pixels Tab */}
-            <TabsContent value="pixels" className="space-y-6">
-              <Card className="theme-border bg-gray-900/95 border-gray-700 backdrop-blur-sm dark:bg-gray-800">
-                <CardHeader className="bg-theme-primary-light dark:bg-gray-700">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle className="text-xl text-theme-primary">إدارة البكسلات</CardTitle>
-                      <CardDescription className="text-theme-primary/70 dark:text-gray-300">
-                        أنشئ وأدر بكسلات TikTok لتتبع زوار موقعك والتحويلات
-                      </CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={() => setCreatePixelOpen(true)} className="bg-theme-gradient hover:opacity-90 text-white theme-shadow">
-                        <Plus className="ml-2 h-4 w-4" />
-                        إنشاء بكسل
-                      </Button>
-                      <Button variant="outline" onClick={showIdentitiesDialog} className="theme-border hover:bg-theme-primary-light">
-                        <User className="ml-2 h-4 w-4" />
-                        عرض الهويات
-                      </Button>
-                      <Button variant="outline" onClick={showUserProfileDialog} className="theme-border hover:bg-theme-primary-light">
-                        <User2 className="ml-2 h-4 w-4" />
-                        حساب TikTok
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Dialog for creating new pixel */}
-                  <Dialog open={createPixelOpen} onOpenChange={setCreatePixelOpen}>
-                    <DialogContent className="bg-gray-900/95 border-gray-700 backdrop-blur-sm theme-border">
-                      <DialogHeader>
-                        <DialogTitle className="text-theme-primary">إنشاء بكسل جديد</DialogTitle>
-                        <DialogDescription className="text-theme-primary/70">
-                          أنشئ بكسل جديد لتتبع زوار موقعك والتحويلات
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <label htmlFor="pixel-name-input" className="text-sm font-medium text-theme-primary">اسم البكسل</label>
-                          <input 
-                            id="pixel-name-input"
-                            className="theme-input"
-                            placeholder="بكسل موقع التجارة الإلكترونية"
-                            value={newPixelName}
-                            onChange={(e) => setNewPixelName(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium text-theme-primary">نوع البكسل</div>
-                          <Select value={newPixelMode} onValueChange={setNewPixelMode}>
-                            <SelectTrigger className="theme-select-trigger">
-                              <SelectValue placeholder="اختر نوع البكسل" />
-                            </SelectTrigger>
-                            <SelectContent className="select-content-solid">
-                              <SelectItem value="STANDARD_MODE" className="select-item">بكسل عادي</SelectItem>
-                              <SelectItem value="DEVELOPER_MODE" className="select-item">وضع المطور (مرونة كاملة)</SelectItem>
-                              <SelectItem value="CONVERSIONS_API_MODE" className="select-item">API للتحويلات</SelectItem>
-                              <SelectItem value="MANUAL_MODE" className="select-item">وضع يدوي</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                          <Button type="button" variant="outline" onClick={() => setCreatePixelOpen(false)} className="theme-border hover:bg-theme-primary-light">
-                            إلغاء
-                          </Button>
-                          <Button 
-                            onClick={handleCreatePixel} 
-                            disabled={createPixelMutation.isPending || !newPixelName.trim()}
-                            className="bg-theme-gradient hover:opacity-90 text-white"
-                          >
-                            {createPixelMutation.isPending ? (
-                              <RefreshCw className="ml-2 h-4 w-4 animate-spin" />
-                            ) : null}
-                            إنشاء البكسل
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-hidden">
-                    <Table className="bg-gray-900/95 border-gray-700 backdrop-blur-sm">
-                      <TableHeader className="bg-theme-primary-light">
-                        <TableRow className="border-theme-primary/20 hover:bg-theme-primary-light">
-                          <TableHead className="text-right text-theme-primary font-semibold">معرف البكسل</TableHead>
-                          <TableHead className="text-right text-theme-primary font-semibold">اسم البكسل</TableHead>
-                          <TableHead className="text-right text-theme-primary font-semibold">الحالة</TableHead>
-                          <TableHead className="text-right text-theme-primary font-semibold">النوع</TableHead>
-                          <TableHead className="text-right text-theme-primary font-semibold">تاريخ الإنشاء</TableHead>
-                          <TableHead className="text-right text-theme-primary font-semibold">الكود</TableHead>
-                          <TableHead className="text-right text-theme-primary font-semibold">الإجراءات</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pixelsLoading ? (
-                          <TableRow className="hover:bg-theme-primary-light/50">
-                            <TableCell colSpan={7} className="text-center py-8 bg-gray-900/95 border-gray-700 backdrop-blur-sm">
-                              <RefreshCw className="h-6 w-6 animate-spin mx-auto text-theme-primary" />
-                              <p className="mt-2 text-theme-primary">جارٍ تحميل البكسلات...</p>
-                            </TableCell>
-                          </TableRow>
-                        ) : (!(pixelsData as any)?.pixels?.length && !(pixelsData as any)?.dbPixels?.length) || (!(pixelsData as any)?.pixels && !(pixelsData as any)?.dbPixels) ? (
-                          <TableRow className="hover:bg-theme-primary-light/50">
-                            <TableCell colSpan={7} className="text-center py-8 bg-gray-900/95 border-gray-700 backdrop-blur-sm">
-                              <div className="flex flex-col items-center justify-center space-y-3">
-                                <div className="h-12 w-12 rounded-full bg-theme-primary-light flex items-center justify-center">
-                                  📊
-                                </div>
-                                <p className="text-theme-primary">لا توجد بكسلات حالياً</p>
-                                <p className="text-sm text-theme-primary/60">أنشئ بكسل جديد لتتبع زوار موقعك والتحويلات</p>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          // عرض البكسلات الفريدة بدون تكرار (السيرفر يدمجها بالفعل في pixels)
-                          ((pixelsData as any)?.pixels || []).map((pixel: any) => (
-                            <TableRow key={pixel.id} className="border-theme-primary/20 hover:bg-theme-primary-light/50 transition-colors duration-200">
-                              <TableCell className="font-mono text-sm text-theme-primary">{pixel.pixelId}</TableCell>
-                              <TableCell className="font-medium text-theme-primary">{pixel.pixelName}</TableCell>
-                              <TableCell>
-                                <Badge variant={pixel.status === 'ACTIVE' ? 'default' : 'secondary'} className={pixel.status === 'ACTIVE' ? 'bg-theme-gradient text-white' : 'bg-theme-primary-light text-theme-primary'}>
-                                  {pixel.status === 'ACTIVE' ? 'نشط' : 'غير نشط'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="bg-theme-primary-light text-theme-primary border-theme-primary/30">
-                                  {pixel.pixelMode === 'STANDARD_MODE' ? 'بكسل عادي' :
-                                   pixel.pixelMode === 'DEVELOPER_MODE' ? 'وضع المطور' :
-                                   pixel.pixelMode === 'CONVERSIONS_API_MODE' ? 'API للتحويلات' :
-                                   pixel.pixelMode === 'MANUAL_MODE' ? 'وضع يدوي' : 
-                                   pixel.pixelMode || 'غير محدد'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-theme-primary">
-                                {pixel.createdAt ? new Date(pixel.createdAt).toLocaleDateString('ar-IQ') : '-'}
-                              </TableCell>
-                              <TableCell>
-                                {pixel.pixelCode ? (
-                                  <Button variant="outline" size="sm" className="theme-border hover:bg-theme-primary-light" onClick={() => {
-                                    navigator.clipboard.writeText(pixel.pixelCode);
-                                    toast({
-                                      title: "تم نسخ الكود",
-                                      description: "تم نسخ كود البكسل إلى الحافظة",
-                                    });
-                                  }}>
-                                    نسخ الكود
-                                  </Button>
-                                ) : (
-                                  <span className="text-theme-primary/50">-</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-1">
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    className="theme-border hover:bg-theme-primary-light"
-                                    onClick={() => {
-                                      // عرض إحصائيات البكسل
-                                      fetch(`/api/tiktok/pixels/${pixel.pixelId}/stats?startDate=2025-01-01&endDate=${new Date().toISOString().split('T')[0]}`)
-                                        .then(res => res.json())
-                                        .then(data => {
-                                          toast({
-                                            title: "إحصائيات البكسل",
-                                            description: `البكسل يعمل بحالة جيدة`,
-                                          });
-                                        })
-                                        .catch(err => {
-                                          console.error('Stats error:', err);
-                                          toast({
-                                            title: "خطأ",
-                                            description: "فشل في جلب الإحصائيات",
-                                            variant: "destructive"
-                                          });
-                                        });
-                                    }}
-                                  >
-                                    <BarChart3 className="h-3 w-3 mr-1" />
-                                    الإحصائيات
-                                  </Button>
-                                  
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    className="theme-border hover:bg-theme-primary-light"
-                                    onClick={() => {
-                                      // فحص صحة البكسل
-                                      fetch(`/api/tiktok/pixels/${pixel.pixelId}/health`)
-                                        .then(res => res.json())
-                                        .then(data => {
-                                          toast({
-                                            title: "تقرير صحة البكسل",
-                                            description: `البكسل يعمل بصحة جيدة`,
-                                          });
-                                        })
-                                        .catch(err => {
-                                          console.error('Health error:', err);
-                                          toast({
-                                            title: "تحذير",
-                                            description: "قد تكون هناك مشاكل في البكسل",
-                                            variant: "destructive"
-                                          });
-                                        });
-                                    }}
-                                  >
-                                    <Activity className="h-3 w-3 mr-1" />
-                                    الصحة
-                                  </Button>
-                                  
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    className="theme-border hover:bg-theme-primary-light"
-                                    onClick={() => {
-                                      // إنشاء حدث PAGE_VIEW للبكسل
-                                      fetch(`/api/tiktok/pixels/${pixel.pixelId}/events`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                          eventType: 'PAGE_VIEW',
-                                          eventName: 'صفحة المنتجات',
-                                          currency: 'USD',
-                                          value: 0
-                                        })
-                                      })
-                                        .then(res => res.json())
-                                        .then(data => {
-                                          if (data.success) {
-                                            toast({
-                                              title: "تم إنشاء حدث البكسل",
-                                              description: `تم إنشاء حدث PAGE_VIEW بنجاح`,
-                                            });
-                                          } else {
-                                            throw new Error(data.error || 'خطأ غير معروف');
-                                          }
-                                        })
-                                        .catch(err => {
-                                          console.error('Event creation error:', err);
-                                          toast({
-                                            title: "خطأ",
-                                            description: "فشل في إنشاء حدث البكسل",
-                                            variant: "destructive"
-                                          });
-                                        });
-                                    }}
-                                  >
-                                    <Zap className="h-3 w-3 mr-1" />
-                                    حدث
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             {/* Leads Tab */}
             <TabsContent value="leads" className="space-y-6">
@@ -6625,13 +6457,14 @@ export default function PlatformAdsTikTokManagement() {
 
           {/* Video Container - iPhone aspect ratio */}
           <div className="relative bg-black flex items-center justify-center" style={{aspectRatio: '9/16', minHeight: '60vh'}}>
-            {selectedTikTokAd ? (
+            {selectedVideoData ? (
               <div className="w-full h-full">
                 {/* عرض الفيديو الفعلي إذا كان متوفراً */}
-                {selectedTikTokAd.actualVideoUrl ? (
+                {selectedVideoData.videoUrl ? (
                   <div className="relative w-full h-full">
                     <video 
-                      src={`/api/proxy/video?url=${encodeURIComponent(selectedTikTokAd.actualVideoUrl)}`}
+                      key={`video-${selectedVideoData.videoId}-${Date.now()}`}
+                      src={`${selectedVideoData.videoUrl}&t=${Date.now()}`}
                       controls
                       autoPlay
                       loop
@@ -6641,30 +6474,29 @@ export default function PlatformAdsTikTokManagement() {
                         filter: 'contrast(1.1) saturate(1.2)'
                       }}
                       onError={(e) => {
-                        console.error('فشل في تحميل الفيديو عبر الـ proxy:', e);
-                        console.log('🔄 محاولة تحميل الفيديو مباشرة...');
-                        // محاولة تحميل الفيديو مباشرة كـ fallback
+                        console.error('فشل في تحميل الفيديو:', selectedVideoData.videoUrl);
+                        console.log('🔄 محاولة تحميل الفيديو عبر proxy...');
+                        // محاولة تحميل الفيديو عبر proxy كـ fallback
                         const videoElement = e.target as HTMLVideoElement;
-                        if (selectedTikTokAd.actualVideoUrl) {
-                          videoElement.src = selectedTikTokAd.actualVideoUrl;
-                          videoElement.onerror = (e2: string | Event) => {
-                            console.error('فشل في تحميل الفيديو مباشرة أيضاً:', e2);
-                            // إخفاء الفيديو وإظهار fallback
-                            videoElement.style.display = 'none';
-                            const fallback = videoElement.nextElementSibling as HTMLElement;
-                            if (fallback) fallback.style.display = 'flex';
-                          };
-                        }
+                        videoElement.src = `/api/proxy/video?url=${encodeURIComponent(selectedVideoData.videoUrl)}`;
+                        videoElement.onerror = (e2: string | Event) => {
+                          console.error('فشل في تحميل الفيديو عبر proxy أيضاً:', e2);
+                          // إخفاء الفيديو وإظهار fallback
+                          videoElement.style.display = 'none';
+                          const fallback = videoElement.nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        };
                       }}
                     >
                       متصفحك لا يدعم عرض الفيديو
                     </video>
                   </div>
-                ) : selectedTikTokAd.coverImageUrl ? (
+                ) : selectedVideoData.coverUrl ? (
                   /* عرض صورة الغلاف مع رسالة */
                   <div className="relative w-full h-full">
                     <img 
-                      src={selectedTikTokAd.coverImageUrl} 
+                      key={`modal-cover-${selectedVideoData.videoId}-${Date.now()}`}
+                      src={`${selectedVideoData.coverUrl}&t=${Date.now()}`} 
                       alt="Video Cover"
                       className="w-full h-full object-cover"
                       style={{
@@ -6676,7 +6508,7 @@ export default function PlatformAdsTikTokManagement() {
                         <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center shadow-2xl animate-pulse">
                           <Video className="h-10 w-10 text-white" />
                         </div>
-                        <h3 className="text-lg font-bold mb-2">{selectedTikTokAd.adName}</h3>
+                        <h3 className="text-lg font-bold mb-2">فيديو الإعلان</h3>
                         <p className="text-sm text-gray-300 mb-4">جاري تحميل الفيديو...</p>
                         <div className="text-xs text-gray-400">
                           الفيديو غير متاح للعرض المباشر
@@ -6690,11 +6522,11 @@ export default function PlatformAdsTikTokManagement() {
                     <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center shadow-2xl">
                       <Video className="h-10 w-10 text-white" />
                     </div>
-                    <h3 className="text-xl font-bold mb-3">{selectedTikTokAd.adName}</h3>
+                    <h3 className="text-xl font-bold mb-3">فيديو الإعلان</h3>
                     <p className="text-gray-300 mb-6">إعلان فيديو TikTok</p>
-                    {selectedTikTokAd.videoId && (
+                    {selectedVideoData.videoId && (
                       <div className="text-xs text-gray-400 font-mono bg-gray-800/50 px-3 py-2 rounded-lg mb-6">
-                        Video ID: {selectedTikTokAd.videoId}
+                        Video ID: {selectedVideoData.videoId}
                       </div>
                     )}
                     <div className="text-sm text-gray-400">

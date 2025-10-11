@@ -216,10 +216,72 @@ function getAvailableOffers(product: any) {
   return offers.filter(offer => offer.price > 0);
 }
 
+// دالة تنظيف وتحقق صارمة لأرقام الهواتف العراقية
+const cleanAndValidateIraqiPhone = (phone: string): { isValid: boolean; cleanPhone: string; error?: string } => {
+  if (!phone || typeof phone !== 'string') {
+    return { isValid: false, cleanPhone: '', error: 'يرجى إدخال رقم الهاتف' };
+  }
+
+  // إزالة جميع المسافات والرموز والأحرف غير الرقمية
+  let cleanPhone = phone.replace(/[^0-9+]/g, '');
+  
+  // معالجة الأرقام التي تبدأ بـ +964
+  if (cleanPhone.startsWith('+964')) {
+    cleanPhone = cleanPhone.substring(4); // إزالة +964
+  }
+  // معالجة الأرقام التي تبدأ بـ 964
+  else if (cleanPhone.startsWith('964')) {
+    cleanPhone = cleanPhone.substring(3); // إزالة 964
+  }
+  
+  // التحقق من أن الرقم يبدأ بأحد البادئات المسموحة
+  const validPrefixes = ['079', '078', '077', '076', '075'];
+  const startsWithValidPrefix = validPrefixes.some(prefix => cleanPhone.startsWith(prefix));
+  
+  if (!startsWithValidPrefix) {
+    return {
+      isValid: false,
+      cleanPhone: '',
+      error: 'رقم الهاتف يجب أن يبدأ بـ 079 أو 078 أو 077 أو 076 أو 075'
+    };
+  }
+  
+  // التحقق من أن الرقم مكون من 11 رقم بالضبط
+  if (cleanPhone.length !== 11) {
+    return {
+      isValid: false,
+      cleanPhone: '',
+      error: `رقم الهاتف يجب أن يكون 11 رقم بالضبط. الرقم الحالي ${cleanPhone.length} رقم`
+    };
+  }
+  
+  // التحقق من أن جميع الأحرف أرقام
+  if (!/^[0-9]+$/.test(cleanPhone)) {
+    return {
+      isValid: false,
+      cleanPhone: '',
+      error: 'رقم الهاتف يجب أن يحتوي على أرقام فقط'
+    };
+  }
+  
+  return { isValid: true, cleanPhone };
+};
+
 // نموذج الطلب مع خصائص إضافية
 const orderFormSchema = z.object({
   customerName: z.string().min(2, "يجب أن يكون الاسم حرفين على الأقل"),
-  customerPhone: z.string().min(10, "يجب أن يكون رقم الهاتف 10 أرقام على الأقل"),
+  customerPhone: z.string()
+    .min(1, "يرجى إدخال رقم الهاتف")
+    .refine((phone) => {
+      const validation = cleanAndValidateIraqiPhone(phone);
+      return validation.isValid;
+    }, {
+      message: "رقم الهاتف غير صحيح. يجب أن يبدأ بـ 079/078/077/076/075 ويكون 11 رقم"
+    })
+    .transform((phone) => {
+      const validation = cleanAndValidateIraqiPhone(phone);
+      return validation.isValid ? validation.cleanPhone : phone;
+    }),
   customerGovernorate: z.string().min(1, "يرجى اختيار المحافظة"),
   customerAddress: z.string().min(5, "يرجى إدخال العنوان بتفصيل"),
   offer: z.string().min(1, "يرجى اختيار العرض"),
@@ -519,6 +581,23 @@ export default function LandingPageView() {
   const [initiateCheckoutData, setInitiateCheckoutData] = useState<any>(null);
   const [leadEventData, setLeadEventData] = useState<any>(null);
   const [addressLeadEventData, setAddressLeadEventData] = useState<any>(null);
+  const [phoneValidationError, setPhoneValidationError] = useState<string>('');
+
+  // دالة للتحقق من رقم الهاتف عند الكتابة
+  const handlePhoneChange = (value: string) => {
+    // إزالة رسالة الخطأ عند بدء الكتابة
+    if (phoneValidationError) {
+      setPhoneValidationError('');
+    }
+    
+    // التحقق من صحة الرقم إذا كان أكثر من 3 أحرف
+    if (value.length > 3) {
+      const validation = cleanAndValidateIraqiPhone(value);
+      if (!validation.isValid && validation.error) {
+        setPhoneValidationError(validation.error);
+      }
+    }
+  };
 
   // دالة لإرسال حدث Lead عند الكتابة في حقل العنوان التفصيلي
   const handleAddressFieldChange = (value: string) => {
@@ -1841,6 +1920,21 @@ export default function LandingPageView() {
   const submitOrderMutation = useMutation({
     mutationFn: async (data: OrderFormData) => {
       try {
+        // التحقق الصارم من رقم الهاتف قبل الإرسال
+        const phoneValidation = cleanAndValidateIraqiPhone(data.customerPhone);
+        if (!phoneValidation.isValid) {
+          setPhoneValidationError(phoneValidation.error || 'رقم الهاتف غير صحيح');
+          toast({
+            title: "رقم الهاتف غير صحيح",
+            description: phoneValidation.error || 'يرجى التأكد من صحة رقم الهاتف',
+            variant: "destructive",
+            duration: 8000,
+          });
+          throw new Error(phoneValidation.error || 'رقم الهاتف غير صحيح');
+        }
+        
+        // تنظيف رقم الهاتف وتحديثه في البيانات
+        data.customerPhone = phoneValidation.cleanPhone;
         
         // حساب الكمية والسعر من العرض المختار
         let selectedOfferData;
@@ -1883,8 +1977,29 @@ export default function LandingPageView() {
           const medium = urlParams.get('utm_medium') || urlParams.get('medium');
           const campaign = urlParams.get('utm_campaign') || urlParams.get('campaign');
           
-          console.log('🔍 UTM Parameters:', { source, medium, campaign });
+          // فحص معاملات TikTok الخاصة
+          const ttclid = urlParams.get('ttclid'); // TikTok Click ID - يضاف تلقائياً من TikTok
+          const tt_medium = urlParams.get('tt_medium');
+          const tt_source = urlParams.get('tt_source');
           
+          console.log('🔍 URL Parameters:', { 
+            source, medium, campaign, 
+            ttclid: ttclid ? 'present' : 'none',
+            tt_medium, tt_source 
+          });
+          
+          // أولاً: فحص معاملات TikTok المباشرة
+          if (ttclid) {
+            console.log('🎯 TikTok Click ID detected - source: tiktok_ad');
+            return 'tiktok_ad';
+          }
+          
+          if (tt_source || tt_medium) {
+            console.log('🎯 TikTok tt_* parameters detected - source: tiktok_ad');
+            return 'tiktok_ad';
+          }
+          
+          // ثانياً: فحص UTM المعتادة
           if (source) {
             const sourceLower = source.toLowerCase();
             // تحويل مصادر UTM إلى القيم المسموحة في enum
@@ -1897,7 +2012,7 @@ export default function LandingPageView() {
             return 'other';
           }
           
-          // كشف المصدر من referrer
+          // ثالثاً: كشف المصدر من referrer
           const referrer = document.referrer.toLowerCase();
           if (referrer.includes('facebook.com')) return 'facebook_ad';
           if (referrer.includes('instagram.com')) return 'instagram_ad';
@@ -1924,6 +2039,12 @@ export default function LandingPageView() {
             utm_term: urlParams.get('utm_term'),
             utm_id: urlParams.get('utm_id'),
             fbclid: urlParams.get('fbclid'),
+            // معاملات TikTok الخاصة
+            ttclid: urlParams.get('ttclid'),
+            tt_source: urlParams.get('tt_source'),
+            tt_medium: urlParams.get('tt_medium'),
+            tt_campaign: urlParams.get('tt_campaign'),
+            tt_content: urlParams.get('tt_content'),
             referrer: document.referrer
           };
           return JSON.stringify(details);
@@ -2293,6 +2414,28 @@ export default function LandingPageView() {
                 </div>
               </div>
 
+              {/* رسالة خطأ رقم الهاتف المركزية */}
+              {phoneValidationError && (
+                <div className="px-4 py-2">
+                  <div className="max-w-lg mx-auto">
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-center animate-pulse">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                          <span className="text-white text-sm font-bold">!</span>
+                        </div>
+                        <h3 className="text-red-700 dark:text-red-300 font-bold text-sm">خطأ في رقم الهاتف</h3>
+                      </div>
+                      <p className="text-red-600 dark:text-red-400 text-xs leading-relaxed">
+                        {phoneValidationError}
+                      </p>
+                      <div className="mt-2 text-xs text-red-500 dark:text-red-400">
+                        <strong>أمثلة صحيحة:</strong> 07914411303، 07814411303 (11 رقم)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Product Image */}
               <div className="px-4 pt-2 pb-2">
                 <div className="max-w-lg mx-auto">
@@ -2401,10 +2544,23 @@ export default function LandingPageView() {
                           <FormControl>
                             <div className="relative">
                               <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white force-light-placeholder dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
+                              <Input 
+                                placeholder="079X XXX XXXX (11 رقم)" 
+                                className={`pr-10 bg-white force-light-placeholder dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-200 dark:placeholder-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 border-[0.5px] ${phoneValidationError ? 'border-red-500 focus:border-red-500' : ''}`}
+                                {...field}
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  handlePhoneChange(e.target.value);
+                                }}
+                              />
                             </div>
                           </FormControl>
                           <FormMessage />
+                          {phoneValidationError && (
+                            <div className="text-red-500 text-xs mt-1 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                              ⚠️ {phoneValidationError}
+                            </div>
+                          )}
                         </FormItem>
                       )}
                     />
@@ -3190,13 +3346,22 @@ export default function LandingPageView() {
                         <FormItem>
                           <FormControl>
                             <Input
-                              placeholder="رقم الهاتف"
+                              placeholder="079X XXX XXXX (11 رقم)"
                               type="tel"
-                              className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500`}
+                              className={`${isDarkMode ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'} focus:border-red-500 ${phoneValidationError ? 'border-red-500' : ''}`}
                               {...field}
+                              onChange={(e) => {
+                                field.onChange(e);
+                                handlePhoneChange(e.target.value);
+                              }}
                             />
                           </FormControl>
                           <FormMessage className="text-red-400" />
+                          {phoneValidationError && (
+                            <div className="text-red-500 text-xs mt-1 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                              ⚠️ {phoneValidationError}
+                            </div>
+                          )}
                         </FormItem>
                       )}
                     />
@@ -3777,10 +3942,23 @@ export default function LandingPageView() {
                           <FormControl>
                             <div className="relative">
                               <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <Input placeholder="07XX XXX XXXX" className="pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px]" {...field} />
+                              <Input 
+                                placeholder="079X XXX XXXX (11 رقم)" 
+                                className={`pr-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-[#757575] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 border-[0.5px] ${phoneValidationError ? 'border-red-500 focus:border-red-500' : ''}`}
+                                {...field}
+                                onChange={(e) => {
+                                  field.onChange(e);
+                                  handlePhoneChange(e.target.value);
+                                }}
+                              />
                             </div>
                           </FormControl>
                           <FormMessage />
+                          {phoneValidationError && (
+                            <div className="text-red-500 text-xs mt-1 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">
+                              ⚠️ {phoneValidationError}
+                            </div>
+                          )}
                         </FormItem>
                       )}
                     />
